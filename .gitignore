@@ -1,0 +1,6 @@
+*.swp
+*.exp
+*.def
+*.obj
+main.exe
+test/test.exe
