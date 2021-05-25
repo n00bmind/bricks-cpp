@@ -1,9 +1,37 @@
-#define CPPHTTPLIB_OPENSSL_SUPPORT
 
-#include "../httplib.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include <stdint.h>
+
+#pragma warning( push )
+#pragma warning( disable : 4774 )
+#pragma warning( disable : 4388 )
 
 #include "gtest/gtest.h"
-#include "gtest/gtest-all.cc"
+
+
+#include <winsock2.h>
+#include "win32.h"
+#include <DbgHelp.h>
+
+#include "magic.h"
+#include "common.h"
+#include "strings.h"
+#include "win32_platform.cpp"
+
+#pragma warning( disable : 4355 )
+#pragma warning( disable : 4365 )
+#pragma warning( disable : 4548 )
+#pragma warning( disable : 4530 )
+#pragma warning( disable : 4577 )
+#pragma warning( disable : 4702 )
+
+// TODO Fix all warnings
+#define CPPHTTPLIB_OPENSSL_SUPPORT
+#include "httplib.h"
+
+
+#undef internal
 
 #include <atomic>
 #include <chrono>
@@ -20,6 +48,7 @@
 #define CLIENT_CA_CERT_DIR "."
 #define CLIENT_CERT_FILE "./client.cert.pem"
 #define CLIENT_PRIVATE_KEY_FILE "./client.key.pem"
+#define CLIENT_IMAGE_FILE "./test/image.jpg"
 
 using namespace std;
 using namespace httplib;
@@ -374,7 +403,7 @@ TEST(ChunkedEncodingTest, FromHTTPWatch) {
     ASSERT_TRUE(res);
 
     std::string out;
-    detail::read_file("./image.jpg", out);
+    detail::read_file(CLIENT_IMAGE_FILE, out);
 
     EXPECT_EQ(200, res->status);
     EXPECT_EQ(out, res->body);
@@ -402,7 +431,7 @@ TEST(ChunkedEncodingTest, WithContentReceiver) {
     ASSERT_TRUE(res);
 
     std::string out;
-    detail::read_file("./image.jpg", out);
+    detail::read_file(CLIENT_IMAGE_FILE, out);
 
     EXPECT_EQ(200, res->status);
     EXPECT_EQ(out, body);
@@ -434,7 +463,7 @@ TEST(ChunkedEncodingTest, WithResponseHandlerAndContentReceiver) {
     ASSERT_TRUE(res);
 
     std::string out;
-    detail::read_file("./image.jpg", out);
+    detail::read_file(CLIENT_IMAGE_FILE, out);
 
     EXPECT_EQ(200, res->status);
     EXPECT_EQ(out, body);
@@ -1111,8 +1140,14 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 
 
 
+#include "gtest/gtest-all.cc"
 
-GTEST_API_ int main(int argc, char **argv) {
+#pragma warning( pop )
+
+GTEST_API_ int main(int argc, char **argv)
+{
+    SetUnhandledExceptionFilter( Win32::ExceptionHandler );
+
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

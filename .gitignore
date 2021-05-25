@@ -2,5 +2,9 @@
 *.exp
 *.def
 *.obj
+*.suo
+*.pdb
 main.exe
+bricks.time
+bin/
 test/test.exe
