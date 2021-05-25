@@ -4,6 +4,7 @@
 *.obj
 *.suo
 *.pdb
+**/.session.vim
 main.exe
 bricks.time
 bin/

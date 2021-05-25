@@ -138,6 +138,13 @@ using ssize_t = __int64;
 #else
 using ssize_t = int;
 #endif
+
+// NOTE Removing this define breaks the first YahooRedirectTest (!)
+// TODO Actually, all YahooRedirectTests seem flimsy? This doesn't happen in the source release..
+// The only other thing I can think of is exception shit!? Do a diff just in case
+#if _MSC_VER < 1900
+#define snprintf _snprintf_s
+#endif
 #endif // _MSC_VER
 
 #ifndef S_ISREG

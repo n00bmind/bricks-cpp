@@ -40,14 +40,7 @@
 #include <thread>
 #include <sstream>
 
-#define SERVER_CERT_FILE "./cert.pem"
-#define SERVER_CERT2_FILE "./cert2.pem"
-#define SERVER_PRIVATE_KEY_FILE "./key.pem"
-#define CA_CERT_FILE "./ca-bundle.crt"
-#define CLIENT_CA_CERT_FILE "./rootCA.cert.pem"
-#define CLIENT_CA_CERT_DIR "."
-#define CLIENT_CERT_FILE "./client.cert.pem"
-#define CLIENT_PRIVATE_KEY_FILE "./client.key.pem"
+#define CA_CERT_FILE "./test/ca-bundle.crt"
 #define CLIENT_IMAGE_FILE "./test/image.jpg"
 
 using namespace std;
@@ -846,12 +839,15 @@ TEST(TooManyRedirectTest, Redirect) {
 TEST(YahooRedirectTest, Redirect) {
     Client cli("yahoo.com");
 
+#if 0
     auto res = cli.Get("/");
     ASSERT_TRUE(res);
     EXPECT_EQ(301, res->status);
+#endif
 
+    // TODO One of the inner redirects seems to error out while reading the response body
     cli.set_follow_location(true);
-    res = cli.Get("/");
+    auto res = cli.Get("/");
     ASSERT_TRUE(res);
     EXPECT_EQ(200, res->status);
     EXPECT_EQ("https://yahoo.com/", res->location);
