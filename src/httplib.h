@@ -123,6 +123,16 @@
  * Headers
  */
 
+#pragma warning( push )
+// TODO Fix all remaining warnings in this header
+#pragma warning( disable : 4355 )
+#pragma warning( disable : 4548 )
+#pragma warning( disable : 4530 )
+#pragma warning( disable : 4365 )
+#pragma warning( disable : 4702 )
+
+#pragma warning( disable : 4774 )
+
 #ifdef _WIN32
 #ifndef _CRT_SECURE_NO_WARNINGS
 #define _CRT_SECURE_NO_WARNINGS
@@ -991,6 +1001,7 @@ namespace httplib {
             virtual bool is_ssl() const;
     };
 
+    // NOTE Host string passed to constructors must include _only the host part_ with no other URL portions (protocol is ok)
     class Client {
         public:
             // Universal interface
@@ -1199,6 +1210,7 @@ namespace httplib {
     };
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
+    // NOTE Host string passed to constructors must include _only the host part_ with no other URL portions (protocol is NOT ok here!)
     class SSLClient : public ClientImpl {
         public:
             explicit SSLClient(const std::string &host);
@@ -6319,5 +6331,7 @@ namespace httplib {
         // ----------------------------------------------------------------------------
 
     } // namespace httplib
+
+#pragma warning( pop )
 
 #endif // CPPHTTPLIB_HTTPLIB_H

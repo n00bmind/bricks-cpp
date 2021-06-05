@@ -1,6 +1,9 @@
+#pragma once
+
 // Crazyballs prepro shit stolen from http://jhnet.co.uk/articles/cpp_magic
+// © 2021 Jonathan Heathcote 
 //
-// NOTE MSVC of course was playing its own game, and so I had to insert DEFERs all along the chain to make this work at all,
+// TODO MSVC of course was playing its own game, and so I had to insert DEFERs all along the chain to make this work at all,
 // meaning all this surely has zero portability
 
 #define FIRST(a, ...) a
