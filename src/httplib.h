@@ -657,6 +657,23 @@ namespace httplib {
 
     class Result {
         public:
+            static constexpr char const* errorStrings[] =
+            {
+                "Success",
+                "Unknown",
+                "Connection",
+                "BindIPAddress",
+                "Read",
+                "Write",
+                "ExceedRedirectCount",
+                "Canceled",
+                "SSLConnection",
+                "SSLLoadingCerts",
+                "SSLServerVerification",
+                "UnsupportedMultipartBoundaryChars",
+                "Compression",
+            };
+
             Result(std::unique_ptr<Response> &&res, Error err,
                    Headers &&request_headers = Headers{})
                 : res_(std::move(res)), err_(err),
@@ -674,6 +691,7 @@ namespace httplib {
 
             // Error
             Error error() const { return err_; }
+            char const* ErrorString() const { return errorStrings[(int)err_]; }
 
             // Request Headers
             bool has_request_header(const char *key) const;

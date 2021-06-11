@@ -40,12 +40,22 @@ namespace Win32
 #define PLATFORM_PRINT(name) void name( const char *fmt, ... )
 #define PLATFORM_PRINT_VA(name) void name( const char *fmt, va_list args )
 
+    PLATFORM_PRINT(Print)
+    {
+        va_list args;
+        va_start( args, fmt );
+        vfprintf( stdout, fmt, args );
+        va_end( args );
+        fprintf( stdout, "\n" );
+    }
+
     PLATFORM_PRINT(Error)
     {
         va_list args;
         va_start( args, fmt );
         vfprintf( stderr, fmt, args );
         va_end( args );
+        fprintf( stderr, "\n" );
     }
 
     PLATFORM_PRINT_VA(ErrorVA)

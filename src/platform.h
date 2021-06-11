@@ -22,8 +22,50 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #pragma once
 
+
+//
+// Compiler stuff
+//
+
+#if defined(__clang__) || defined(__GNUC__)   // Put this first so we account for clang-cl too
+
+#define COMPILER_LLVM 1
+
+#if defined(__amd64__) || defined(__x86_64__)
+    #define ARCH_X64 1
+#elif defined(__arm__)
+    #define ARCH_ARM 1
+#endif
+
+#elif _MSC_VER
+
+#define COMPILER_MSVC 1
+
+#if defined(_M_X64) || defined(_M_AMD64)
+    #define ARCH_X64 1
+#elif defined(_M_ARM)
+    #define ARCH_ARM 1
+#endif
+
+#else
+
+#error Compiler not supported!
+
+#endif //__clang__
+
+
+#if COMPILER_MSVC
+#define LIB_EXPORT extern "C" __declspec(dllexport)
+#else
+#define LIB_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
+
+
 struct MemoryArena;
 template <typename T> struct Array;
+
+// TODO Do something better for paths
+#define PLATFORM_PATH_MAX 1024
 
 #define PLATFORM_ALLOC(name) void* name( sz sizeBytes, u32 flags )
 typedef PLATFORM_ALLOC(PlatformAllocFunc);
@@ -87,6 +129,11 @@ struct PlatformAPI
 };
 extern PlatformAPI globalPlatform;
 
+// TODO Add support for different log severities and categories/filters
+#define LOG globalPlatform.Print
+#define LOGE globalPlatform.Error
+
 // TODO Introduce a thread-local globalContext that can be pushed & popped
 // We wanna make sure everything inside there is not generally synchronized across threads to keep it fast!
-// i.e. allocator, temp allocator, logger (how do we collate and flush all logs?)
+// i.e. allocator, temp allocator, assert handler, logger (how do we collate and flush all logs?)
+

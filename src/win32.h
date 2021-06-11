@@ -10,28 +10,21 @@
     #define WIN32_EXTRA_LEAN
 #endif
 
-#if 1
 #define NOIME
 #define NOWINRES
 #define NOGDICAPMASKS
-#define NOVIRTUALKEYCODES
-#define NOWINMESSAGES
-#define NOWINSTYLES
 #define NOSYSMETRICS
 #define NOMENUS
 #define NOICONS
 #define NOKEYSTATES
 #define NOSYSCOMMANDS
 #define NORASTEROPS
-#define NOSHOWWINDOW
 #define OEMRESOURCE
 #define NOATOM
-#define NOCLIPBOARD
 #define NOCOLOR
 #define NOCTLMGR
 #define NODRAWTEXT
 #define NOGDI
-#define NOUSER
 #define NOMB
 #define NOMEMMGR
 #define NOMETAFILE
@@ -53,10 +46,8 @@
 #define NOIME
 #define NOPROXYSTUB
 #define NOIMAGE
-#define NO
 #define NOTAPE
 #define ANSI_ONLY
-#endif
 
 #include <windows.h>
 

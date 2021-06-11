@@ -277,7 +277,6 @@ bool EqualityComparator( T const& a, T const& b )
 template <typename T>
 struct BucketArray
 {
-    // TODO Rewrite using Arrays with prev/next pointers as buckets
     struct Bucket
     {
         T* data;
@@ -325,6 +324,8 @@ struct BucketArray
         typedef IsFalse type;
     };
 
+    // TODO Since we can actually never index the buckets directly and we're forced to always iterate,
+    // isn't it much simpler to just treat this as a linked-list interface backed by linear chunks of memory?
     template<bool IsConst>
     struct Idx
     {

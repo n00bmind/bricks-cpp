@@ -9,3 +9,4 @@ main.exe
 bricks.time
 bin/
 test/test.exe
+*.swo
