@@ -268,13 +268,6 @@ const Array<T> Array<T>::Empty = {};
 /////     BUCKET ARRAY     /////
 
 template <typename T>
-bool EqualityComparator( T const& a, T const& b )
-{
-    return a == b;
-}
-
-
-template <typename T>
 struct BucketArray
 {
     struct Bucket
@@ -308,71 +301,27 @@ struct BucketArray
         }
     };
 
-    // Stupid C++ shit to have both a const and non-const iterator without writing it twice
-    // TODO Get rid of this
-    template <bool Flag, typename IsTrue, typename IsFalse>
-    struct Choose;
-
-    template <typename IsTrue, typename IsFalse>
-    struct Choose<true, IsTrue, IsFalse>
+    template <typename V, typename B>
+    struct IdxBase
     {
-        typedef IsTrue type;
-    };
-    template <typename IsTrue, typename IsFalse>
-    struct Choose<false, IsTrue, IsFalse>
-    {
-        typedef IsFalse type;
-    };
-
-    // TODO Since we can actually never index the buckets directly and we're forced to always iterate,
-    // isn't it much simpler to just treat this as a linked-list interface backed by linear chunks of memory?
-    template<bool IsConst>
-    struct Idx
-    {
-        typedef typename Choose<IsConst, T const&, T&>::type ValueRef;
-        typedef typename Choose<IsConst, Bucket const*, Bucket*>::type BucketPtr;
-
-        // TODO Should probably just default to const and do a const_cast in the main class methods when needed
-        BucketPtr base;
+        B base;
         i32 index;
 
-        Idx( BucketPtr base_ = nullptr, i32 index_ = 0 )
+        IdxBase( B base_ = nullptr, i32 index_ = 0 )
             : base( base_ )
             , index( index_ )
         {}
 
         // FIXME Additionally check that base is not in the free list
-        bool IsValid() const
-        {
-            return base && index >= 0 && index < base->count;
-        }
+        bool IsValid() const { return base && index >= 0 && index < base->count; }
+        explicit operator bool() const { return IsValid(); }
 
-        explicit operator bool() const
-        {
-            return base && index >= 0 && index < base->count;
-        }
+        operator V() const { ASSERT( IsValid() ); return base->data[index]; }
+        V operator *() const { return (V)*this; }
 
-        operator ValueRef() const
-        {
-            ASSERT( IsValid() );
-            return base->data[index];
-        }
+        bool operator ==( IdxBase<V, B> const& other ) const { return base == other.base && index == other.index; }
+        bool operator !=( IdxBase<V, B> const& other ) const { return !(*this == other); }
 
-        bool operator ==( Idx<IsConst> const& other ) const
-        {
-            return base == other.base && index == other.index;
-        }
-
-        bool operator !=( Idx<IsConst> const& other ) const
-        {
-            return base != other.base || index != other.index;
-        }
-
-        ValueRef operator *() const
-        {
-            ASSERT( IsValid() );
-            return base->data[index];
-        }
 
         void Next()
         {
@@ -385,19 +334,8 @@ struct BucketArray
             }
         }
 
-        Idx& operator ++()
-        {
-            Next();
-            return *this;
-        }
-
-        Idx operator ++( int )
-        {
-            Idx result(*this);
-            Next();
-
-            return result;
-        }
+        IdxBase& operator ++() { Next(); return *this; }
+        IdxBase operator ++( int ) { IdxBase result(*this); Next(); return result; }
 
         void Prev()
         {
@@ -410,20 +348,12 @@ struct BucketArray
             }
         }
 
-        Idx& operator --()
-        {
-            Prev();
-            return *this;
-        }
-
-        Idx operator --( int )
-        {
-            Idx result(*this);
-            Prev();
-
-            return result;
-        }
+        IdxBase& operator --() { Prev(); return *this; }
+        IdxBase operator --( int ) { IdxBase result(*this); Prev(); return result; }
     };
+
+    using Idx = IdxBase<T&, Bucket*>;
+    using ConstIdx = IdxBase<T const&, Bucket const*>;
 
 
     Bucket first;
@@ -471,6 +401,49 @@ struct BucketArray
     BucketArray( const BucketArray& ) = delete;
     BucketArray& operator =( const BucketArray& ) = delete;
 
+    Idx         First()          { return { &first, 0 }; }
+    ConstIdx    First() const    { return { &first, 0 }; }
+    Idx         Last()           { return { last, last->count - 1 }; }
+    ConstIdx    Last()  const    { return { last, last->count - 1 }; }
+    Idx         End()            { return { last, last->count }; }
+    ConstIdx    End()   const    { return { last, last->count }; }
+
+    T& operator[]( const Idx& idx ) { ASSERT( idx.IsValid() ); return (T&)idx; }
+    const T& operator[]( const ConstIdx& idx ) const { ASSERT( idx.IsValid() ); return (T const&)idx; }
+
+    bool operator ==( Array<T> const& other ) const
+    {
+        if( count != other.count)
+            return false;
+
+        int i = 0;
+        auto idx = First(); 
+        while( idx )
+        {
+            T const& e = *idx;
+            if( e != other[i++] )
+                return false;
+
+            idx.Next();
+        }
+
+        return true;
+    }
+
+    void Clear()
+    {
+        if( last != &first )
+        {
+            // Place all chained buckets in the free list
+            last->next = firstFree;
+            firstFree = first.next;
+        }
+
+        first.Clear();
+        count = 0;
+        last = &first;
+    }
+
     T* PushEmpty( bool clear = true )
     {
         if( last->count == last->capacity )
@@ -491,7 +464,7 @@ struct BucketArray
         return slot;
     }
 
-    T Remove( const Idx<false>& index )
+    T Remove( const Idx& index )
     {
         ASSERT( count > 0 );
         ASSERT( index.IsValid() );
@@ -529,7 +502,7 @@ struct BucketArray
 
     // Inclusive
     // TODO Need a way to convert between index const-ness when it makes sense, otherwise this IsConst shit is shit
-    void PopUntil( const Idx<false>& index )
+    void PopUntil( const Idx& index )
     {
         while( index.IsValid() )
             Pop();
@@ -716,58 +689,6 @@ struct BucketArray
         CopyTo( &result );
 
         return result;
-    }
-
-    void Clear()
-    {
-        if( last != &first )
-        {
-            // Place all chained buckets in the free list
-            last->next = firstFree;
-            firstFree = first.next;
-        }
-
-        first.Clear();
-        count = 0;
-        last = &first;
-    }
-
-    Idx<false> First()          { return { &first, 0 }; }
-    Idx<true>  First() const    { return { &first, 0 }; }
-    Idx<false> Last()           { return { last, last->count - 1 }; }
-    Idx<true>  Last()  const    { return { last, last->count - 1 }; }
-    Idx<false> End()            { return { last, last->count }; }
-    Idx<true>  End()   const    { return { last, last->count }; }
-
-    T& operator[]( const Idx<false>& idx )
-    {
-        ASSERT( idx.IsValid() );
-        return (T&)idx;
-    }
-
-    const T& operator[]( const Idx<true>& idx ) const
-    {
-        ASSERT( idx.IsValid() );
-        return (T const&)idx;
-    }
-
-    bool operator ==( Array<T> const& other ) const
-    {
-        if( count != other.count)
-            return false;
-
-        int i = 0;
-        auto idx = First(); 
-        while( idx )
-        {
-            T const& e = *idx;
-            if( e != other[i++] )
-                return false;
-
-            idx.Next();
-        }
-
-        return true;
     }
 
 private:
@@ -1087,7 +1008,7 @@ private:
 
         count = 0;
         capacity = newCapacity;
-        void* newMemory = ALLOC_SIZE( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), NoClear() );
+        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), NoClear() );
         keys   = (K*)newMemory;
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 

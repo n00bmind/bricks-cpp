@@ -29,6 +29,10 @@
 //OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 //SOFTWARE.
 
+// TODO Also, why the hell didn't I try https://github.com/HISONA/https_client first??
+// TODO RTFM! https://tls.mbed.org/kb/how-to/mbedtls-tutorial
+// TODO so investigate that, and get rid of this stuff
+
 #ifndef CPPHTTPLIB_HTTPLIB_H
 #define CPPHTTPLIB_HTTPLIB_H
 

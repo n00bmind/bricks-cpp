@@ -87,14 +87,74 @@ Temporary()
 
 #define INIT(var) new (&(var))
 
-#define ALLOC_FUNC(type) void* Alloc( type* alloc, sz sizeBytes, MemoryParams params = DefaultMemoryParams() )
-#define FREE_FUNC(type)  void Free( type* alloc, void* memoryBlock )
 
-#define ALLOC_STRUCT(alloc, type, ...)          (type *)Alloc( alloc, SIZEOF(type), ## __VA_ARGS__ )
-#define ALLOC_ARRAY(alloc, type, count, ...)    (type *)Alloc( alloc, (count)*SIZEOF(type), ## __VA_ARGS__ )
-#define ALLOC_STRING(alloc, count, ...)         (char *)Alloc( alloc, (count)*SIZEOF(char), ## __VA_ARGS__ )
-#define ALLOC_SIZE(alloc, size, ...)            Alloc( alloc, size, ## __VA_ARGS__ )
-#define FREE(alloc, mem)                        Free( alloc, mem )
+#define ALLOC_FUNC(cls) void* Alloc( cls* data, sz sizeBytes, char const* filename, int line, MemoryParams params = DefaultMemoryParams() )
+#define ALLOC_METHOD void* Alloc( sz sizeBytes, char const* filename, int line, MemoryParams params = DefaultMemoryParams() )
+typedef void* (*AllocFunc)( void* impl, sz sizeBytes, char const* filename, int line, MemoryParams params );
+#define FREE_FUNC(cls)  void Free( cls* data, void* memoryBlock, MemoryParams params = DefaultMemoryParams() )
+#define FREE_METHOD  void Free( void* memoryBlock, MemoryParams params = DefaultMemoryParams() )
+typedef void (*FreeFunc)( void* impl, void* memoryBlock, MemoryParams params );
+
+// This guy casts the data pointer to the appropriate type
+// and relies on overloading to call the correct pair of Alloc & Free functions accepting that as a first argument
+template <typename Class>
+struct AllocatorImpl
+{
+    static INLINE ALLOC_FUNC( void )
+    {
+        Class* obj = (Class*)data;
+        return ::Alloc( obj, sizeBytes, filename, line, params );
+    }
+
+    static INLINE FREE_FUNC( void )
+    {
+        Class* obj = (Class*)data;
+        ::Free( obj, memoryBlock, params );
+    }
+};
+
+
+// This guy is just a generic non-templated wrapper to any kind of allocator whatsoever
+// and two function pointers to its corresponding pair of free Alloc & Free functions
+struct Allocator
+{
+    Allocator() : impl( nullptr )
+    {}
+
+    template <typename Class>
+    static Allocator CreateFrom( Class* obj )
+    {
+        Allocator result;
+        result.impl = obj;
+        result.allocPtr = &AllocatorImpl<Class>::Alloc;
+        result.freePtr = &AllocatorImpl<Class>::Free;
+
+        return result;
+    }
+
+    INLINE ALLOC_METHOD
+    {
+        return allocPtr( impl, sizeBytes, filename, line, params );
+    }
+
+    INLINE FREE_METHOD
+    {
+        freePtr( impl, memoryBlock, params );
+    }
+
+private:
+    AllocFunc allocPtr;
+    FreeFunc freePtr;
+    void* impl;
+};
+
+
+#define ALLOC(allocator, size, ...)                 Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_STRUCT(allocator, type, ...)          (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_ARRAY(allocator, type, count, ...)    (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_STRING(allocator, count, ...)         (char *)Alloc( allocator, (count)*SIZEOF(char), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define FREE(allocator, mem, ...)                   Free( allocator, mem, ##__VA_ARGS__ )
+
 
 struct LazyAllocator
 {
@@ -297,10 +357,10 @@ MakeSubArena( MemoryArena* arena, sz size, MemoryParams params = NoClear() )
     return result;
 }
 
-//#define ALLOC_FUNC(type) void* Alloc( type* alloc, sz sizeBytes, MemoryParams params = DefaultMemoryParams() )
+//#define ALLOC_FUNC(type) void* Alloc( type* allocator, sz sizeBytes, MemoryParams params = DefaultMemoryParams() )
 ALLOC_FUNC( MemoryArena )
 {
-    void *result = _PushSize( alloc, sizeBytes, DefaultMemoryAlignment, params );
+    void *result = _PushSize( data, sizeBytes, DefaultMemoryAlignment, params );
     return result;
 }
 
