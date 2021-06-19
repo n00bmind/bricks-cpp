@@ -36,6 +36,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 namespace Win32
 {
+    PLATFORM_ALLOC(Alloc)
+    {
+        return VirtualAlloc( 0, (size_t)sizeBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE );
+    }
+
+    PLATFORM_FREE(Free)
+    {
+        VirtualFree( memoryBlock, 0, MEM_RELEASE );
+    }
+
     // TODO 
 #define PLATFORM_PRINT(name) void name( const char *fmt, ... )
 #define PLATFORM_PRINT_VA(name) void name( const char *fmt, va_list args )

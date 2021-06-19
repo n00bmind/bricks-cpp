@@ -64,13 +64,22 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 struct MemoryArena;
 template <typename T> struct Array;
 
+// Defined by the application
+struct Context;
+
 // TODO Do something better for paths
 #define PLATFORM_PATH_MAX 1024
+
 
 #define PLATFORM_ALLOC(name) void* name( sz sizeBytes, u32 flags )
 typedef PLATFORM_ALLOC(PlatformAllocFunc);
 #define PLATFORM_FREE(name) void name( void* memoryBlock )
 typedef PLATFORM_FREE(PlatformFreeFunc);
+
+#define PLATFORM_PUSH_CONTEXT(name) void name( Context const& newContext )
+typedef PLATFORM_PUSH_CONTEXT(PlatformPushContextFunc);
+#define PLATFORM_POP_CONTEXT(name) void name()
+typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
 
 #define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
@@ -95,11 +104,17 @@ struct PlatformAPI
 {
     PlatformAllocFunc* Alloc;
     PlatformFreeFunc* Free;
+
+    PlatformPushContextFunc* PushContext;
+    PlatformPopContextFunc* PopContext;
+
     PlatformGetAbsolutePathFunc* GetAbsolutePath;
     PlatformReadEntireFileFunc* ReadEntireFile;
     PlatformWriteEntireFileFunc* WriteEntireFile;
+
     PlatformCurrentTimeMillisFunc* CurrentTimeMillis;
     PlatformShellExecuteFunc* ShellExecute;
+
     PlatformPrintFunc* Print;
     PlatformPrintFunc* Error;
     PlatformPrintVAFunc* PrintVA;
@@ -129,11 +144,10 @@ struct PlatformAPI
 };
 extern PlatformAPI globalPlatform;
 
+#define CTX (**globalContext)
+
 // TODO Add support for different log severities and categories/filters
+// TODO Use the Context!
 #define LOG globalPlatform.Print
 #define LOGE globalPlatform.Error
-
-// TODO Introduce a thread-local globalContext that can be pushed & popped
-// We wanna make sure everything inside there is not generally synchronized across threads to keep it fast!
-// i.e. allocator, temp allocator, assert handler, logger (how do we collate and flush all logs?)
 

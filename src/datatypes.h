@@ -1008,7 +1008,7 @@ private:
 
         count = 0;
         capacity = newCapacity;
-        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), NoClear() );
+        void* newMemory = ALLOCA( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), NoClear() );
         keys   = (K*)newMemory;
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 

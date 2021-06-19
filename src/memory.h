@@ -148,12 +148,16 @@ private:
     void* impl;
 };
 
+#define ALLOC(size, ...)                            Alloc( size, __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_STRUCT(type, ...)                     Alloc( SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_ARRAY(type, count, ...)               Alloc( (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define FREE(mem, ...)                              Free( mem, ##__VA_ARGS__ )
 
-#define ALLOC(allocator, size, ...)                 Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_STRUCT(allocator, type, ...)          (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_ARRAY(allocator, type, count, ...)    (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_STRING(allocator, count, ...)         (char *)Alloc( allocator, (count)*SIZEOF(char), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define FREE(allocator, mem, ...)                   Free( allocator, mem, ##__VA_ARGS__ )
+// Free-function versions, passing the allocator implementation
+#define ALLOCA(allocator, size, ...)                Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOCA_STRUCT(allocator, type, ...)         (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOCA_ARRAY(allocator, type, count, ...)   (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define FREEA(allocator, mem, ...)                  Free( allocator, mem, ##__VA_ARGS__ )
 
 
 struct LazyAllocator
