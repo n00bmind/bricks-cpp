@@ -1,4 +1,8 @@
 
+#include <winsock2.h>
+#include "win32.h"
+#include <DbgHelp.h>
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -10,14 +14,20 @@
 #include "gtest/gtest.h"
 
 
-#include <winsock2.h>
-#include "win32.h"
-#include <DbgHelp.h>
-
 #include "magic.h"
 #include "common.h"
+#include "intrinsics.h"
+#include "maths.h"
+#include "platform.h"
+#include "memory.h"
+#include "datatypes.h"
 #include "strings.h"
 #include "win32_platform.cpp"
+
+// TODO
+PlatformAPI globalPlatform;
+
+#undef internal
 
 #pragma warning( disable : 4355 )
 #pragma warning( disable : 4365 )
@@ -26,12 +36,13 @@
 #pragma warning( disable : 4577 )
 #pragma warning( disable : 4702 )
 
+// Disable httplib tests for now
+#if 0
+
 // TODO Fix all warnings
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.h"
 
-
-#undef internal
 
 #include <atomic>
 #include <chrono>
@@ -1134,7 +1145,52 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 }
 #endif
 
+// Disable httplib tests for now
+#endif
 
+
+#include "https.h"
+#include "https.c"
+
+TEST( Https, Various )
+{
+    WSADATA wsaData;
+    int iResult;
+
+    // Initialize Winsock
+    iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+    if (iResult != 0) {
+        printf("WSAStartup failed: %d\n", iResult);
+        ASSERT_TRUE( false );
+        return;
+    }
+
+
+    char* url;
+    char data[1024], response[4096];
+    int  i, ret, size;
+
+    HTTP_INFO hi1, hi2;
+
+
+    // Init http session. verify: check the server CA cert.
+    http_init(&hi1, FALSE);
+    http_init(&hi2, TRUE);
+
+    // Test a http get method.
+    url = "http://httpbin.org/get?message=https_client";
+
+    ret = http_get(&hi1, url, response, sizeof(response));
+
+    printf("return code: %d \n", ret);
+    printf("return body: %s \n", response);
+
+    ASSERT_EQ( ret, 200 );
+
+
+    ret = WSACleanup();
+    ASSERT_EQ(0, ret);
+}
 
 #include "gtest/gtest-all.cc"
 

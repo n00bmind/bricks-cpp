@@ -58,9 +58,10 @@ platform_win = Platform(
             '-wd4820',          # Padding added
             '-wd5026',          # Move constructor implicitly deleted
             '-wd5027',          # Move assignment implicitly deleted
-            '-wd5045'          # Spectre mitigations
+            '-wd5045',          # Spectre mitigations
             ],
-        libs                  = ['dbghelp.lib'], #'user32.lib', 'gdi32.lib', 'winmm.lib', 'ole32.lib', 'opengl32.lib', 'shlwapi.lib'],
+        libs                  = ['dbghelp.lib', 'ws2_32.lib', 'advapi32.lib',],
+                                #'user32.lib', 'gdi32.lib', 'winmm.lib', 'ole32.lib', 'opengl32.lib', 'shlwapi.lib'],
         common_linker_flags   = ['/opt:ref', '/incremental:no']
 )
 
@@ -115,12 +116,16 @@ default_platform = platform_win
 
 include_dirs = [
     'src',
-    '3rdparty\\openssl\\include',
+    '3rdparty/openssl/include',
+    '3rdparty/mbedtls/include'
 ]
 
+#  TODO Create additional separate lists for Debug/Release
 user_libs = [
-    '3rdparty\openssl\libcrypto-1_1-x64.lib',
-    '3rdparty\openssl\libssl-1_1-x64.lib',
+    '3rdparty/openssl/libcrypto-1_1-x64.lib',
+    '3rdparty/openssl/libssl-1_1-x64.lib',
+    '3rdparty/mbedtls/lib/Debug/mbedTLS.lib',
+    # '3rdparty/mbedtls/lib/Release/mbedTLS.lib',
 ]
 
 

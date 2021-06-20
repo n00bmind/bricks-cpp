@@ -100,6 +100,7 @@ typedef PLATFORM_PRINT(PlatformPrintFunc);
 typedef PLATFORM_PRINT_VA(PlatformPrintVAFunc);
 
 
+// TODO Shouldn't this be defined by the application really?
 struct PlatformAPI
 {
     PlatformAllocFunc* Alloc;
@@ -108,12 +109,14 @@ struct PlatformAPI
     PlatformPushContextFunc* PushContext;
     PlatformPopContextFunc* PopContext;
 
+#if 0
     PlatformGetAbsolutePathFunc* GetAbsolutePath;
     PlatformReadEntireFileFunc* ReadEntireFile;
     PlatformWriteEntireFileFunc* WriteEntireFile;
 
     PlatformCurrentTimeMillisFunc* CurrentTimeMillis;
     PlatformShellExecuteFunc* ShellExecute;
+#endif
 
     PlatformPrintFunc* Print;
     PlatformPrintFunc* Error;

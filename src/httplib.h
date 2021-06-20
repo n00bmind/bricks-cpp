@@ -3528,14 +3528,14 @@ namespace httplib {
         }
 
 #ifdef CPPHTTPLIB_OPENSSL_SUPPORT
-        template <typename CTX, typename Init, typename Update, typename Final>
+        template <typename Ctx, typename Init, typename Update, typename Final>
             inline std::string message_digest(const std::string &s, Init init,
                                               Update update, Final final,
                                               size_t digest_length) {
                 using namespace std;
 
                 std::vector<unsigned char> md(digest_length, 0);
-                CTX ctx;
+                Ctx ctx;
                 init(&ctx);
                 update(&ctx, s.data(), s.size());
                 final(md.data(), &ctx);
