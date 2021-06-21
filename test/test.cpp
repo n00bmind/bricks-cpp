@@ -1152,49 +1152,142 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 #include "https.h"
 #include "https.c"
 
-TEST( Https, Various )
+#ifdef _WIN32
+class Https : public testing::Test
 {
-    WSADATA wsaData;
-    int iResult;
+protected:
+    // Per-test-suite set-up.
+    // Called before the first test in this test suite.
+    // Can be omitted if not needed.
+    static void SetUpTestCase()
+    {
+        WSADATA wsaData;
+        int iResult;
 
-    // Initialize Winsock
-    iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-    if (iResult != 0) {
-        printf("WSAStartup failed: %d\n", iResult);
-        ASSERT_TRUE( false );
-        return;
+        // Initialize Winsock
+        iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+        ASSERT_EQ( iResult, 0 ) << "WSAStartup failed";
     }
 
+    // Per-test-suite tear-down.
+    // Called after the last test in this test suite.
+    // Can be omitted if not needed.
+    static void TearDownTestCase()
+    {
+        int ret = WSACleanup();
+        ASSERT_EQ(0, ret);
+    }
 
+    // Per-test setup/teardown
+    virtual void SetUp()
+    { }
+    virtual void TearDown()
+    { }
+};
+#endif
+
+TEST_F( Https, GetPost )
+{
     char* url;
     char data[1024], response[4096];
     int  i, ret, size;
 
-    HTTP_INFO hi1, hi2;
-
-
+    HTTP_INFO info;
     // Init http session. verify: check the server CA cert.
-    http_init(&hi1, FALSE);
-    http_init(&hi2, TRUE);
+    //http_init(&info, FALSE);
+    http_init(&info, TRUE);
 
     // Test a http get method.
-    url = "http://httpbin.org/get?message=https_client";
+    url = "https://httpbin.org/get?message=https_client";
+    ret = http_get(&info, url, response, sizeof(response));
 
-    ret = http_get(&hi1, url, response, sizeof(response));
-
+#if 0
     printf("return code: %d \n", ret);
     printf("return body: %s \n", response);
+#endif
 
     ASSERT_EQ( ret, 200 );
 
+    // Test a http post method.
+    url = "https://httpbin.org/post";
+    snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client!\"}");
+    ret = http_post(&info, url, data, response, sizeof(response));
 
-    ret = WSACleanup();
-    ASSERT_EQ(0, ret);
+#if 0
+    printf("return code: %d \n", ret);
+    printf("return body: %s \n", response);
+#endif
+
+    ASSERT_EQ( ret, 200 );
+
+    http_close(&info);
 }
+
+#if 0
+// http_open_chunked & http_write_chunked are nowhere to be found
+
+TEST_F( Https, ChunkedEncoding )
+{
+    char* url;
+    char data[1024], response[4096];
+    int  i, ret, size;
+
+    HTTP_INFO info;
+    // Init http session. verify: check the server CA cert.
+    //http_init(&info, FALSE);
+    http_init(&info, TRUE);
+
+    // Test a https post with the chunked-encoding data.
+    url = "https://httpbin.org/post";
+    ret = http_open_chunked(&info, url);
+    if(ret == 0)
+    {
+        size = snprintf(data, ARRAYCOUNT(data), "[{\"message\":\"Hello, https_client %d\"},", 0);
+        int written = http_write_chunked(&info, data, size);
+        if(written != size)
+        {
+            http_strerror(data, 1024);
+            ASSERT_EQ( written, size ) << "socket error: " << data;
+        }
+
+        for(i=1; i<4; i++)
+        {
+            size = snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client %d\"},", i);
+            written = http_write_chunked(&info, data, size);
+            if(written != size)
+            {
+                http_strerror(data, 1024);
+                ASSERT_EQ( written, size ) << "socket error: " << data;
+            }
+        }
+
+        size = snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client %d\"}]", i);
+        written = http_write_chunked(&info, data, strlen(data));
+        if(written != size)
+        {
+            http_strerror(data, 1024);
+            ASSERT_EQ( written, size ) << "socket error: " << data;
+        }
+
+        ret = http_read_chunked(&info, response, sizeof(response));
+
+        printf("return code: %d \n", ret);
+        printf("return body: %s \n", response);
+    }
+    else
+    {
+        http_strerror(data, 1024);
+        ASSERT_EQ( ret, 0 ) << "socket error: " << data;
+    }
+
+    http_close(&info);
+}
+#endif
 
 #include "gtest/gtest-all.cc"
 
 #pragma warning( pop )
+
 
 GTEST_API_ int main(int argc, char **argv)
 {

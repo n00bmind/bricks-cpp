@@ -1,4 +1,5 @@
-// Taken from https://github.com/HISONA/https_client TODO Modified to add Windows support
+// Taken from https://github.com/HISONA/https_client
+// Modified to add Windows support
 /*
                                  Apache License
                            Version 2.0, January 2004
@@ -233,10 +234,7 @@ using socket_t = int;
 #endif // #ifdef _WIN32
 
 
-/* TODO */
-#if 0
 #include "ca_cert.h"
-#endif
 #include "https.h"
 
 /* TODO Fix these! */
@@ -647,6 +645,17 @@ static int https_init(HTTP_INFO *hi, bool https, bool verify)
 
     mbedtls_net_init(&hi->tls.ssl_fd);
 
+    /* NOTE Moved from https_connect */
+    for( int i = 0; i < (sizeof(ca_crt_rsa) / sizeof(char*)); ++i )
+    {
+        // +1 to account for the null terminator
+        int ret = mbedtls_x509_crt_parse(&hi->tls.cacert, (uint8_t *)ca_crt_rsa[i], strlen(ca_crt_rsa[i]) + 1);
+        if( ret != 0 )
+        {
+            return ret;
+        }
+    }
+
     hi->tls.verify = verify;
     hi->url.https = https;
 
@@ -741,6 +750,7 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
             break;
         }
 
+        /* TODO We should be able to use mbedTLS all the way? Check how this compares to 'mbedtls_net_connect' */
         ret = connect( ctx->fd, cur->ai_addr, cur->ai_addrlen );
         if( ret == 0 )
         {
@@ -834,16 +844,6 @@ static int https_connect(HTTP_INFO *hi, char *host, char *port)
         {
             return ret;
         }
-
-        /* TODO */
-#if 0
-        ca_crt_rsa[ca_crt_rsa_size - 1] = 0;
-        ret = mbedtls_x509_crt_parse(&hi->tls.cacert, (uint8_t *)ca_crt_rsa, ca_crt_rsa_size);
-        if( ret != 0 )
-        {
-            return ret;
-        }
-#endif
 
         ret = mbedtls_ssl_config_defaults( &hi->tls.conf,
                                            MBEDTLS_SSL_IS_CLIENT,

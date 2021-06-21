@@ -1,5 +1,5 @@
 // Taken from https://github.com/HISONA/https_client
-// TODO Modified to add Windows support
+// Modified to add Windows support
 /*
                                  Apache License
                            Version 2.0, January 2004
