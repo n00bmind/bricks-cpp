@@ -218,8 +218,8 @@
 #include "mbedtls/certs.h"
 
 /*---------------------------------------------------------------------*/
-#define H_FIELD_SIZE     512
-#define H_READ_SIZE     2048
+#define H_FIELD_SIZE    512
+#define H_READ_SIZE     16384
 
 #include <stdbool.h>
 
@@ -242,7 +242,7 @@ typedef struct
     char cookie[H_FIELD_SIZE];
     char boundary[H_FIELD_SIZE];
 
-} HTTP_HEADER;
+} HttpHeader;
 
 typedef struct
 {
@@ -255,7 +255,7 @@ typedef struct
     mbedtls_ssl_config          conf;
     mbedtls_x509_crt            cacert;
 
-} HTTP_SSL;
+} HttpSsl;
 
 typedef struct {
 
@@ -264,15 +264,15 @@ typedef struct {
     char    port[8];
     char    path[H_FIELD_SIZE];
 
-} HTTP_URL;
+} HttpUrl;
 
-typedef struct
+struct Http
 {
-    HTTP_URL    url;
+    HttpUrl    url;
 
-    HTTP_HEADER request;
-    HTTP_HEADER response;
-    HTTP_SSL    tls;
+    HttpHeader request;
+    HttpHeader response;
+    HttpSsl    tls;
 
     long        length;
     char        r_buf[H_READ_SIZE];
@@ -283,24 +283,30 @@ typedef struct
     long        body_len;
 
 
-} HTTP_INFO;
+    Http( bool verify ) { Init( verify ); }
+    ~Http() { Close(); }
+
+    int  Get( char *url, char *response, int size );
+    int  Post( char *url, char *data, char *response, int size );
+
+    // Custom connection handling
+    int  Open( char *url );
+    int  WriteHeaders();
+    int  Write( char *data, int len );
+    int  WriteEnd();
+    int  ReadChunked( char *response, int size );
+
+private:
+    int  Init( bool verify );
+    int  Close();
+
+};
 
 
 /*---------------------------------------------------------------------*/
 
 char *strtoken(char *src, char *dst, int size);
-
-int  http_init(HTTP_INFO *hi, bool verify);
-int  http_close(HTTP_INFO *hi);
-int  http_get(HTTP_INFO *hi, char *url, char *response, int size);
-int  http_post(HTTP_INFO *hi, char *url, char *data, char *response, int size);
-
-void http_strerror(char *buf, int len);
-int  http_open(HTTP_INFO *hi, char *url);
-int  http_write_header(HTTP_INFO *hi);
-int  http_write(HTTP_INFO *hi, char *data, int len);
-int  http_write_end(HTTP_INFO *hi);
-int  http_read_chunked(HTTP_INFO *hi, char *response, int size);
+void http_strerror(char *buf, sz len);
 
 #endif //HTTPS_CLIENT_HTTPS_H
 

@@ -252,14 +252,14 @@ static int _error;
 char *strtoken(char *src, char *dst, int size);
 
 static int parse_url(char *src_url, int *https, char *host, char *port, char *url);
-static int http_header(HTTP_INFO *hi, char *param);
-static int http_parse(HTTP_INFO *hi);
+static int http_header(Http *hi, char *param);
+static int http_parse(Http *hi);
 
-static int https_init(HTTP_INFO *hi, bool https, bool verify);
-static int https_close(HTTP_INFO *hi);
-static int https_connect(HTTP_INFO *hi, char *host, char *port);
-static int https_write(HTTP_INFO *hi, char *buffer, int len);
-static int https_read(HTTP_INFO *hi, char *buffer, int len);
+static int https_init(Http *hi, bool https, bool verify);
+static int https_close(Http *hi);
+static int https_connect(Http *hi, char *host, char *port);
+static int https_write(Http *hi, char *buffer, int len);
+static int https_read(Http *hi, char *buffer, int len);
 
 /*---------------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size)
@@ -357,7 +357,7 @@ static int parse_url(char *src_url, int *https, char *host, char *port, char *ur
 }
 
 /*---------------------------------------------------------------------*/
-static int http_header(HTTP_INFO *hi, char *param)
+static int http_header(Http *hi, char *param)
 {
     char *token;
     char t1[256], t2[256];
@@ -405,7 +405,7 @@ static int http_header(HTTP_INFO *hi, char *param)
 }
 
 /*---------------------------------------------------------------------*/
-static int http_parse(HTTP_INFO *hi)
+static int http_parse(Http *hi)
 {
     char    *p1, *p2;
     long    len;
@@ -631,9 +631,9 @@ static int http_parse(HTTP_INFO *hi)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_init(HTTP_INFO *hi, bool https, bool verify)
+static int https_init(Http *hi, bool https, bool verify)
 {
-    memset(hi, 0, sizeof(HTTP_INFO));
+    memset(hi, 0, sizeof(Http));
 
     if(https == TRUE)
     {
@@ -665,7 +665,7 @@ static int https_init(HTTP_INFO *hi, bool https, bool verify)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_close(HTTP_INFO *hi)
+static int https_close(Http *hi)
 {
     if(hi->url.https == 1)
     {
@@ -828,7 +828,7 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
 }
 
 /*---------------------------------------------------------------------*/
-static int https_connect(HTTP_INFO *hi, char *host, char *port)
+static int https_connect(Http *hi, char *host, char *port)
 {
     int ret, https;
 
@@ -903,7 +903,7 @@ static int https_connect(HTTP_INFO *hi, char *host, char *port)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_write(HTTP_INFO *hi, char *buffer, int len)
+static int https_write(Http *hi, char *buffer, int len)
 {
     int ret, slen = 0;
 
@@ -926,7 +926,7 @@ static int https_write(HTTP_INFO *hi, char *buffer, int len)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_read(HTTP_INFO *hi, char *buffer, int len)
+static int https_read(Http *hi, char *buffer, int len)
 {
     if(hi->url.https == 1)
     {
@@ -939,211 +939,211 @@ static int https_read(HTTP_INFO *hi, char *buffer, int len)
 }
 
 /*---------------------------------------------------------------------*/
-int http_init(HTTP_INFO *hi, bool verify)
+int Http::Init( bool verify )
 {
-    return https_init(hi, 0, verify);
+    return https_init( this, 0, verify );
 }
 
 /*---------------------------------------------------------------------*/
-int http_close(HTTP_INFO *hi)
+int Http::Close()
 {
-    return https_close(hi);
+    return https_close( this );
 }
 
 /*---------------------------------------------------------------------*/
-int http_get(HTTP_INFO *hi, char *url, char *response, int size)
+int Http::Get( char *url_, char *response_, int size )
 {
-    char        request[1024], err[100];
+    char        req[1024], err[100];
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
     int         ret, opt, len;
     socklen_t   slen;
 
 
-    if(NULL == hi) return -1;
+    if(NULL == this) return -1;
 
-    verify = hi->tls.verify;
+    verify = this->tls.verify;
 
-    parse_url(url, &https, host, port, dir);
+    parse_url(url_, &https, host, port, dir);
 
-    if( (hi->tls.ssl_fd.fd == -1) || (hi->url.https != https) ||
-        (strcmp(hi->url.host, host) != 0) || (strcmp(hi->url.port, port) != 0) )
+    if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
+        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
     {
-        https_close(hi);
+        https_close(this);
 
-        https_init(hi, https, verify);
+        https_init(this, https, verify);
 
-        if((ret=https_connect(hi, host, port)) < 0)
+        if((ret=https_connect(this, host, port)) < 0)
         {
-            https_close(hi);
+            https_close(this);
 
             mbedtls_strerror(ret, err, 100);
-            snprintf(response, 256, "socket error: %s(%d)", err, ret);
+            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
             return -1;
         }
     }
     else
     {
-        sock_fd = hi->tls.ssl_fd.fd;
+        sock_fd = this->tls.ssl_fd.fd;
 
         slen = sizeof(int);
 
         if((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *)&opt, &slen) < 0) || (opt > 0))
         {
-            https_close(hi);
+            https_close(this);
 
-            https_init(hi, https, verify);
+            https_init(this, https, verify);
 
-            if((ret=https_connect(hi, host, port)) < 0)
+            if((ret=https_connect(this, host, port)) < 0)
             {
-                https_close(hi);
+                https_close(this);
 
                 mbedtls_strerror(ret, err, 100);
-                snprintf(response, 256, "socket error: %s(%d)", err, ret);
+                snprintf(response_, 256, "socket error: %s(%d)", err, ret);
                 return -1;
             }
         }
     }
 
     /* Send HTTP request. */
-    len = snprintf(request, 1024,
+    len = snprintf(req, 1024,
             "GET %s HTTP/1.1\r\n"
             "User-Agent: Mozilla/4.0\r\n"
             "Host: %s:%s\r\n"
             "Content-Type: application/json; charset=utf-8\r\n"
             "Connection: Keep-Alive\r\n"
             "%s\r\n",
-            dir, host, port, hi->request.cookie);
+            dir, host, port, this->request.cookie);
 
-    if((ret = https_write(hi, request, len)) != len)
+    if((ret = https_write(this, req, len)) != len)
     {
-        https_close(hi);
+        https_close(this);
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(response, 256, "socket error: %s(%d)", err, ret);
+        snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", request);
+//  printf("request: %s \r\n\r\n", req);
 
-    hi->response.status = 0;
-    hi->response.content_length = 0;
-    hi->response.close = 0;
+    this->response.status = 0;
+    this->response.content_length = 0;
+    this->response.close = 0;
 
-    hi->r_len = 0;
-    hi->header_end = 0;
+    this->r_len = 0;
+    this->header_end = 0;
 
-    hi->body = response;
-    hi->body_size = size;
-    hi->body_len = 0;
+    this->body = response_;
+    this->body_size = size;
+    this->body_len = 0;
 
     while(1)
     {
-        ret = https_read(hi, &hi->r_buf[hi->r_len], (int)(H_READ_SIZE - hi->r_len));
+        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
         if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
         else if(ret < 0)
         {
-            https_close(hi);
+            https_close(this);
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(response, 256, "socket error: %s(%d)", err, ret);
+            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
         else if(ret == 0)
         {
-            https_close(hi);
+            https_close(this);
             break;
         }
 
-        hi->r_len += ret;
-        hi->r_buf[hi->r_len] = 0;
+        this->r_len += ret;
+        this->r_buf[this->r_len] = 0;
 
-        // printf("read(%ld): |%s| \n", hi->r_len, hi->r_buf);
-        // printf("read(%ld) ... \n", hi->r_len);
+        // printf("read(%ld): |%s| \n", this->r_len, this->r_buf);
+        // printf("read(%ld) ... \n", this->r_len);
 
-        if(http_parse(hi) != 0) break;
+        if(http_parse(this) != 0) break;
     }
 
-    if(hi->response.close == 1)
+    if(this->response.close == 1)
     {
-        https_close(hi);
+        https_close(this);
     }
     else
     {
-        strncpy(hi->url.host, host, strlen(host));
-        strncpy(hi->url.port, port, strlen(port));
-        strncpy(hi->url.path, dir, strlen(dir));
+        strncpy(this->url.host, host, strlen(host));
+        strncpy(this->url.port, port, strlen(port));
+        strncpy(this->url.path, dir, strlen(dir));
     }
 
     /*
-    printf("status: %d \n", hi->response.status);
-    printf("cookie: %s \n", hi->response.cookie);
-    printf("location: %s \n", hi->response.location);
-    printf("referrer: %s \n", hi->response.referrer);
-    printf("length: %ld \n", hi->response.content_length);
-    printf("body: %ld \n", hi->body_len);
+    printf("status: %d \n", this->response.status);
+    printf("cookie: %s \n", this->response.cookie);
+    printf("location: %s \n", this->response.location);
+    printf("referrer: %s \n", this->response.referrer);
+    printf("length: %ld \n", this->response.content_length);
+    printf("body: %ld \n", this->body_len);
     */
 
-    return hi->response.status;
+    return this->response.status;
 
 }
 
 /*---------------------------------------------------------------------*/
-int http_post(HTTP_INFO *hi, char *url, char *data, char *response, int size)
+int Http::Post( char *url_, char *data, char *response_, int size )
 {
-    char        request[1024], err[100];
+    char        req[1024], err[100];
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
     int         ret, opt, len;
     socklen_t   slen;
 
 
-    if(NULL == hi) return -1;
+    if(NULL == this) return -1;
 
-    verify = hi->tls.verify;
+    verify = this->tls.verify;
 
-    parse_url(url, &https, host, port, dir);
+    parse_url(url_, &https, host, port, dir);
 
-    if( (hi->tls.ssl_fd.fd == -1) || (hi->url.https != https) ||
-        (strcmp(hi->url.host, host) != 0) || (strcmp(hi->url.port, port) != 0) )
+    if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
+        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
     {
-        if(hi->tls.ssl_fd.fd != -1)
-            https_close(hi);
+        if(this->tls.ssl_fd.fd != -1)
+            https_close(this);
 
-        https_init(hi, https, verify);
+        https_init(this, https, verify);
 
-        if((ret=https_connect(hi, host, port)) < 0)
+        if((ret=https_connect(this, host, port)) < 0)
         {
-            https_close(hi);
+            https_close(this);
 
             mbedtls_strerror(ret, err, 100);
-            snprintf(response, 256, "socket error: %s(%d)", err, ret);
+            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
     }
     else
     {
-        sock_fd = hi->tls.ssl_fd.fd;
+        sock_fd = this->tls.ssl_fd.fd;
 
         slen = sizeof(int);
 
         if((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *)&opt, &slen) < 0) || (opt > 0))
         {
-            https_close(hi);
+            https_close(this);
 
-            https_init(hi, https, verify);
+            https_init(this, https, verify);
 
-            if((ret=https_connect(hi, host, port)) < 0)
+            if((ret=https_connect(this, host, port)) < 0)
             {
-                https_close(hi);
+                https_close(this);
 
                 mbedtls_strerror(ret, err, 100);
-                snprintf(response, 256, "socket error: %s(%d)", err, ret);
+                snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
                 return -1;
             }
@@ -1153,7 +1153,7 @@ int http_post(HTTP_INFO *hi, char *url, char *data, char *response, int size)
     }
 
     /* Send HTTP request. */
-    len = snprintf(request, 1024,
+    len = snprintf(req, 1024,
             "POST %s HTTP/1.1\r\n"
             "User-Agent: Mozilla/4.0\r\n"
             "Host: %s:%s\r\n"
@@ -1165,96 +1165,95 @@ int http_post(HTTP_INFO *hi, char *url, char *data, char *response, int size)
             "%s",
             dir, host, port,
             (int)strlen(data),
-            hi->request.cookie,
+            this->request.cookie,
             data);
 
-    if((ret = https_write(hi, request, len)) != len)
+    if((ret = https_write(this, req, len)) != len)
     {
-        https_close(hi);
+        https_close(this);
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(response, 256, "socket error: %s(%d)", err, ret);
+        snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", request);
+//  printf("request: %s \r\n\r\n", req);
 
-    hi->response.status = 0;
-    hi->response.content_length = 0;
-    hi->response.close = 0;
+    this->response.status = 0;
+    this->response.content_length = 0;
+    this->response.close = 0;
 
-    hi->r_len = 0;
-    hi->header_end = 0;
+    this->r_len = 0;
+    this->header_end = 0;
 
-    hi->body = response;
-    hi->body_size = size;
-    hi->body_len = 0;
+    this->body = response_;
+    this->body_size = size;
+    this->body_len = 0;
 
-    hi->body[0] = 0;
+    this->body[0] = 0;
 
     while(1)
     {
-        ret = https_read(hi, &hi->r_buf[hi->r_len], (int)(H_READ_SIZE - hi->r_len));
+        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
         if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
         else if(ret < 0)
         {
-            https_close(hi);
+            https_close(this);
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(response, 256, "socket error: %s(%d)", err, ret);
+            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
         else if(ret == 0)
         {
-            https_close(hi);
+            https_close(this);
             break;
         }
 
-        hi->r_len += ret;
-        hi->r_buf[hi->r_len] = 0;
+        this->r_len += ret;
+        this->r_buf[this->r_len] = 0;
 
-//        printf("read(%ld): %s \n", hi->r_len, hi->r_buf);
-//        printf("read(%ld) \n", hi->r_len);
+//        printf("read(%ld): %s \n", this->r_len, this->r_buf);
+//        printf("read(%ld) \n", this->r_len);
 
-        if(http_parse(hi) != 0) break;
+        if(http_parse(this) != 0) break;
     }
 
-    if(hi->response.close == 1)
+    if(this->response.close == 1)
     {
-        https_close(hi);
+        https_close(this);
     }
     else
     {
-        strncpy(hi->url.host, host, strlen(host));
-        strncpy(hi->url.port, port, strlen(port));
-        strncpy(hi->url.path, dir, strlen(dir));
+        strncpy(this->url.host, host, strlen(host));
+        strncpy(this->url.port, port, strlen(port));
+        strncpy(this->url.path, dir, strlen(dir));
     }
 
 /*
-    printf("status: %d \n", hi->response.status);
-    printf("cookie: %s \n", hi->response.cookie);
-    printf("location: %s \n", hi->response.location);
-    printf("referrer: %s \n", hi->response.referrer);
-    printf("length: %d \n", hi->response.content_length);
-    printf("body: %d \n", hi->body_len);
+    printf("status: %d \n", this->response.status);
+    printf("cookie: %s \n", this->response.cookie);
+    printf("location: %s \n", this->response.location);
+    printf("referrer: %s \n", this->response.referrer);
+    printf("length: %d \n", this->response.content_length);
+    printf("body: %d \n", this->body_len);
 */
 
-    return hi->response.status;
-
+    return this->response.status;
 }
 
 /*---------------------------------------------------------------------*/
-void http_strerror(char *buf, int len)
+void http_strerror(char *buf, sz len)
 {
     mbedtls_strerror(_error, buf, len);
 }
 
 /*---------------------------------------------------------------------*/
-int http_open(HTTP_INFO *hi, char *url)
+int Http::Open( char *url_ )
 {
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
@@ -1262,23 +1261,23 @@ int http_open(HTTP_INFO *hi, char *url)
     socklen_t   slen;
 
 
-    if (NULL == hi) return -1;
+    if (NULL == this) return -1;
 
-    verify = hi->tls.verify;
+    verify = this->tls.verify;
 
-    parse_url(url, &https, host, port, dir);
+    parse_url(url_, &https, host, port, dir);
 
-    if ((hi->tls.ssl_fd.fd == -1) || (hi->url.https != https) ||
-        (strcmp(hi->url.host, host) != 0) || (strcmp(hi->url.port, port) != 0))
+    if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
+        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0))
     {
-        if (hi->tls.ssl_fd.fd != -1)
-            https_close(hi);
+        if (this->tls.ssl_fd.fd != -1)
+            https_close(this);
 
-        https_init(hi, https, verify);
+        https_init(this, https, verify);
 
-        if ((ret = https_connect(hi, host, port)) < 0)
+        if ((ret = https_connect(this, host, port)) < 0)
         {
-            https_close(hi);
+            https_close(this);
 
             _error = ret;
 
@@ -1287,19 +1286,19 @@ int http_open(HTTP_INFO *hi, char *url)
     }
     else
     {
-        sock_fd = hi->tls.ssl_fd.fd;
+        sock_fd = this->tls.ssl_fd.fd;
 
         slen = sizeof(int);
 
         if ((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *) &opt, &slen) < 0) || (opt > 0))
         {
-            https_close(hi);
+            https_close(this);
 
-            https_init(hi, https, verify);
+            https_init(this, https, verify);
 
-            if ((ret = https_connect(hi, host, port)) < 0)
+            if ((ret = https_connect(this, host, port)) < 0)
             {
-                https_close(hi);
+                https_close(this);
 
                 _error = ret;
 
@@ -1310,75 +1309,75 @@ int http_open(HTTP_INFO *hi, char *url)
 //          printf("socket reuse: %d \n", sock_fd);
     }
 
-    strncpy(hi->url.host, host, strlen(host));
-    strncpy(hi->url.port, port, strlen(port));
-    strncpy(hi->url.path, dir, strlen(dir));
+    strncpy(this->url.host, host, strlen(host));
+    strncpy(this->url.port, port, strlen(port));
+    strncpy(this->url.path, dir, strlen(dir));
 
     return 0;
 }
 
 /*---------------------------------------------------------------------*/
-int http_write_header(HTTP_INFO *hi)
+int Http::WriteHeaders()
 {
-    char        request[4096], buf[H_FIELD_SIZE];
+    char        req[4096], buf[H_FIELD_SIZE];
     int         ret, len, l;
 
 
-    if (NULL == hi) return -1;
+    if (NULL == this) return -1;
 
     /* Send HTTP request. */
-    len = snprintf(request, 1024,
+    len = snprintf(req, 1024,
                    "%s %s HTTP/1.1\r\n"
                    "User-Agent: Mozilla/4.0\r\n"
                    "Host: %s:%s\r\n"
                    "Content-Type: %s\r\n",
-                   hi->request.method, hi->url.path,
-                   hi->url.host, hi->url.port,
-                   hi->request.content_type);
+                   this->request.method, this->url.path,
+                   this->url.host, this->url.port,
+                   this->request.content_type);
 
 
-    if(hi->request.referrer[0] != 0)
+    if(this->request.referrer[0] != 0)
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
-                        "Referer: %s\r\n", hi->request.referrer);
+        len += snprintf(&req[len], H_FIELD_SIZE,
+                        "Referer: %s\r\n", this->request.referrer);
     }
 
-    if(hi->request.chunked == TRUE)
+    if(this->request.chunked == TRUE)
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
+        len += snprintf(&req[len], H_FIELD_SIZE,
                         "Transfer-Encoding: chunked\r\n");
     }
     else
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
-                        "Content-Length: %ld\r\n", hi->request.content_length);
+        len += snprintf(&req[len], H_FIELD_SIZE,
+                        "Content-Length: %ld\r\n", this->request.content_length);
     }
 
-    if(hi->request.close == TRUE)
+    if(this->request.close == TRUE)
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
+        len += snprintf(&req[len], H_FIELD_SIZE,
                         "Connection: close\r\n");
     }
     else
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
+        len += snprintf(&req[len], H_FIELD_SIZE,
                         "Connection: Keep-Alive\r\n");
     }
 
-    if(hi->request.cookie[0] != 0)
+    if(this->request.cookie[0] != 0)
     {
-        len += snprintf(&request[len], H_FIELD_SIZE,
-                        "Cookie: %s\r\n", hi->request.cookie);
+        len += snprintf(&req[len], H_FIELD_SIZE,
+                        "Cookie: %s\r\n", this->request.cookie);
     }
 
-    len += snprintf(&request[len], H_FIELD_SIZE, "\r\n");
+    len += snprintf(&req[len], H_FIELD_SIZE, "\r\n");
 
 
-    printf("%s", request);
+    printf("%s", req);
 
-    if ((ret = https_write(hi, request, len)) != len)
+    if ((ret = https_write(this, req, len)) != len)
     {
-        https_close(hi);
+        https_close(this);
 
         _error = ret;
 
@@ -1389,40 +1388,40 @@ int http_write_header(HTTP_INFO *hi)
 }
 
 /*---------------------------------------------------------------------*/
-int http_write(HTTP_INFO *hi, char *data, int len)
+int Http::Write( char *data, int len )
 {
     char        str[10];
     int         ret, l;
 
 
-    if(NULL == hi || len <= 0) return -1;
+    if(NULL == this || len <= 0) return -1;
 
-    if(hi->request.chunked == TRUE)
+    if(this->request.chunked == TRUE)
     {
         l = snprintf(str, 10, "%x\r\n", len);
 
-        if ((ret = https_write(hi, str, l)) != l)
+        if ((ret = https_write(this, str, l)) != l)
         {
-            https_close(hi);
+            https_close(this);
             _error = ret;
 
             return -1;
         }
     }
 
-    if((ret = https_write(hi, data, len)) != len)
+    if((ret = https_write(this, data, len)) != len)
     {
-        https_close(hi);
+        https_close(this);
         _error = ret;
 
         return -1;
     }
 
-    if(hi->request.chunked == TRUE)
+    if(this->request.chunked == TRUE)
     {
-        if ((ret = https_write(hi, "\r\n", 2)) != 2)
+        if ((ret = https_write(this, "\r\n", 2)) != 2)
         {
-            https_close(hi);
+            https_close(this);
             _error = ret;
 
             return -1;
@@ -1433,14 +1432,14 @@ int http_write(HTTP_INFO *hi, char *data, int len)
 }
 
 /*---------------------------------------------------------------------*/
-int http_write_end(HTTP_INFO *hi)
+int Http::WriteEnd()
 {
     char        str[10];
     int         ret, len;
 
-    if (NULL == hi) return -1;
+    if (NULL == this) return -1;
 
-    if(hi->request.chunked == TRUE)
+    if(this->request.chunked == TRUE)
     {
         len = snprintf(str, 10, "0\r\n\r\n");
     }
@@ -1449,9 +1448,9 @@ int http_write_end(HTTP_INFO *hi)
         len = snprintf(str, 10, "\r\n\r\n");
     }
 
-    if ((ret = https_write(hi, str, len)) != len)
+    if ((ret = https_write(this, str, len)) != len)
     {
-        https_close(hi);
+        https_close(this);
         _error = ret;
 
         return -1;
@@ -1461,69 +1460,68 @@ int http_write_end(HTTP_INFO *hi)
 }
 
 /*---------------------------------------------------------------------*/
-int http_read_chunked(HTTP_INFO *hi, char *response, int size)
+int Http::ReadChunked( char *response_, int size )
 {
     int ret;
 
-
-    if (NULL == hi) return -1;
+    if (NULL == this) return -1;
 
 //  printf("request: %s \r\n\r\n", request);
 
-    hi->response.status = 0;
-    hi->response.content_length = 0;
-    hi->response.close = 0;
+    this->response.status = 0;
+    this->response.content_length = 0;
+    this->response.close = 0;
 
-    hi->r_len = 0;
-    hi->header_end = 0;
+    this->r_len = 0;
+    this->header_end = 0;
 
-    hi->body = response;
-    hi->body_size = size;
-    hi->body_len = 0;
+    this->body = response_;
+    this->body_size = size;
+    this->body_len = 0;
 
-    hi->body[0] = 0;
+    this->body[0] = 0;
 
     while(1)
     {
-        ret = https_read(hi, &hi->r_buf[hi->r_len], (int)(H_READ_SIZE - hi->r_len));
+        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
         if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
         else if(ret < 0)
         {
-            https_close(hi);
+            https_close(this);
             _error = ret;
 
             return -1;
         }
         else if(ret == 0)
         {
-            https_close(hi);
+            https_close(this);
             break;
         }
 
-        hi->r_len += ret;
-        hi->r_buf[hi->r_len] = 0;
+        this->r_len += ret;
+        this->r_buf[this->r_len] = 0;
 
-//        printf("read(%ld): %s \n", hi->r_len, hi->r_buf);
-//        printf("read(%ld) \n", hi->r_len);
+//        printf("read(%ld): %s \n", this->r_len, this->r_buf);
+//        printf("read(%ld) \n", this->r_len);
 
-        if(http_parse(hi) != 0) break;
+        if(http_parse(this) != 0) break;
     }
 
-    if(hi->response.close == 1)
+    if(this->response.close == 1)
     {
-        https_close(hi);
+        https_close(this);
     }
 
 /*
-    printf("status: %d \n", hi->status);
-    printf("cookie: %s \n", hi->cookie);
-    printf("location: %s \n", hi->location);
-    printf("referrer: %s \n", hi->referrer);
-    printf("length: %d \n", hi->content_length);
-    printf("body: %d \n", hi->body_len);
+    printf("status: %d \n", this->status);
+    printf("cookie: %s \n", this->cookie);
+    printf("location: %s \n", this->location);
+    printf("referrer: %s \n", this->referrer);
+    printf("length: %d \n", this->content_length);
+    printf("body: %d \n", this->body_len);
 */
 
-    return hi->response.status;
+    return this->response.status;
 }
 
 #ifdef _WIN32

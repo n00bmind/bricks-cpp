@@ -369,6 +369,11 @@ struct BucketArray
     static const BucketArray<T> Empty;
 
     BucketArray()
+        : last( nullptr )
+        , firstFree( nullptr )
+        , arena( nullptr )
+        , memoryParams{}
+        , count( 0 )
     {}
 
     BucketArray( MemoryArena* arena_, i32 bucketSize, MemoryParams params = DefaultMemoryParams() )
@@ -494,6 +499,8 @@ struct BucketArray
         return result;
     }
 
+    // TODO RemoveOrdered() moves every item after forward one slot (until end of the bucket)
+
     T Pop()
     {
         T result = Remove( Last() );
@@ -501,7 +508,6 @@ struct BucketArray
     }
 
     // Inclusive
-    // TODO Need a way to convert between index const-ness when it makes sense, otherwise this IsConst shit is shit
     void PopUntil( const Idx& index )
     {
         while( index.IsValid() )

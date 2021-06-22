@@ -1153,7 +1153,7 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 #include "https.c"
 
 #ifdef _WIN32
-class Https : public testing::Test
+class HttpsTest : public testing::Test
 {
 protected:
     // Per-test-suite set-up.
@@ -1186,64 +1186,65 @@ protected:
 };
 #endif
 
-TEST_F( Https, GetPost )
+TEST_F( HttpsTest, GetPost )
 {
     char* url;
     char data[1024], response[4096];
     int  i, ret, size;
 
-    HTTP_INFO info;
     // Init http session. verify: check the server CA cert.
-    //http_init(&info, FALSE);
-    http_init(&info, TRUE);
+    //Http req( false );
+    Http req( true );
 
     // Test a http get method.
     url = "https://httpbin.org/get?message=https_client";
-    ret = http_get(&info, url, response, sizeof(response));
+    ret = req.Get( url, response, sizeof(response) );
 
+    // TODO Parse response and assert on the contents
 #if 0
     printf("return code: %d \n", ret);
     printf("return body: %s \n", response);
 #endif
 
-    ASSERT_EQ( ret, 200 );
+    if( ret != 200 )
+        http_strerror( data, ARRAYCOUNT(data) );
+    ASSERT_EQ( ret, 200 ) << "Error: " << data;
 
     // Test a http post method.
     url = "https://httpbin.org/post";
     snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client!\"}");
-    ret = http_post(&info, url, data, response, sizeof(response));
+    ret = req.Post( url, data, response, sizeof(response) );
 
 #if 0
     printf("return code: %d \n", ret);
     printf("return body: %s \n", response);
 #endif
 
-    ASSERT_EQ( ret, 200 );
-
-    http_close(&info);
+    if( ret != 200 )
+        http_strerror( data, ARRAYCOUNT(data) );
+    ASSERT_EQ( ret, 200 ) << "Error: " << data;
 }
 
 #if 0
 // http_open_chunked & http_write_chunked are nowhere to be found
 
-TEST_F( Https, ChunkedEncoding )
+TEST_F( HttpTest, ChunkedEncoding )
 {
     char* url;
     char data[1024], response[4096];
     int  i, ret, size;
 
-    HTTP_INFO info;
     // Init http session. verify: check the server CA cert.
-    //http_init(&info, FALSE);
-    http_init(&info, TRUE);
+    //Http req( false );
+    Http req( true );
 
     // Test a https post with the chunked-encoding data.
     url = "https://httpbin.org/post";
-    ret = http_open_chunked(&info, url);
+    ret = http_open_chunked(&req, url);
     if(ret == 0)
     {
         size = snprintf(data, ARRAYCOUNT(data), "[{\"message\":\"Hello, https_client %d\"},", 0);
-        int written = http_write_chunked(&info, data, size);
+        int written = http_write_chunked(&req, data, size);
         if(written != size)
         {
             http_strerror(data, 1024);
@@ -1253,7 +1254,7 @@ TEST_F( Https, ChunkedEncoding )
         for(i=1; i<4; i++)
         {
             size = snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client %d\"},", i);
-            written = http_write_chunked(&info, data, size);
+            written = http_write_chunked(&req, data, size);
             if(written != size)
             {
                 http_strerror(data, 1024);
@@ -1262,14 +1263,14 @@ TEST_F( Https, ChunkedEncoding )
         }
 
         size = snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client %d\"}]", i);
-        written = http_write_chunked(&info, data, strlen(data));
+        written = http_write_chunked(&req, data, strlen(data));
         if(written != size)
         {
             http_strerror(data, 1024);
             ASSERT_EQ( written, size ) << "socket error: " << data;
         }
 
-        ret = http_read_chunked(&info, response, sizeof(response));
+        ret = http_read_chunked(&req, response, sizeof(response));
 
         printf("return code: %d \n", ret);
         printf("return body: %s \n", response);
@@ -1280,7 +1281,7 @@ TEST_F( Https, ChunkedEncoding )
         ASSERT_EQ( ret, 0 ) << "socket error: " << data;
     }
 
-    http_close(&info);
+    http_close(&req);
 }
 #endif
 
