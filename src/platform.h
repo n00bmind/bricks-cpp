@@ -106,8 +106,10 @@ struct PlatformAPI
     PlatformAllocFunc* Alloc;
     PlatformFreeFunc* Free;
 
+#if 0
     PlatformPushContextFunc* PushContext;
     PlatformPopContextFunc* PopContext;
+#endif
 
 #if 0
     PlatformGetAbsolutePathFunc* GetAbsolutePath;

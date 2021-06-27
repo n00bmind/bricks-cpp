@@ -106,7 +106,11 @@ struct AllocatorImpl
 // and two function pointers to its corresponding pair of free Alloc & Free functions
 struct Allocator
 {
-    Allocator() = delete;
+    Allocator()
+        : allocPtr( nullptr )
+        , freePtr( nullptr )
+        , impl( nullptr )
+    {}
 
     template <typename Class>
     Allocator( Class* obj )
@@ -182,12 +186,35 @@ struct Context
     // TODO Application-defined custom data
 };
 
-// NOTE This would be weird to use in a non-unity build, as the pointer would get defined in each
+// NOTE TODO This is pretty weird to use in a non-unity build, as the data would get defined in each
 // translation unit that includes this, but I have no idea how to forward-declare a thread_local variable!?
+thread_local Context   globalContextStack[64];
+thread_local Context*  globalContextPtr;
 thread_local Context** globalContext;
 #define CTX (**globalContext)
 #define CTX_ALLOC &CTX.allocator
 #define CTX_TMPALLOC &CTX.tmpAllocator
+
+void InitContextStack( Context const& baseContext )
+{
+    globalContextPtr  = globalContextStack;
+    *globalContextPtr = baseContext;
+    globalContext     = &globalContextPtr;
+}
+
+PLATFORM_PUSH_CONTEXT( PushContext )
+{
+    globalContextPtr++;
+    ASSERT( globalContextPtr < globalContextStack + ARRAYCOUNT(globalContextStack) );
+    *globalContextPtr = newContext;
+}
+
+PLATFORM_POP_CONTEXT( PopContext )
+{
+    if( globalContextPtr > globalContextStack )
+        globalContextPtr--;
+}
+
 
 
 struct LazyAllocator

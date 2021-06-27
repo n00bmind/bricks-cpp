@@ -24,7 +24,7 @@
 #include "strings.h"
 #include "win32_platform.cpp"
 
-// TODO
+
 PlatformAPI globalPlatform;
 
 #undef internal
@@ -1148,6 +1148,72 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 // Disable httplib tests for now
 #endif
 
+
+MemoryArena globalPlatformArena;
+MemoryArena globalTmpArena;
+
+class DatatypesTest : public testing::Test
+{
+protected:
+    // Per-test-suite set-up.
+    // Called before the first test in this test suite.
+    // Can be omitted if not needed.
+    static void SetUpTestCase()
+    {
+        // Init global platform
+        globalPlatform = {};
+        globalPlatform.Alloc = Win32::Alloc;
+        globalPlatform.Free = Win32::Free;
+#if 0
+        globalPlatform.PushContext = PushContext;
+        globalPlatform.PopContext = PopContext;
+#endif
+        globalPlatform.Print = Win32::Print;
+        globalPlatform.Error = Win32::Error;
+
+        InitArena( &globalPlatformArena );
+        InitArena( &globalTmpArena );
+        // Set up an initial context that the platform itself can use
+        Context platformContext =
+        {
+            Allocator::CreateFrom( &globalPlatformArena ),
+            Allocator::CreateFrom( &globalTmpArena ),
+        };
+        InitContextStack( platformContext );
+    }
+
+    // Per-test-suite tear-down.
+    // Called after the last test in this test suite.
+    // Can be omitted if not needed.
+    static void TearDownTestCase()
+    {
+    }
+
+    // Per-test setup/teardown
+    virtual void SetUp()
+    { }
+    virtual void TearDown()
+    { }
+};
+
+TEST_F( DatatypesTest, ArrayBasics )
+{
+    Array<int> array( 100 );
+
+    // TODO 
+}
+
+TEST_F( DatatypesTest, HashtablePutGet )
+{
+    persistent LazyAllocator lazyAllocator;
+    Hashtable<void*, void*, LazyAllocator> table( 0, 0, &lazyAllocator );
+
+    const int N = 128 * 1024;
+    for( int i = 1; i < N; ++i )
+        table.Put( (void*)i, (void*)(i + 1) );
+    for( int i = 1; i < N; ++i )
+        ASSERT( *table.Get( (void*)i ) == (void*)(i + 1) );
+}
 
 #include "https.h"
 #include "https.cpp"

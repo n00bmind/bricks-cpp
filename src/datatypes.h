@@ -1278,19 +1278,3 @@ private:
     }
 };
 
-
-// FIXME Proper tests!
-void TestHashtable()
-{
-    persistent LazyAllocator lazyAllocator;
-    Hashtable<void*, void*, LazyAllocator> table( 0, 0, &lazyAllocator );
-
-    Array<int, LazyAllocator> array( 100, &lazyAllocator );
-
-    const int N = 1024 * 1024;
-    for( int i = 1; i < N; ++i )
-        table.Put( (void*)i, (void*)(i + 1) );
-    for( int i = 1; i < N; ++i )
-        ASSERT( *table.Get( (void*)i ) == (void*)(i + 1) );
-}
-
