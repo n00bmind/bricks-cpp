@@ -23,54 +23,58 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 
-template <typename T>
-struct BucketArray;
-
 
 /////     DYNAMIC ARRAY    /////
 
 // Actually, a reference to an array of any size and type somewhere in memory, so more like a 'buffer view' as it's called in do-lang
 // (although we have semantics for Push/Pop/Remove etc. so it is not read-only)
 
-template <typename T>
+template <typename T, typename AllocType /*= Allocator*/>
 struct Array
 {
     T* data;
     i32 count;
     i32 capacity;
 
+    AllocType* allocator;
+    MemoryParams memParams;
 
-    static const Array<T> Empty;
+
+    static const Array<T, AllocType> Empty;
 
     Array()
-    {
-        data = nullptr;
-        count = 0;
-        capacity = 0;
-    }
+        : data( nullptr )
+        , count( 0 )
+        , capacity( 0 )
+        , allocator( nullptr )
+    {}
 
     // NOTE All newly allocated arrays start empty
-    Array( MemoryArena* arena, i32 capacity_, MemoryParams params = DefaultMemoryParams() )
+    // NOTE You cannot specify an AllocType for the instance and then not provide an allocator
+    explicit Array( i32 capacity_, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+        : count( 0 )
+        , capacity( capacity_ )
+        , allocator( allocator_ )
+        , memParams( params )
     {
-        ASSERT( capacity_ >= 0 );
-        data = PUSH_ARRAY( arena, T, capacity_, params );
-        count = 0;
-        capacity = capacity_;
+        ASSERT( capacity > 0 );
+        ASSERT( allocator );
+        data = ALLOC_ARRAY( allocator, T, capacity, memParams );
     }
 
     // NOTE All arrays initialized from a buffer start with count equal to the full capacity
     Array( T* buffer, i32 bufferCount )
+        : data( buffer )
+        , count( bufferCount )
+        , capacity( bufferCount )
     {
         ASSERT( buffer && bufferCount > 0 );
-        data = buffer;
-        count = bufferCount;
-        capacity = bufferCount;
     }
 
-    Array( BucketArray<T> const& buckets, MemoryArena* arena, MemoryParams params = DefaultMemoryParams() )
-        : Array( arena, buckets.count, params )
+    ~Array()
     {
-        buckets.CopyTo( this );
+        if( allocator )
+            FREE( allocator, data, memParams );
     }
 
     operator Buffer<T>()
@@ -89,7 +93,8 @@ struct Array
     T&       Last()          { ASSERT( count > 0 ); return data[count - 1]; }
     T const& Last() const    { ASSERT( count > 0 ); return data[count - 1]; }
 
-    bool operator ==( Array<T> const& other ) const
+    template <typename AllocType2 = Allocator>
+    bool operator ==( Array<T, AllocType2> const& other ) const
     {
         return count == other.count && PEQUAL( data, other.data, count * SIZEOF(T) );
     }
@@ -185,7 +190,7 @@ struct Array
 
     T const* Find( const T& item ) const
     {
-        T* slot = ((Array<T>*)this)->Find( item );
+        T* slot = ((Array<T, AllocType>*)this)->Find( item );
         return slot;
     }
 
@@ -214,7 +219,7 @@ struct Array
     template <class Predicate>
     T const* Find( Predicate p ) const
     {
-        T* slot = ((Array<T>*)this)->Find( p );
+        T* slot = ((Array<T, AllocType>*)this)->Find( p );
         return slot;
     }
 
@@ -226,23 +231,26 @@ struct Array
     }
 
     // Deep copy
-    Array<T> Clone( MemoryArena* arena ) const
+    template <typename AllocType2 = Allocator>
+    Array<T, AllocType2> Clone( AllocType2* allocator = nullptr ) const
     {
-        Array<T> result( arena, count );
+        Array<T, AllocType2> result( count, allocator ? allocator : CTX_ALLOC );
+        result.ResizeToCapacity();
         PCOPY( data, result.data, count * SIZEOF(T) );
-        result.count = count;
         return result;
     }
 
-    static Array<T> Clone( Buffer<T> buffer, MemoryArena* arena )
+    template <typename AllocType2 = Allocator>
+    static Array<T, AllocType2> Clone( Buffer<T> buffer, AllocType2* allocator = nullptr )
     {
-        Array<T> result( arena, I32( buffer.length ) );
+        Array<T, AllocType2> result( I32( buffer.length ), allocator ? allocator : CTX_ALLOC );
         result.ResizeToCapacity();
         PCOPY( buffer.data, result.data, buffer.length * SIZEOF(T) );
         return result;
     }
 
-    void CopyTo( Array<T>* out ) const
+    template <typename AllocType2 = Allocator>
+    void CopyTo( Array<T, AllocType2>* out ) const
     {
         ASSERT( out->capacity >= count );
         PCOPY( data, out->data, count * SIZEOF(T) );
@@ -261,37 +269,52 @@ struct Array
     }
 };
 
-template <typename T>
-const Array<T> Array<T>::Empty = {};
+template <typename T, typename AllocType>
+const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 
 
 /////     BUCKET ARRAY     /////
 
-template <typename T>
+template <typename T, typename AllocType = Allocator>
 struct BucketArray
 {
     struct Bucket
     {
+        Bucket *next;
+        Bucket *prev;               // TODO Do we really use this?
+        AllocType* allocator;
+
         T* data;
         i32 count;
         i32 capacity;
-
-        Bucket *next;
-        Bucket *prev;
+        MemoryParams memParams;
 
         Bucket()
-            : data( nullptr )
+            : next( nullptr )
+            , prev( nullptr )
+            , allocator( nullptr )
+            , data( nullptr )
             , count( 0 )
             , capacity( 0 )
         {}
 
-        Bucket( MemoryArena* arena, i32 capacity_, MemoryParams params )
+        Bucket( i32 capacity_, AllocType* allocator_, MemoryParams memParams_ )
+            : next( nullptr )
+            , prev( nullptr )
+            , allocator( allocator_ )
+            , count( 0 )
+            , capacity( capacity_ )
+            , memParams( memParams_ )
         {
-            ASSERT( capacity_ > 0 );
-            data = PUSH_ARRAY( arena, T, capacity_, params );
-            capacity = capacity_;
-            count = 0;
-            next = prev = nullptr;
+            ASSERT( capacity > 0 );
+            ASSERT( allocator );
+            data = ALLOC_ARRAY( allocator, T, capacity, memParams );
+        }
+
+        ~Bucket()
+        {
+            Clear();
+            FREE( allocator, data, memParams );
         }
 
         void Clear()
@@ -360,9 +383,8 @@ struct BucketArray
     Bucket* last;
     Bucket* firstFree;
 
-    MemoryArena* arena;
-    MemoryParams memoryParams;
-
+    AllocType* allocator;
+    MemoryParams memParams;
     i32 count;
 
 
@@ -371,35 +393,47 @@ struct BucketArray
     BucketArray()
         : last( nullptr )
         , firstFree( nullptr )
-        , arena( nullptr )
-        , memoryParams{}
+        , allocator( nullptr )
+        , memParams{}
         , count( 0 )
     {}
 
-    BucketArray( MemoryArena* arena_, i32 bucketSize, MemoryParams params = DefaultMemoryParams() )
-        : first( arena_, bucketSize, params )
+    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+        : first( bucketSize, allocator_, params )
+        , last( &first )
+        , firstFree( nullptr )
+        , allocator( allocator_ )
+        , memParams( params )
+        , count( 0 )
     {
-        count = 0;
-        last = &first;
-        firstFree = nullptr;
-        arena = arena_;
-        memoryParams = params;
+        ASSERT( allocator );
     }
 
-    BucketArray( BucketArray<T> && other )
+    BucketArray( BucketArray<T>&& other )
         : first( other.first )
         , last( other.last )
         , firstFree( other.firstFree )
-        , arena( other.arena )
-        , memoryParams( other.memoryParams )
+        , memParams( other.memoryParams )
         , count( other.count )
     {
         other.first = {};
         other.last = nullptr;
         other.firstFree = nullptr;
-        other.arena = nullptr;
         other.memoryParams = {};
         other.count = 0;
+    }
+
+    ~BucketArray()
+    {
+        Clear();
+        
+        while( firstFree )
+        {
+            Bucket* b = firstFree;
+            DELETE( allocator, b, Bucket, memParams );
+
+            firstFree = firstFree->next;
+        }
     }
 
     // Disallow implicit copying
@@ -416,7 +450,8 @@ struct BucketArray
     T& operator[]( const Idx& idx ) { ASSERT( idx.IsValid() ); return (T&)idx; }
     const T& operator[]( const ConstIdx& idx ) const { ASSERT( idx.IsValid() ); return (T const&)idx; }
 
-    bool operator ==( Array<T> const& other ) const
+    template <typename AllocType2 = Allocator>
+    bool operator ==( Array<T, AllocType2> const& other ) const
     {
         if( count != other.count)
             return false;
@@ -655,7 +690,8 @@ struct BucketArray
         count += totalCopied;
     }
 
-    void Append( Array<T> const& array )
+    template <typename AllocType2 = Allocator>
+    void Append( Array<T, AllocType2> const& array )
     {
         Append( array.data, array.count );
     }
@@ -673,7 +709,8 @@ struct BucketArray
         }
     }
 
-    void CopyTo( Array<T>* array ) const
+    template <typename AllocType2 = Allocator>
+    void CopyTo( Array<T, AllocType2>* array ) const
     {
         ASSERT( count <= array->capacity );
         array->Resize( count );
@@ -688,9 +725,10 @@ struct BucketArray
         }
     }
 
-    Array<T> ToArray( MemoryArena* arena_ ) const
+    template <typename AllocType2 = Allocator>
+    Array<T, AllocType2> ToArray( AllocType2* allocator_ = nullptr ) const
     {
-        Array<T> result( arena_, count );
+        Array<T, AllocType2> result( count, allocator_ ? allocator_ : CTX_ALLOC );
         result.ResizeToCapacity();
         CopyTo( &result );
 
@@ -710,8 +748,8 @@ private:
         }
         else
         {
-            newBucket = PUSH_STRUCT( arena, Bucket, memoryParams );
-            *newBucket = Bucket( arena, first.capacity, memoryParams );
+            // TODO Inline this with the actual contents
+            newBucket = NEW( allocator, Bucket, memParams )( first.capacity, allocator, memParams );
         }
         newBucket->prev = last;
         last->next = newBucket;
@@ -720,8 +758,8 @@ private:
     }
 };
 
-template <typename T>
-const BucketArray<T> BucketArray<T>::Empty = {};
+template <typename T, typename AllocType>
+const BucketArray<T, AllocType> BucketArray<T, AllocType>::Empty = {};
 
 
 /////     HASHTABLE     /////
@@ -789,14 +827,8 @@ bool DefaultEqFunc( K const& a, K const& b )
 template <typename K>
 const K ZeroKey = K();
 
-enum HashTableFlags
-{
-    HTF_None = 0,
-    HTF_FixedSize = 0x1,    // For stable pointers to content, must provide expectedSize as appropriate
-};
-
 // NOTE Type K must have a default constructor, and all keys must be different to the default-constructed value
-template <typename K, typename V, typename Allocator>
+template <typename K, typename V, typename AllocType = Allocator>
 struct Hashtable
 {
     struct Item
@@ -808,30 +840,27 @@ struct Hashtable
     using HashFunc = u64 (*)( K const& key );
     using KeysEqFunc = bool (*)( K const& a, K const& b );
 
+    enum Flags
+    {
+        None = 0,
+        FixedSize = 0x1,    // For stable pointers to content, must provide expectedSize as appropriate
+    };
+
+
     K* keys;
     V* values;
 
-    Allocator* allocator;
+    AllocType* allocator;
     HashFunc hashFunc;
     KeysEqFunc eqFunc;
     i32 count;
     i32 capacity;
+    MemoryParams memParams;
     u32 flags;
 
 
-    Hashtable()
-        : keys( nullptr )
-        , values( nullptr )
-        , allocator( nullptr )
-        , hashFunc( nullptr )
-        , eqFunc( nullptr )
-        , count( 0 )
-        , capacity( 0 )
-        , flags( 0 )
-    {}
-
-    Hashtable( Allocator* allocator_, int expectedSize = 0, u32 flags_ = 0, HashFunc hashFunc_ = DefaultHashFunc<K>,
-               KeysEqFunc eqFunc_ = DefaultEqFunc<K> )
+    explicit Hashtable( int expectedSize = 0, u32 flags_ = 0, AllocType* allocator_ = CTX_ALLOC, 
+                        HashFunc hashFunc_ = DefaultHashFunc<K>, KeysEqFunc eqFunc_ = DefaultEqFunc<K> )
         : keys( nullptr )
         , values( nullptr )
         , allocator( allocator_ )
@@ -841,9 +870,17 @@ struct Hashtable
         , capacity( 0 )
         , flags( flags_ )
     {
+        ASSERT( expectedSize || !(flags & FixedSize) );
+        ASSERT( allocator );
+
         if( expectedSize )
             Grow( NextPowerOf2( 2 * expectedSize ) );
     }
+
+    // Disallow implicit copying
+    Hashtable( const Hashtable& ) = delete;
+    Hashtable& operator =( const Hashtable& ) = delete;
+
 
     V* Get( K const& key )
     {
@@ -1003,7 +1040,7 @@ struct Hashtable
 private:
     void Grow( int newCapacity )
     {
-        ASSERT( !(flags & HTF_FixedSize) || !capacity );
+        ASSERT( !(flags & FixedSize) || !capacity );
 
         newCapacity = Max( newCapacity, 16 );
         ASSERT( IsPowerOf2( newCapacity ) );
@@ -1014,7 +1051,9 @@ private:
 
         count = 0;
         capacity = newCapacity;
-        void* newMemory = ALLOCA( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), NoClear() );
+
+        // TODO Check generated code for instances with different allocator types is still being inlined
+        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), { Memory::NoClear } );
         keys   = (K*)newMemory;
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 
@@ -1041,36 +1080,40 @@ private:
 // TODO Make this thread-safe by masking the indices (instead of resetting them to 0), and using atomic increment
 // We could then easily use this as a fixed-capacity thread-safe queue
 
-template <typename T>
+template <typename T, typename AllocType = Allocator>
 struct RingBuffer
 {
-    Array<T> buffer;
+    Array<T, AllocType> buffer;
     i32 onePastHeadIndex;       // Points to next slot to write
     i32 tailIndex;
 
 
     RingBuffer()
-    { }
+    {}
 
-    RingBuffer( i32 capacity_, MemoryArena* arena, MemoryParams params = DefaultMemoryParams() )
-        : buffer( arena, capacity_, params )
+    RingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
+        : buffer( capacity, allocator, params )
         , onePastHeadIndex( 0 )
         , tailIndex( 0 )
     {
         buffer.ResizeToCapacity();
     }
 
-    static RingBuffer FromArray( Array<T> const& a )
+    template <typename AllocType2 = Allocator>
+    static RingBuffer FromArray( Array<T, AllocType2> const& a )
     {
         int itemCount = a.count;
 
         RingBuffer result = {};
-        // Make space for one more at the end
-        result.buffer.Resize( itemCount + 1 );
-        result.buffer.CopyFrom( a );
+        if( itemCount )
+        {
+            // Make space for one more at the end
+            result.buffer.Resize( itemCount + 1 );
+            result.buffer.CopyFrom( a );
 
-        result.onePastHeadIndex = itemCount;
-        result.tailIndex = 0;
+            result.onePastHeadIndex = itemCount;
+            result.tailIndex = 0;
+        }
 
         return result;
     }
@@ -1236,10 +1279,13 @@ private:
 };
 
 
+// FIXME Proper tests!
 void TestHashtable()
 {
     persistent LazyAllocator lazyAllocator;
-    Hashtable<void*, void*, LazyAllocator> table( &lazyAllocator );
+    Hashtable<void*, void*, LazyAllocator> table( 0, 0, &lazyAllocator );
+
+    Array<int, LazyAllocator> array( 100, &lazyAllocator );
 
     const int N = 1024 * 1024;
     for( int i = 1; i < N; ++i )

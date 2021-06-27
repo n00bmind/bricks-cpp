@@ -83,10 +83,13 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define SET(dest, value) memset( &dest, value, sizeof(dest) )
 #define ZERO(dest) memset( &dest, 0, sizeof(dest) )
 #define EQUAL(source, dest) (memcmp( &source, &dest, sizeof(source) ) == 0)
+
 #define PCOPY(source, dest, size) memcpy( dest, source, Size( size ) )
 #define PSET(dest, value, size) memset( dest, value, Size( size ) )
 #define PZERO(dest, size) memset( dest, 0, Size( size ) )
 #define PEQUAL(source, dest, size) (memcmp( source, dest, Size( size ) ) == 0)
+
+#define INIT(var) new (&(var))
 
 
 #if _MSC_VER

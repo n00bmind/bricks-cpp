@@ -29,70 +29,58 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
-struct MemoryParams
+namespace Memory
 {
-    enum Tags
+    enum Tags : u8
     {
         Unknown = 0,
     };
 
-    enum Flags
+    enum Flags : u8
     {
         None = 0,
-        ClearToZero = 0x1,                  // Zeroed upon allocation
-        // FIXME Remove Temporary flag as that's a property of each allocator/arena
-        // and not something that can be specified freely per allocation
-        Temporary = 0x2,              // No guaranteed persistence beyond allocation scope
+        NoClear = 0x1,              // Don't zero memory upon allocation
     };
 
-    u32 flags;
-    u16 alignment;
-    u16 tag;
+    struct Params
+    {
+        u8 flags;
+        u8 tag;
+        u16 alignment;
 
-    bool Flag( u32 flag ) { return (flags & flag) == flag; }
-};
+        Params( u8 flags = 0 )
+            : flags( flags )
+            , tag( Unknown )
+            , alignment( 0 )
+        {}
 
-inline MemoryParams
-DefaultMemoryParams()
-{
-    MemoryParams result = {};
-    result.flags = MemoryParams::ClearToZero;
-    result.alignment = 0;
-    return result;
+        bool IsSet( Flags flag ) const { return (flags & flag) == flag; }
+    };
+
+    inline Params
+    Default()
+    {
+        Params result;
+        return result;
+    }
+
+    inline Params
+    Aligned( u16 alignment )
+    {
+        Params result;
+        result.alignment = alignment;
+        return result;
+    }
 }
 
-inline MemoryParams
-NoClear()
-{
-    MemoryParams result = DefaultMemoryParams();
-    result.flags &= ~MemoryParams::ClearToZero;
-    return result;
-}
-
-inline MemoryParams
-Aligned( u16 alignment )
-{
-    MemoryParams result = DefaultMemoryParams();
-    result.alignment = alignment;
-    return result;
-}
-
-inline MemoryParams
-Temporary()
-{
-    MemoryParams result = DefaultMemoryParams();
-    result.flags |= MemoryParams::Temporary;
-    return result;
-}
-
-#define INIT(var) new (&(var))
+using MemoryParams = Memory::Params;
 
 
-#define ALLOC_FUNC(cls) void* Alloc( cls* data, sz sizeBytes, char const* filename, int line, MemoryParams params = DefaultMemoryParams() )
-#define ALLOC_METHOD void* Alloc( sz sizeBytes, char const* filename, int line, MemoryParams params = DefaultMemoryParams() )
+#define ALLOC_FUNC(cls) void* Alloc( cls* data, sz sizeBytes, char const* filename, int line, MemoryParams params = {} )
+#define ALLOC_METHOD void* Alloc( sz sizeBytes, char const* filename, int line, MemoryParams params = {} )
 typedef void* (*AllocFunc)( void* impl, sz sizeBytes, char const* filename, int line, MemoryParams params );
-#define FREE_FUNC(cls)  void Free( cls* data, void* memoryBlock, MemoryParams params = DefaultMemoryParams() )
-#define FREE_METHOD  void Free( void* memoryBlock, MemoryParams params = DefaultMemoryParams() )
+#define FREE_FUNC(cls)  void Free( cls* data, void* memoryBlock, MemoryParams params = {} )
+#define FREE_METHOD  void Free( void* memoryBlock, MemoryParams params = {} )
 typedef void (*FreeFunc)( void* impl, void* memoryBlock, MemoryParams params );
 
 // This guy casts the data pointer to the appropriate type
@@ -118,17 +106,27 @@ struct AllocatorImpl
 // and two function pointers to its corresponding pair of free Alloc & Free functions
 struct Allocator
 {
-    Allocator() : impl( nullptr )
+    Allocator() = delete;
+
+    template <typename Class>
+    Allocator( Class* obj )
+        : allocPtr( &AllocatorImpl<Class>::Alloc )
+        , freePtr( &AllocatorImpl<Class>::Free )
+        , impl( obj )
+    {}
+
+    // Pass-through for abstract allocators
+    template <>
+    Allocator( Allocator* obj )
+        : allocPtr( obj->allocPtr )
+        , freePtr( obj->freePtr )
+        , impl( obj->impl )
     {}
 
     template <typename Class>
-    static Allocator CreateFrom( Class* obj )
+    static INLINE Allocator CreateFrom( Class* obj )
     {
-        Allocator result;
-        result.impl = obj;
-        result.allocPtr = &AllocatorImpl<Class>::Alloc;
-        result.freePtr = &AllocatorImpl<Class>::Free;
-
+        Allocator result( obj );
         return result;
     }
 
@@ -142,22 +140,54 @@ struct Allocator
         freePtr( impl, memoryBlock, params );
     }
 
+    friend void* Alloc( Allocator* data, sz sizeBytes, char const* filename, int line, MemoryParams params );
+    friend void Free( Allocator* data, void* memoryBlock, MemoryParams params );
+
 private:
     AllocFunc allocPtr;
     FreeFunc freePtr;
     void* impl;
 };
 
-#define ALLOC(size, ...)                            Alloc( size, __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_STRUCT(type, ...)                     Alloc( SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_ARRAY(type, count, ...)               Alloc( (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define FREE(mem, ...)                              Free( mem, ##__VA_ARGS__ )
+INLINE ALLOC_FUNC( Allocator )
+{
+    return data->allocPtr( data->impl, sizeBytes, filename, line, params );
+}
+
+INLINE FREE_FUNC( Allocator )
+{
+    data->freePtr( data->impl, memoryBlock, params );
+}
+
 
 // Free-function versions, passing the allocator implementation
-#define ALLOCA(allocator, size, ...)                Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOCA_STRUCT(allocator, type, ...)         (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOCA_ARRAY(allocator, type, count, ...)   (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define FREEA(allocator, mem, ...)                  Free( allocator, mem, ##__VA_ARGS__ )
+#define ALLOC(allocator, size, ...)                 Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_STRUCT(allocator, type, ...)          (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_ARRAY(allocator, type, count, ...)    (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define FREE(allocator, mem, ...)                   Free( allocator, (void*)(mem), ##__VA_ARGS__ )
+
+#undef DELETE
+#define NEW(allocator, type, ...)                   new ( ALLOC( allocator, sizeof(type), ##__VA_ARGS__ ) ) type
+#define DELETE(allocator, p, T, ...)                { if( p ) { p->~T(); FREE( allocator, p, ##__VA_ARGS__ ); p = nullptr; } }
+
+
+// Global context to use across the entire application
+// NOTE We wanna make sure everything inside here is not generally synchronized across threads to keep it fast!
+// i.e. allocator, temp allocator, assert handler, logger (how do we collate and flush all logs?)
+struct Context
+{
+    Allocator allocator;
+    Allocator tmpAllocator;
+    // ...
+    // TODO Application-defined custom data
+};
+
+// NOTE This would be weird to use in a non-unity build, as the pointer would get defined in each
+// translation unit that includes this, but I have no idea how to forward-declare a thread_local variable!?
+thread_local Context** globalContext;
+#define CTX (**globalContext)
+#define CTX_ALLOC &CTX.allocator
+#define CTX_TMPALLOC &CTX.tmpAllocator
 
 
 struct LazyAllocator
@@ -167,11 +197,10 @@ struct LazyAllocator
 ALLOC_FUNC( LazyAllocator )
 {
     ASSERT( !params.alignment );
-    ASSERT( !params.Flag( MemoryParams::Temporary ) );
     
     void* result = malloc( Size( sizeBytes ) );
 
-    if( params.Flag( MemoryParams::ClearToZero ) )
+    if( !params.IsSet( Memory::NoClear ) )
         PZERO( result, sizeBytes );
 
     return result;
@@ -282,7 +311,7 @@ IsInitialized( const MemoryArena& arena )
 }
 
 inline void *
-_PushSize( MemoryArena *arena, sz size, sz minAlignment, MemoryParams params = DefaultMemoryParams() )
+_PushSize( MemoryArena *arena, sz size, sz minAlignment, MemoryParams params = {} )
 {
 #if 0
     if( !(params.flags & MemoryParams::Temporary) )
@@ -337,14 +366,14 @@ _PushSize( MemoryArena *arena, sz size, sz minAlignment, MemoryParams params = D
     arena->used += alignedSize;
 
     // Have already moved up the block's pointer, so just clear the requested size
-    if( params.flags & MemoryParams::ClearToZero )
+    if( !(params.flags & Memory::NoClear) )
         PZERO( result, size );
 
     return result;
 }
 
 inline MemoryArena
-MakeSubArena( MemoryArena* arena, sz size, MemoryParams params = NoClear() )
+MakeSubArena( MemoryArena* arena, sz size, MemoryParams params = {} )
 {
     ASSERT( arena->tempCount == 0 );
 

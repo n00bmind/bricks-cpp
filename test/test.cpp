@@ -1150,7 +1150,7 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 
 
 #include "https.h"
-#include "https.c"
+#include "https.cpp"
 
 #ifdef _WIN32
 class HttpsTest : public testing::Test

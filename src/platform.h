@@ -61,8 +61,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
-struct MemoryArena;
-template <typename T> struct Array;
+struct Allocator;
+template <typename T, typename AllocType = Allocator> struct Array;
 
 // Defined by the application
 struct Context;
@@ -83,7 +83,7 @@ typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
 
 #define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
-#define PLATFORM_READ_ENTIRE_FILE(name) buffer name( char const* filename, MemoryArena* arena )
+#define PLATFORM_READ_ENTIRE_FILE(name) buffer name( char const* filename, Allocator* allocator )
 typedef PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFileFunc);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<buffer> const& chunks, bool overwrite )
 typedef PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFileFunc);
@@ -147,7 +147,6 @@ struct PlatformAPI
 };
 extern PlatformAPI globalPlatform;
 
-#define CTX (**globalContext)
 
 // TODO Add support for different log severities and categories/filters
 // TODO Use the Context!

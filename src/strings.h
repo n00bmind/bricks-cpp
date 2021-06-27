@@ -119,16 +119,15 @@ inline char* StringToLowercase( char* str, int len = 0 )
 struct String;
 
 // String builder to help compose Strings piece by piece
+// NOTE This uses temporary memory by default!
 struct StringBuilder
 {
     BucketArray<char> buckets;
-    MemoryParams memoryParams;
 
     // TODO Raise bucket size when we know it works
-    StringBuilder( MemoryArena* arena, MemoryParams params = Temporary() )
-        //: buckets( arena, 32, params )
-        : buckets( arena, 4, params )
-        , memoryParams( params )
+    explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
+        //: buckets( 32, params )
+        : buckets( 4, allocator )
     {}
 
     bool Empty() const { return buckets.count == 0; }
@@ -148,7 +147,7 @@ struct StringBuilder
         va_start( args, fmt );
 
         int n = 1 + vsnprintf( nullptr, 0, fmt, args );
-        char* buf = PUSH_STRING( buckets.arena, n, memoryParams );
+        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n );
 
         // TODO Does this work??
         vsnprintf( buf, Size( n ), fmt, args );
@@ -159,72 +158,194 @@ struct StringBuilder
         buckets.Append( buf, n - 1 );
     }
 
-    String ToString( MemoryArena* arena );
+    String ToString();
 };
 
 
 // Read only string
-// TODO Remove all the lazily placed Valid() checks once we've reviewed and ensured null termination
-// TODO Once we start usings a global context, remove MemoryArena from all signatures (and pay attention to places that could use tmp mem)
+// By default it only just references character data living somewhere else
+// It can optionally own the memory too (for easily moving string data around or building formatted strings etc.)
+
+// TODO Write some tests to make sure the default of not copying anything is not a problem when stored inside containers
+// TODO Remove all the lazily placed Valid() checks where it makes sense
 struct String
 {
+    enum Flags : u32
+    {
+        None        = 0,
+        Owned       = 1 << 0,
+        Temporary   = 1 << 1,
+    };
+
     char const* data;
     i32 length;             // Not including null terminator
+    u32 flags;
 
     constexpr String()
         : data( "" )
         , length( 0 )
+        , flags( 0 )
     {}
 
     explicit String( char const* cString )
         : data( cString )
-        , length( I32( strlen( cString ) ) )
+        , length( StringLength( cString ) )
+        , flags( 0 )
     { ASSERT( Valid() ); }
 
     explicit String( char const* cString, int len )
         : data( cString )
         , length( len )
+        , flags( 0 )
     { ASSERT( Valid() ); }
 
     explicit String( Buffer<char> const& buffer )
         : data( buffer )
         , length( I32( buffer.length ) )
+        , flags( 0 )
     { ASSERT( Valid() ); }
 
     explicit String( buffer const& buffer )
         : data( (char*)buffer.data )
         , length( I32( buffer.length ) )
+        , flags( 0 )
     { ASSERT( Valid() ); }
+
+    String( String const& other )
+        : flags( other.flags )
+    {
+        flags &= ~Owned;
+        *this = other;
+    }
+
+    String( String const&& other )
+        : flags( other.flags )
+    {
+        flags &= ~Owned;
+        *this = std::move( other );
+    }
+
+    ~String()
+    { Clear(); }
+
+    void Clear()
+    {
+        if( flags & Owned )
+        {
+            Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
+            FREE( allocator, data );
+        }
+
+        data = nullptr;
+        length = 0;
+        flags &= ~Owned;
+    }
 
     String const& operator =( char const* cString )
     {
+        Clear();
+
         data = cString;
-        length = I32( strlen( cString ) );
+        length = StringLength( cString );
         ASSERT( Valid() );
         return *this;
     }
 
+    String const& operator =( String const& other )
+    {
+        Clear();
+
+        flags = other.flags;
+        if( flags & Owned )
+            InternalClone( other.data, other.length );
+        else
+        {
+            data = other.data;
+            length = other.length;
+        }
+
+        return *this;
+    }
+
+    String const& operator =( String&& other )
+    {
+        Clear();
+
+        // Force a copy if they use different memory pools to avoid surprises
+        bool force_copy = (other.flags & Owned) && ((flags & Temporary) != (other.flags & Temporary));
+        flags = other.flags;
+
+        // Only ever copy if we're gonna own it!
+        if( force_copy )
+            InternalClone( other.data, other.length );
+        else
+        {
+            data = other.data;
+            length = other.length;
+        }
+
+        other.flags &= ~Owned;
+        other.Clear();
+
+        return *this;
+    }
+
+private:
+    explicit String( int len, u32 flags_ = 0 )
+    {
+        flags = flags_ | Owned;
+        length = len;
+
+        Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
+        data = ALLOC_ARRAY( allocator, char, len );
+    }
+
+    void InternalClone( char const* src, int len = 0 )
+    {
+        ASSERT( src );
+
+        i32 new_len = len ? len : StringLength( src );
+        if( new_len )
+        {
+            Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
+            char* dst = ALLOC_ARRAY( allocator, char, new_len + 1 );
+
+            PCOPY( src, dst, new_len );
+            dst[new_len] = 0;
+
+            data = dst;
+            length = new_len;
+            flags |= Owned;
+        }
+    }
+
+public:
+
+    bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
     explicit operator bool() const { return !Empty(); }
 
     bool Empty() const { return length == 0 || data == nullptr; }
-    bool Valid() const { return data == nullptr || data[length] == 0; }
+    bool Valid() const { return Empty() || data[length] == 0; }
     inline char const* CStr() const { ASSERT( Valid() ); return data ? data : ""; }
 
-    bool IsEqual( const char* cString, bool caseSensitive = true ) const
+    bool IsEqual( const char* cString, sz len = 0, bool caseSensitive = true ) const
     {
         if( Empty() )
+            return false;
+        if( !len )
+            len = StringLength( cString );
+        if( length != len )
             return false;
 
         bool result = false;
 
         if( caseSensitive )
-            result = strncmp( data, cString, Size( length ) ) == 0 && cString[length] == '\0';
+        {
+            result = strncmp( data, cString, (size_t)length ) == 0 && cString[length] == '\0';
+        }
         else
         {
-            if( (size_t)length != strlen( cString ) )
-                return false;
-
             for( int i = 0; i < length; ++i )
                 if( tolower( data[i] ) != tolower( cString[i] ) )
                     return false;
@@ -233,37 +354,53 @@ struct String
 
         return result;
     }
-
-
-    static String Clone( char const* src, MemoryArena* arena )
+    bool IsEqualIgnoreCase( const char* cString, sz len = 0 ) const
     {
-        String result = {};
-        result.length = StringLength( src );
-        result.data = PUSH_STRING( arena, result.length );
-        StringCopy( src, (char*)result.data, result.length );
+        return IsEqual( cString, len, false );
+    }
 
+
+    static String Clone( char const* src, int len = 0 )
+    {
+        String result;
+        result.InternalClone( src, len );
+        return result;
+    }
+
+    static String CloneTmp( char const* src, int len = 0 )
+    {
+        String result;
+        result.flags |= Temporary;
+        result.InternalClone( src, len );
+        return result;
+    }
+
+    static String Clone( BucketArray<char> const& src )
+    {
+        String result( src.count );
+        src.CopyTo( (char*)result.data, result.length );
+
+        // TODO Should we auto null terminate here?
         ASSERT( result.Valid() );
         return result;
     }
 
-    static String Clone( BucketArray<char> const& src, MemoryArena* arena )
+    static String CloneTmp( BucketArray<char> const& src )
     {
-        String result = {};
-        result.length = src.count;
-        result.data = PUSH_STRING( arena, result.length );
+        String result( src.count, Temporary );
         src.CopyTo( (char*)result.data, result.length );
 
+        // TODO Should we auto null terminate here?
         ASSERT( result.Valid() );
         return result;
     }
 
     // Clone src string, while replacing all instances of match with subst
-    static String CloneReplace( char const* src, char const* match, char const* subst, MemoryArena* arena )
+    static String CloneReplace( char const* src, char const* match, char const* subst )
     {
         int matchLen = StringLength( match );
 
-        // TODO This should use a temporary allocator
-        StringBuilder builder( arena );
+        StringBuilder builder;
         int index = 0;
         while( char const* m = strstr( src + index, match ) )
         {
@@ -280,32 +417,51 @@ struct String
         if( index < srcLen )
             builder.Append( src + index, srcLen - index );
 
-        String result = builder.ToString( arena );
+        String result = builder.ToString();
         ASSERT( result.Valid() );
         return result;
     }
 
-    static String FromFormat( MemoryArena* arena, char const* fmt, va_list args )
+private:
+    static String FromFormat( char const* fmt, va_list args, bool temporary )
     {
+        // TODO Apparently I read somewhere that these need to be copied to correctly use them twice?
+#if 0
         va_list argsCopy;
         va_copy( argsCopy, args );
+#endif
+        int len = 1 + vsnprintf( nullptr, 0, fmt, args );
 
-        String result = {};
-        result.length = 1 + vsnprintf( nullptr, 0, fmt, args );
-        result.data = PUSH_STRING( arena, result.length );
-
-        vsnprintf( (char*)result.data, Size( result.length ), fmt, argsCopy );
+        String result( len, temporary ? Temporary : None );
+        vsnprintf( (char*)result.data, (size_t)result.length, fmt, args/*Copy*/ );
+#if 0
         va_end( argsCopy );
+#endif
 
         ASSERT( result.Valid() );
         return result;
     }
 
-    static String FromFormat( MemoryArena* arena, char const* fmt, ... )
+public:
+    static String FromFormat( char const* fmt, va_list args ) { return FromFormat( fmt, args, false ); }
+    static String FromFormatTmp( char const* fmt, va_list args ) { return FromFormat( fmt, args, true ); }
+
+    static String FromFormat( char const* fmt, ... )
     {
         va_list args;
         va_start( args, fmt );
-        String result = FromFormat( arena, fmt, args );
+        String result = FromFormat( fmt, args, false );
+        va_end( args );
+
+        ASSERT( result.Valid() );
+        return result;
+    }
+
+    static String FromFormatTmp( char const* fmt, ... )
+    {
+        va_list args;
+        va_start( args, fmt );
+        String result = FromFormat( fmt, args, true );
         va_end( args );
 
         ASSERT( result.Valid() );
@@ -420,8 +576,9 @@ struct String
 
     String ConsumeLine()
     {
-        int lineLen = length;
+        ASSERT( !(flags & Owned) );
 
+        int lineLen = length;
         const char* atNL = data + length;
         const char* onePastNL = FindString( "\n" );
 
@@ -450,6 +607,8 @@ struct String
     // Consume next word trimming whatever whitespace is there at the beginning
     String ConsumeWord()
     {
+        ASSERT( !(flags & Owned) );
+
         ConsumeWhitespace();
 
         int wordLen = 0;
@@ -477,6 +636,8 @@ struct String
 
     int ConsumeWhitespace()
     {
+        ASSERT( !(flags & Owned) );
+
         const char *start = data;
         int remaining = length;
 
@@ -497,6 +658,8 @@ struct String
 
     String Consume( int charCount )
     {
+        ASSERT( !(flags & Owned) );
+
         const char *next = data;
         int remaining = Min( charCount, length );
 
@@ -517,8 +680,8 @@ struct String
         return result;
     }
 
-    // FIXME This should actually be totally unnecessary given that now we guarantee null termination!
     // FIXME Make a copy in the stack/temp memory or something
+    // (REVIEW! This should actually be totally unnecessary given that now we guarantee null termination!)
     int Scan( const char *format, ... )
     {
         va_list args;
@@ -614,17 +777,8 @@ struct String
         return result;
     }
 
+#if 0
     // Deep copy
-    void CopyTo( String* target, MemoryArena* arena ) const
-    {
-        target->length = length;
-        int len = length + 1;
-        target->data = PUSH_ARRAY( arena, char, len );
-        PCOPY( data, (char*)target->data, len * SIZEOF(char) );
-
-        ASSERT( target->Valid() );
-    }
-
     // dst buffer will be null terminated always
     int CopyTo( char* dst, int dstLen ) const
     {
@@ -636,15 +790,14 @@ struct String
 
         return len;
     }
+#endif
 };
 
-constexpr String EmptyString;
 
-
-inline String StringBuilder::ToString( MemoryArena* arena )
+inline String StringBuilder::ToString()
 {
     buckets.Append( "\0", 1 );
-    return String::Clone( buckets, arena );
+    return String::Clone( buckets );
 }
 
 INLINE bool StringsEqual( String const& a, String const& b )

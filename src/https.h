@@ -229,7 +229,7 @@
 #define TRUE    1
 #define FALSE   0
 
-typedef struct
+struct HttpHeader
 {
     char method[8];
     int  status;
@@ -242,7 +242,8 @@ typedef struct
     char cookie[H_FIELD_SIZE];
     char boundary[H_FIELD_SIZE];
 
-} HttpHeader;
+    Hashtable< char const*, String > userHeaders;
+};
 
 typedef struct
 {
