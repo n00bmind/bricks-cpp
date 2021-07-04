@@ -22,6 +22,8 @@
 #include "memory.h"
 #include "datatypes.h"
 #include "strings.h"
+
+#include "platform.cpp"
 #include "win32_platform.cpp"
 
 
@@ -1256,7 +1258,7 @@ TEST_F( HttpsTest, GetPost )
 {
     char* url;
     char data[1024], response[4096];
-    int  i, ret, size;
+    int  ret;
 
     // Init http session. verify: check the server CA cert.
     //Http req( false );

@@ -251,14 +251,12 @@ static int _error;
 /*---------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size);
 
-static int parse_url(char *src_url, int *https, char *host, char *port, char *url);
 static int http_header(Http *hi, char *param);
 static int http_parse(Http *hi);
 
 static int https_init(Http *hi, bool https, bool verify);
 static int https_close(Http *hi);
 static int https_connect(Http *hi, char *host, char *port);
-static int https_write(Http *hi, char *buffer, int len);
 static int https_read(Http *hi, char *buffer, int len);
 
 /*---------------------------------------------------------------------------*/
@@ -307,33 +305,35 @@ char *strtoken(char *src, char *dst, int size)
 }
 
 /*---------------------------------------------------------------------*/
-static int parse_url(char *src_url, int *https, char *host, char *port, char *url)
+static int parse_url(char const* src_url, int *https, char *host, char *port, char *urlOut )
 {
-    char *p1, *p2;
-    char str[1024];
+    char* p1;
+    char* p2;
+    char str[1024] = {};
 
-    memset(str, 0, 1024);
+    String urlString = String::CloneTmp( src_url );
+    char* url = (char*)urlString.CStr();
 
-    if(strncmp(src_url, "http://", 7)==0) {
-        p1=&src_url[7];
+    if(strncmp( url, "http://", 7)==0) {
+        p1=&url[7];
         *https = 0;
-    } else if(strncmp(src_url, "https://", 8)==0) {
-        p1=&src_url[8];
+    } else if(strncmp( url, "https://", 8)==0) {
+        p1=&url[8];
         *https = 1;
     } else {
-        p1 = &src_url[0];
+        p1 = &url[0];
         *https = 0;
     }
 
     if((p2=strstr(p1, "/")) == NULL)
     {
         sprintf(str, "%s", p1);
-        sprintf(url, "/");
+        sprintf(urlOut , "/");
     }
     else
     {
         strncpy(str, p1, p2-p1);
-        snprintf(url, 256, "%s", p2);
+        snprintf(urlOut , 256, "%s", p2);
     }
 
     if((p1=strstr(str, ":")) != NULL)
@@ -374,7 +374,7 @@ static int http_header(Http *hi, char *param)
     }
     else if(strncasecmp(t1, "set-cookie:", 11) == 0)
     {
-        snprintf(hi->response.cookie, 512, "%s", t2);
+        hi->response.cookie = String::Clone( t2 );
     }
     else if(strncasecmp(t1, "location:", 9) == 0)
     {
@@ -384,7 +384,7 @@ static int http_header(Http *hi, char *param)
     }
     else if(strncasecmp(t1, "content-length:", 15) == 0)
     {
-        hi->response.content_length = atoi(t2);
+        hi->response.contentLength = atoi(t2);
     }
     else if(strncasecmp(t1, "transfer-encoding:", 18) == 0)
     {
@@ -454,7 +454,7 @@ static int http_parse(Http *hi)
                                 }
                                 else
                                 {
-                                    hi->response.content_length += hi->length;
+                                    hi->response.contentLength += hi->length;
                                 }
                                 p1 = p2 + 2;    // skip CR+LF
                             }
@@ -479,7 +479,7 @@ static int http_parse(Http *hi)
                     }
                     else
                     {
-                        hi->length = hi->response.content_length;
+                        hi->length = hi->response.contentLength;
                     }
                 }
 
@@ -519,7 +519,7 @@ static int http_parse(Http *hi)
                         }
                         else
                         {
-                            hi->response.content_length += hi->length;
+                            hi->response.contentLength += hi->length;
                         }
 
                         p1 = p2 + 2;    // skip CR+LF
@@ -646,6 +646,7 @@ static int https_init(Http *hi, bool https, bool verify)
     mbedtls_net_init(&hi->tls.ssl_fd);
 
     /* NOTE Moved from https_connect */
+    // TODO Should do this statically?
     for( int i = 0; i < (sizeof(ca_crt_rsa) / sizeof(char*)); ++i )
     {
         // +1 to account for the null terminator
@@ -688,7 +689,7 @@ static int https_close(Http *hi)
     return 0;
 }
 
-inline int close_socket(socket_t sock) {
+INLINE int close_socket(socket_t sock) {
 #ifdef _WIN32
     return closesocket(sock);
 #else
@@ -696,11 +697,31 @@ inline int close_socket(socket_t sock) {
 #endif
 }
 
-inline bool is_connection_error() {
+INLINE bool is_connection_error() {
 #ifdef _WIN32
     return WSAGetLastError() != WSAEWOULDBLOCK;
 #else
     return errno != EINPROGRESS;
+#endif
+}
+
+INLINE void PrintError()
+{
+    // TODO Use the platform for this?
+#ifdef _WIN32
+    CHAR buffer[2048] = {};
+    DWORD error = ::GetLastError();
+
+    DWORD msg_size = FormatMessageA( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                     NULL,
+                                     error,
+                                     MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
+                                     buffer,
+                                     ARRAYCOUNT(buffer),
+                                     NULL );
+    printf( "ERROR [%08x] : %s\n", (u32)error, buffer );
+#else
+    ASSERT( false, "TO DO" );
 #endif
 }
 
@@ -727,8 +748,12 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
     hints.ai_socktype = proto == MBEDTLS_NET_PROTO_UDP ? SOCK_DGRAM : SOCK_STREAM;
     hints.ai_protocol = proto == MBEDTLS_NET_PROTO_UDP ? IPPROTO_UDP : IPPROTO_TCP;
 
-    if( getaddrinfo( host, port, &hints, &addr_list ) != 0 )
+    ret = getaddrinfo( host, port, &hints, &addr_list );
+    if( ret != 0 )
+    {
+        PrintError();
         return( MBEDTLS_ERR_NET_UNKNOWN_HOST );
+    }
 
     /* Try the sockaddrs until a connection succeeds */
     ret = MBEDTLS_ERR_NET_UNKNOWN_HOST;
@@ -759,7 +784,7 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
         }
         else if( !is_connection_error() )
         {
-            int            fd = (int)ctx->fd;
+            u32            fd = ctx->fd;
             int            opt;
             socklen_t      slen;
             struct timeval tv;
@@ -903,7 +928,7 @@ static int https_connect(Http *hi, char *host, char *port)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_write(Http *hi, char *buffer, int len)
+static int https_write(Http *hi, char const* buffer, int len)
 {
     int ret, slen = 0;
 
@@ -938,20 +963,50 @@ static int https_read(Http *hi, char *buffer, int len)
     }
 }
 
-/*---------------------------------------------------------------------*/
-int Http::Init( bool verify )
+
+
+bool Http::s_initialized = 0;
+
+void Http::Init()
 {
-    return https_init( this, 0, verify );
+    if( !s_initialized )
+    {
+#ifdef _WIN32
+        WSADATA wsaData;
+        int iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+        ASSERT( iResult == 0, "WSAStartup failed" );
+#endif
+
+        s_initialized = true;
+    }
+}
+
+void Http::Close()
+{
+    if( s_initialized )
+    {
+#ifdef _WIN32
+        int ret = WSACleanup();
+        ASSERT(ret == 0);
+#endif
+
+        s_initialized = false;
+    }
+}
+
+Http::Http( bool verify /*= true*/ )
+{
+    Init();
+    https_init( this, 0, verify );
+}
+
+Http::~Http()
+{
+    https_close( this );
 }
 
 /*---------------------------------------------------------------------*/
-int Http::Close()
-{
-    return https_close( this );
-}
-
-/*---------------------------------------------------------------------*/
-int Http::Get( char *url_, char *response_, int size )
+int Http::Get( char const* url_, char *response_, int size )
 {
     char        req[1024], err[100];
     char        host[256], port[10], dir[1024];
@@ -1012,8 +1067,9 @@ int Http::Get( char *url_, char *response_, int size )
             "Host: %s:%s\r\n"
             "Content-Type: application/json; charset=utf-8\r\n"
             "Connection: Keep-Alive\r\n"
-            "%s\r\n",
-            dir, host, port, this->request.cookie);
+            // TODO Need to properly support multiple cookies
+            "Cookie: %s\r\n",
+            dir, host, port, this->request.cookie.CStr() );
 
     if((ret = https_write(this, req, len)) != len)
     {
@@ -1029,7 +1085,7 @@ int Http::Get( char *url_, char *response_, int size )
 //  printf("request: %s \r\n\r\n", req);
 
     this->response.status = 0;
-    this->response.content_length = 0;
+    this->response.contentLength = 0;
     this->response.close = 0;
 
     this->r_len = 0;
@@ -1092,13 +1148,19 @@ int Http::Get( char *url_, char *response_, int size )
 
 }
 
-/*---------------------------------------------------------------------*/
-int Http::Post( char *url_, char *data, char *response_, int size )
+
+int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut, int responseLen )
 {
-    char        req[1024], err[100];
+    Http::Headers headers;
+    return Post( requestUrl, headers, bodyData, responseOut, responseLen );
+}
+
+int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int responseLen )
+{
+    char        err[100];
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
-    int         ret, opt, len;
+    int         ret, opt;
     socklen_t   slen;
 
 
@@ -1106,7 +1168,7 @@ int Http::Post( char *url_, char *data, char *response_, int size )
 
     verify = this->tls.verify;
 
-    parse_url(url_, &https, host, port, dir);
+    parse_url(requestUrl, &https, host, port, dir);
 
     if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
         (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
@@ -1121,7 +1183,7 @@ int Http::Post( char *url_, char *data, char *response_, int size )
             https_close(this);
 
             mbedtls_strerror(ret, err, 100);
-            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1143,7 +1205,7 @@ int Http::Post( char *url_, char *data, char *response_, int size )
                 https_close(this);
 
                 mbedtls_strerror(ret, err, 100);
-                snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+                snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
                 return -1;
             }
@@ -1152,44 +1214,31 @@ int Http::Post( char *url_, char *data, char *response_, int size )
 //          printf("socket reuse: %d \n", sock_fd);
     }
 
-    /* Send HTTP request. */
-    len = snprintf(req, 1024,
-            "POST %s HTTP/1.1\r\n"
-            "User-Agent: Mozilla/4.0\r\n"
-            "Host: %s:%s\r\n"
-            "Connection: Keep-Alive\r\n"
-            "Accept: */*\r\n"
-            "Content-Type: application/json; charset=utf-8\r\n"
-            "Content-Length: %d\r\n"
-            "%s\r\n"
-            "%s",
-            dir, host, port,
-            (int)strlen(data),
-            this->request.cookie,
-            data);
+    // Add common and 'mandatory' headers to the user provided set
+    String req = BuildRequest( "POST", host, port, dir, headers, bodyData );
 
-    if((ret = https_write(this, req, len)) != len)
+    if( (ret = https_write( this, req.data, req.length )) != req.length )
     {
         https_close(this);
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+        snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", req);
+//  printf("request: %s \r\n\r\n", req.CStr() );
 
     this->response.status = 0;
-    this->response.content_length = 0;
+    this->response.contentLength = 0;
     this->response.close = 0;
 
     this->r_len = 0;
     this->header_end = 0;
 
-    this->body = response_;
-    this->body_size = size;
+    this->body = responseOut;
+    this->body_size = responseLen;
     this->body_len = 0;
 
     this->body[0] = 0;
@@ -1204,7 +1253,7 @@ int Http::Post( char *url_, char *data, char *response_, int size )
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1316,75 +1365,57 @@ int Http::Open( char *url_ )
     return 0;
 }
 
-/*---------------------------------------------------------------------*/
-int Http::WriteHeaders()
+
+String Http::BuildRequest( char const* method, char const* host, char const* port, char const* dir,
+                           Headers& headers, String const& bodyData )
 {
-    char        req[4096], buf[H_FIELD_SIZE];
-    int         ret, len, l;
+    // FIXME Store lower-cased, format camel-cased
+    headers.Put( STR( "User-Agent" ), STR( "Mozilla/4.0" ) );
+    headers.Put( STR( "Host" ), String::FromFormatTmp( "%s:%s", host, port ) );
+    headers.Put( STR( "Content-Length" ), String::FromFormatTmp( "%d", bodyData.length ) ); 
+    headers.PutIfNotFound( STR( "Connection" ), STR( "Keep-Alive" ) );
+    headers.PutIfNotFound( STR( "Accept" ), STR( "*/*" ) );
+    headers.PutIfNotFound( STR( "Content-Type" ), STR( "application/json; charset=utf-8" ) );
 
 
-    if (NULL == this) return -1;
-
-    /* Send HTTP request. */
-    len = snprintf(req, 1024,
-                   "%s %s HTTP/1.1\r\n"
-                   "User-Agent: Mozilla/4.0\r\n"
-                   "Host: %s:%s\r\n"
-                   "Content-Type: %s\r\n",
-                   this->request.method, this->url.path,
-                   this->url.host, this->url.port,
-                   this->request.content_type);
-
-
-    if(this->request.referrer[0] != 0)
+    Data* newReq = (Data*)&request;
+    // Retrieve request data from headers
+    if( String* h = headers.Get( STR("Content-Type") ) )
+        newReq->contentType = String::Clone( *h );
+    if( String* h = headers.Get( STR("Content-Length") ) )
     {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Referer: %s\r\n", this->request.referrer);
+        bool ret = h->ToI32( &newReq->contentLength );
+        ASSERT( ret );
+    }
+    if( String* h = headers.Get( STR("Cookie") ) )
+        newReq->cookie = String::Clone( *h );
+    if( String* h = headers.Get( STR("Referer") ) )
+        newReq->referer = String::Clone( *h );
+    if( String* h = headers.Get( STR("Transfer-Encoding") ) )
+    {
+        if( *h == STR("chunked") )
+            newReq->chunked = true;
+    }
+    if( String* h = headers.Get( STR("Connection") ) )
+    {
+        if( *h == STR("close") )
+            newReq->close = true;
     }
 
-    if(this->request.chunked == TRUE)
-    {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Transfer-Encoding: chunked\r\n");
-    }
-    else
-    {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Content-Length: %ld\r\n", this->request.content_length);
-    }
-
-    if(this->request.close == TRUE)
-    {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Connection: close\r\n");
-    }
-    else
-    {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Connection: Keep-Alive\r\n");
-    }
-
-    if(this->request.cookie[0] != 0)
-    {
-        len += snprintf(&req[len], H_FIELD_SIZE,
-                        "Cookie: %s\r\n", this->request.cookie);
-    }
-
-    len += snprintf(&req[len], H_FIELD_SIZE, "\r\n");
+    // TODO Do we want to copy this?
+#if 0
+    newReq->headers = headers;
+#endif
 
 
-    printf("%s", req);
+    StringBuilder sb;
+    sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, dir );
+    for( auto it = headers.Items(); it; ++it )
+        sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
+    sb.Append( STR("\r\n") );
+    sb.AppendFormat( "%s", bodyData.CStr() );
 
-    if ((ret = https_write(this, req, len)) != len)
-    {
-        https_close(this);
-
-        _error = ret;
-
-        return -1;
-    }
-
-    return 0;
+    return sb.ToStringTmp();
 }
 
 /*---------------------------------------------------------------------*/
@@ -1469,7 +1500,7 @@ int Http::ReadChunked( char *response_, int size )
 //  printf("request: %s \r\n\r\n", request);
 
     this->response.status = 0;
-    this->response.content_length = 0;
+    this->response.contentLength = 0;
     this->response.close = 0;
 
     this->r_len = 0;

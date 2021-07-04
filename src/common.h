@@ -72,8 +72,10 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define SIZEOF(s) Sz( sizeof(s) )
 #define OFFSETOF(type, member) Sz( (uintptr_t)&(((type *)0)->member) )
 #define ARRAYCOUNT(array) Sz( sizeof(array) / sizeof((array)[0]) )
+#if 0
 #define STR(s) _STR(s)
 #define _STR(s) #s
+#endif
 
 #define KILOBYTES(value) ((value)*1024)
 #define MEGABYTES(value) (KILOBYTES(value)*1024)

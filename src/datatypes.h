@@ -813,16 +813,8 @@ We could somehow templatize an internal structure that dictates the layout, base
 would be through pass-through methods in that structure, which I guess is fine as long as they're inlined?
 */
 
-template <typename K>
-u64 DefaultHashFunc( K const& key )
-{
-    return Hash64( &key, I32( SIZEOF(K) ) );
-}
-template <typename K>
-bool DefaultEqFunc( K const& a, K const& b )
-{
-    return a == b;
-}
+template <typename K> INLINE u64  DefaultHashFunc( K const& key )          { return Hash64( &key, I32( SIZEOF(K) ) ); }
+template <typename K> INLINE bool DefaultEqFunc( K const& a, K const& b )  { return a == b; }
 
 template <typename K>
 const K ZeroKey = K();
@@ -889,10 +881,12 @@ struct Hashtable
         if( count == 0 )
             return nullptr;
 
+        ASSERT( count < capacity );
+
         u64 hash = hashFunc( key );
         u32 i = hash & (capacity - 1);
 
-        ASSERT( count < capacity );
+        u32 startIdx = i;
         for( ;; )
         {
             if( eqFunc( keys[i], key ) )
@@ -903,10 +897,13 @@ struct Hashtable
             i++;
             if( i == U32( capacity ) )
                 i = 0;
+            if( i == startIdx )
+                // Something went horribly wrong
+                return nullptr;
         }
     }
 
-    V* PutEmpty( K const& key, const bool clear = true )
+    V* PutEmpty( K const& key, const bool clear = true, bool* occupiedOut = nullptr )
     {
         ASSERT( !eqFunc( key, ZeroKey<K> ) );
 
@@ -918,7 +915,7 @@ struct Hashtable
         u64 hash = hashFunc( key );
         u32 i = hash & (capacity - 1);
 
-        ASSERT( count < capacity );
+        u32 startIdx = i;
         for( ;; )
         {
             if( eqFunc( keys[i], ZeroKey<K> ) )
@@ -927,18 +924,25 @@ struct Hashtable
                 if( clear )
                     INIT( values[i] ) V();
                 ++count;
+                if( occupiedOut )
+                    *occupiedOut = false;
                 return &values[i];
             }
             else if( eqFunc( keys[i], key ) )
             {
                 if( clear )
                     INIT( values[i] ) V();
+                if( occupiedOut )
+                    *occupiedOut = true;
                 return &values[i];
             }
 
             i++;
             if( i == U32( capacity ) )
                 i = 0;
+            if( i == startIdx )
+                // Something went horribly wrong
+                return nullptr;
         }
     }
 
@@ -951,14 +955,23 @@ struct Hashtable
         return result;
     }
 
+    V* PutIfNotFound( K const& key, V const& value )
+    {
+        bool found;
+        V* result = PutEmpty( key, false, &found );
+        ASSERT( result );
+
+        if( !found )
+            *result = value;
+
+        return result;
+    }
+
     // TODO Deleting based on Robid Hood or similar
 
     template <typename E>
     struct BaseIterator
     {
-        Hashtable const& table;
-        K* current;
-
         BaseIterator( Hashtable const& table_ )
             : table( table_ )
         {
@@ -968,13 +981,18 @@ struct Hashtable
 
         explicit operator bool() const { return current != nullptr; }
 
-        virtual E operator *() const = 0;
+        virtual E Get() const = 0;
+        E operator * () const { return Get(); }
 
         BaseIterator& operator ++()
         {
             Next();
             return *this;
         }
+
+    protected:
+        Hashtable const& table;
+        K* current;
 
     private:
         void Next()
@@ -997,7 +1015,7 @@ struct Hashtable
             : BaseIterator( table_ )
         {}
 
-        Item operator *() const override
+        Item Get() const override
         {
             ASSERT( current );
             V& currentValue = table.values[ current - table.keys ];
@@ -1012,7 +1030,7 @@ struct Hashtable
             : BaseIterator( table_ )
         {}
 
-        K const& operator *() const override
+        K const& Get() const override
         {
             ASSERT( current );
             return *current;
@@ -1025,7 +1043,7 @@ struct Hashtable
             : BaseIterator( table_ )
         {}
 
-        V& operator *() const override
+        V& Get() const override
         {
             ASSERT( current );
             V& currentValue = table.values[ current - table.keys ];

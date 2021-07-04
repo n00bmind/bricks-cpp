@@ -115,51 +115,12 @@ inline char* StringToLowercase( char* str, int len = 0 )
     return str;
 }
 
+// Specialised hash & equality implementations for char* strings
+template <>
+INLINE u64  DefaultHashFunc< char const* >( char const* const& key )                    { return Hash64( key, StringLength( key ) ); }
+template <>
+INLINE bool DefaultEqFunc< const char* >( char const* const& a, char const* const& b )  { return StringsEqual( a, b ); }
 
-struct String;
-
-// String builder to help compose Strings piece by piece
-// NOTE This uses temporary memory by default!
-struct StringBuilder
-{
-    BucketArray<char> buckets;
-
-    // TODO Raise bucket size when we know it works
-    explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
-        //: buckets( 32, params )
-        : buckets( 4, allocator )
-    {}
-
-    bool Empty() const { return buckets.count == 0; }
-
-    void Append( char const* str, int length = 0 )
-    {
-        if( !length )
-            length = StringLength( str );
-
-        // Not including null terminator
-        buckets.Append( str, length );
-    }
-
-    void AppendFmt( char const* fmt, ... )
-    {
-        va_list args;
-        va_start( args, fmt );
-
-        int n = 1 + vsnprintf( nullptr, 0, fmt, args );
-        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n );
-
-        // TODO Does this work??
-        vsnprintf( buf, Size( n ), fmt, args );
-        va_end( args );
-
-        // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
-        // length needed for each append (n above) so we don't need this extra copy
-        buckets.Append( buf, n - 1 );
-    }
-
-    String ToString();
-};
 
 
 // Read only string
@@ -187,7 +148,7 @@ struct String
         , flags( 0 )
     {}
 
-    explicit String( char const* cString )
+    String( char const* cString )
         : data( cString )
         , length( StringLength( cString ) )
         , flags( 0 )
@@ -211,6 +172,10 @@ struct String
         , flags( 0 )
     { ASSERT( Valid() ); }
 
+    // Automatically figure out length for string literals
+#define STR(x) \
+    ([]{ static_assert( true, x ); }, String( x, sizeof(x) - 1 ))
+
     String( String const& other )
         : flags( other.flags )
     {
@@ -218,7 +183,7 @@ struct String
         *this = other;
     }
 
-    String( String const&& other )
+    String( String&& other )
         : flags( other.flags )
     {
         flags &= ~Owned;
@@ -324,17 +289,16 @@ public:
     bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
     explicit operator bool() const { return !Empty(); }
+    operator char const*() const { return CStr(); }
 
     bool Empty() const { return length == 0 || data == nullptr; }
     bool Valid() const { return Empty() || data[length] == 0; }
-    inline char const* CStr() const { ASSERT( Valid() ); return data ? data : ""; }
+    char const* CStr() const { ASSERT( Valid() ); return data ? data : ""; }
 
     bool IsEqual( const char* cString, sz len = 0, bool caseSensitive = true ) const
     {
-        if( Empty() )
-            return false;
         if( !len )
-            len = StringLength( cString );
+            len = cString ? StringLength( cString ) : 0;
         if( length != len )
             return false;
 
@@ -342,7 +306,7 @@ public:
 
         if( caseSensitive )
         {
-            result = strncmp( data, cString, (size_t)length ) == 0 && cString[length] == '\0';
+            result = len == 0 || (strncmp( data, cString, (size_t)length ) == 0 && cString[length] == '\0');
         }
         else
         {
@@ -396,31 +360,7 @@ public:
     }
 
     // Clone src string, while replacing all instances of match with subst
-    static String CloneReplace( char const* src, char const* match, char const* subst )
-    {
-        int matchLen = StringLength( match );
-
-        StringBuilder builder;
-        int index = 0;
-        while( char const* m = strstr( src + index, match ) )
-        {
-            int subLen = I32( m - (src + index) );
-            builder.Append( src + index, subLen );
-            builder.Append( subst );
-
-            index += subLen + matchLen;
-        }
-
-        int srcLen = StringLength( src );
-        ASSERT( index <= srcLen );
-
-        if( index < srcLen )
-            builder.Append( src + index, srcLen - index );
-
-        String result = builder.ToString();
-        ASSERT( result.Valid() );
-        return result;
-    }
+    static String CloneReplace( char const* src, char const* match, char const* subst );
 
 private:
     static String FromFormat( char const* fmt, va_list args, bool temporary )
@@ -468,6 +408,11 @@ public:
         return result;
     }
 
+
+    INLINE u64 Hash() const
+    {
+        return Empty() ? 0 : Hash64( data, length );
+    }
 
     bool IsNewline() const
     {
@@ -793,12 +738,10 @@ public:
 #endif
 };
 
+// Correctly hash Strings
+template <>
+INLINE u64  DefaultHashFunc< String >( String const& key )  { return key.Hash(); }
 
-inline String StringBuilder::ToString()
-{
-    buckets.Append( "\0", 1 );
-    return String::Clone( buckets );
-}
 
 INLINE bool StringsEqual( String const& a, String const& b )
 {
@@ -810,8 +753,84 @@ INLINE bool StringsEqual( String const& a, char const* b )
     return strncmp( a.data, b, Size( a.length ) ) == 0 && b[ a.length ] == 0;
 }
 
-INLINE u64 StringHash( String const& str )
+
+
+// String builder to help compose Strings piece by piece
+// NOTE This uses temporary memory by default!
+struct StringBuilder
 {
-    return Hash64( str.data, str.length );
+    BucketArray<char> buckets;
+
+    // TODO Raise bucket size when we know it works
+    explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
+        //: buckets( 32, params )
+        : buckets( 4, allocator )
+    {}
+
+    bool Empty() const { return buckets.count == 0; }
+
+    void Append( char const* str, int length = 0 )
+    {
+        if( !length )
+            length = StringLength( str );
+
+        // Not including null terminator
+        buckets.Append( str, length );
+    }
+
+    void AppendFormat( char const* fmt, ... )
+    {
+        va_list args;
+        va_start( args, fmt );
+
+        int n = 1 + vsnprintf( nullptr, 0, fmt, args );
+        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n );
+
+        // TODO Does this work??
+        vsnprintf( buf, Size( n ), fmt, args );
+        va_end( args );
+
+        // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
+        // length needed for each append (n above) so we don't need this extra copy
+        buckets.Append( buf, n - 1 );
+    }
+
+    String ToString()
+    {
+        buckets.Append( "\0", 1 );
+        return String::Clone( buckets );
+    }
+    String ToStringTmp()
+    {
+        buckets.Append( "\0", 1 );
+        return String::CloneTmp( buckets );
+    }
+};
+
+
+String String::CloneReplace( char const* src, char const* match, char const* subst )
+{
+    int matchLen = StringLength( match );
+
+    StringBuilder builder;
+    int index = 0;
+    while( char const* m = strstr( src + index, match ) )
+    {
+        int subLen = I32( m - (src + index) );
+        builder.Append( src + index, subLen );
+        builder.Append( subst );
+
+        index += subLen + matchLen;
+    }
+
+    int srcLen = StringLength( src );
+    ASSERT( index <= srcLen );
+
+    if( index < srcLen )
+        builder.Append( src + index, srcLen - index );
+
+    String result = builder.ToString();
+    ASSERT( result.Valid() );
+    return result;
 }
 

@@ -229,78 +229,90 @@
 #define TRUE    1
 #define FALSE   0
 
-struct HttpHeader
-{
-    char method[8];
-    int  status;
-    char content_type[H_FIELD_SIZE];
-    long content_length;
-    bool chunked;
-    bool close;
-    char location[H_FIELD_SIZE];
-    char referrer[H_FIELD_SIZE];
-    char cookie[H_FIELD_SIZE];
-    char boundary[H_FIELD_SIZE];
-
-    Hashtable< char const*, String > userHeaders;
-};
-
-typedef struct
-{
-    bool    verify;
-
-    mbedtls_net_context         ssl_fd;
-    mbedtls_entropy_context     entropy;
-    mbedtls_ctr_drbg_context    ctr_drbg;
-    mbedtls_ssl_context         ssl;
-    mbedtls_ssl_config          conf;
-    mbedtls_x509_crt            cacert;
-
-} HttpSsl;
-
-typedef struct {
-
-    bool    https;
-    char    host[256];
-    char    port[8];
-    char    path[H_FIELD_SIZE];
-
-} HttpUrl;
 
 struct Http
 {
-    HttpUrl    url;
+    using Headers = Hashtable< String, String >;
 
-    HttpHeader request;
-    HttpHeader response;
-    HttpSsl    tls;
+    struct Data
+    {
+        // TODO Use this to build request data and parse back from response
+        Headers headers;
 
-    long        length;
-    char        r_buf[H_READ_SIZE];
-    long        r_len;
-    bool        header_end;
-    char        *body;
-    long        body_size;
-    long        body_len;
+        char method[8];
+        char location[H_FIELD_SIZE];
+        char boundary[H_FIELD_SIZE];
+        String contentType;
+        String cookie;
+        String referer;
+        i32 contentLength;
+        int  status;
+        bool chunked;
+        bool close;
+    };
 
 
-    Http( bool verify ) { Init( verify ); }
-    ~Http() { Close(); }
+    typedef struct
+    {
+        bool    verify;
 
-    int  Get( char *url, char *response, int size );
-    int  Post( char *url, char *data, char *response, int size );
+        mbedtls_net_context         ssl_fd;
+        mbedtls_entropy_context     entropy;
+        mbedtls_ctr_drbg_context    ctr_drbg;
+        mbedtls_ssl_context         ssl;
+        mbedtls_ssl_config          conf;
+        mbedtls_x509_crt            cacert;
+
+    } Ssl;
+
+    typedef struct {
+
+        bool    https;
+        char    host[256];
+        char    port[8];
+        char    path[H_FIELD_SIZE];
+
+    } Url;
+
+
+    Url        url;
+
+    Data const request;
+    Data       response;
+    Ssl        tls;
+
+    long       length;
+    char       r_buf[H_READ_SIZE];
+    long       r_len;
+    bool       header_end;
+    char*      body;
+    long       body_size;
+    long       body_len;
+
+    
+    static void Init();
+    static void Close();
+
+    Http( bool verify = true );
+    ~Http();
+
+    int Get( char const* url, char *response, int size );
+    int Post( char const* requestUrl, char const* bodyData, char *responseOut, int responseLen );
+    int Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int responseLen );
+    // TODO Post version to automatically create url-encoded body data from given Params set
 
     // Custom connection handling
-    int  Open( char *url );
-    int  WriteHeaders();
-    int  Write( char *data, int len );
-    int  WriteEnd();
-    int  ReadChunked( char *response, int size );
+    int Open( char *url );
+    int Write( char *data, int len );
+    int WriteEnd();
+    int ReadChunked( char *response, int size );
 
 private:
-    int  Init( bool verify );
-    int  Close();
+    static bool s_initialized;
 
+    // Returned String is TEMPORARY
+    String BuildRequest( char const* method, char const* host, char const* port, char const* dir,
+                         Headers& headers, String const& bodyData );
 };
 
 
