@@ -136,6 +136,11 @@ typedef int64_t sz;
 #define F64MIN DBL_MIN
 #define F64INF (f64)INFINITY
 
+// TODO See how to turn these into actual constexprs by using a constexpr-compatible assert expression
+// TODO (may need to use C's assert?)
+// https://akrzemi1.wordpress.com/2017/05/18/asserts-in-constexpr-functions/
+// https://ericniebler.com/2014/09/27/assert-and-constexpr-in-cxx11/
+
 INLINE constexpr i8
 I8( i32 value )
 {

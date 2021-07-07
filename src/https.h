@@ -296,9 +296,10 @@ struct Http
     Http( bool verify = true );
     ~Http();
 
-    int Get( char const* url, char *response, int size );
-    int Post( char const* requestUrl, char const* bodyData, char *responseOut, int responseLen );
-    int Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int responseLen );
+    int Get( char const* requestUrl, char *responseOut, int maxResponseLen );
+    int Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen );
+    int Post( char const* requestUrl, char const* bodyData, char *responseOut, int maxResponseLen );
+    int Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen );
     // TODO Post version to automatically create url-encoded body data from given Params set
 
     // Custom connection handling

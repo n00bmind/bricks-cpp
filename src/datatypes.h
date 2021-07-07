@@ -1098,6 +1098,10 @@ private:
 // TODO Make this thread-safe by masking the indices (instead of resetting them to 0), and using atomic increment
 // We could then easily use this as a fixed-capacity thread-safe queue
 
+// TODO Look at the code inside #ifdef MEM_REPLACE_PLACEHOLDER in https://github.com/cmuratori/refterm/blob/main/refterm_example_source_buffer.c
+// for an example of how to speed up linear reads & writes that go beyond the end of the buffer,
+// by just mapping the same block of memory twice back to back!
+
 template <typename T, typename AllocType = Allocator>
 struct RingBuffer
 {

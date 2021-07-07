@@ -1006,12 +1006,19 @@ Http::~Http()
 }
 
 /*---------------------------------------------------------------------*/
-int Http::Get( char const* url_, char *response_, int size )
+int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
 {
-    char        req[1024], err[100];
+    Http::Headers headers;
+    return Get( requestUrl, headers, responseOut, maxResponseLen );
+}
+
+    //int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
+int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen )
+{
+    char        err[100];
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
-    int         ret, opt, len;
+    int         ret, opt;
     socklen_t   slen;
 
 
@@ -1019,7 +1026,7 @@ int Http::Get( char const* url_, char *response_, int size )
 
     verify = this->tls.verify;
 
-    parse_url(url_, &https, host, port, dir);
+    parse_url(requestUrl, &https, host, port, dir);
 
     if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
         (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
@@ -1033,7 +1040,7 @@ int Http::Get( char const* url_, char *response_, int size )
             https_close(this);
 
             mbedtls_strerror(ret, err, 100);
-            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
             return -1;
         }
     }
@@ -1054,35 +1061,27 @@ int Http::Get( char const* url_, char *response_, int size )
                 https_close(this);
 
                 mbedtls_strerror(ret, err, 100);
-                snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+                snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
                 return -1;
             }
         }
     }
 
-    /* Send HTTP request. */
-    len = snprintf(req, 1024,
-            "GET %s HTTP/1.1\r\n"
-            "User-Agent: Mozilla/4.0\r\n"
-            "Host: %s:%s\r\n"
-            "Content-Type: application/json; charset=utf-8\r\n"
-            "Connection: Keep-Alive\r\n"
-            // TODO Need to properly support multiple cookies
-            "Cookie: %s\r\n",
-            dir, host, port, this->request.cookie.CStr() );
+    // Add common and 'mandatory' headers to the user provided set
+    String req = BuildRequest( "GET", host, port, dir, headers, {} );
 
-    if((ret = https_write(this, req, len)) != len)
+    if( (ret = https_write(this, req.data, req.length)) != req.length )
     {
         https_close(this);
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+        snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", req);
+//  printf("request: %s \r\n\r\n", req.CStr() );
 
     this->response.status = 0;
     this->response.contentLength = 0;
@@ -1091,8 +1090,8 @@ int Http::Get( char const* url_, char *response_, int size )
     this->r_len = 0;
     this->header_end = 0;
 
-    this->body = response_;
-    this->body_size = size;
+    this->body = responseOut;
+    this->body_size = maxResponseLen;
     this->body_len = 0;
 
     while(1)
@@ -1105,7 +1104,7 @@ int Http::Get( char const* url_, char *response_, int size )
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(response_, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1148,14 +1147,13 @@ int Http::Get( char const* url_, char *response_, int size )
 
 }
 
-
-int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut, int responseLen )
+int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut, int maxResponseLen )
 {
     Http::Headers headers;
-    return Post( requestUrl, headers, bodyData, responseOut, responseLen );
+    return Post( requestUrl, headers, bodyData, responseOut, maxResponseLen );
 }
 
-int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int responseLen )
+int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen )
 {
     char        err[100];
     char        host[256], port[10], dir[1024];
@@ -1170,6 +1168,8 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 
     parse_url(requestUrl, &https, host, port, dir);
 
+    // TODO All the connection code looks exactly the same as the stuff in Get() so can very probably be extracted
+    // TODO Similarly for the stuff after really!
     if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
         (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
     {
@@ -1238,7 +1238,7 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
     this->header_end = 0;
 
     this->body = responseOut;
-    this->body_size = responseLen;
+    this->body_size = maxResponseLen;
     this->body_len = 0;
 
     this->body[0] = 0;
@@ -1302,7 +1302,7 @@ void http_strerror(char *buf, sz len)
 }
 
 /*---------------------------------------------------------------------*/
-int Http::Open( char *url_ )
+int Http::Open( char *requestUrl )
 {
     char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
@@ -1314,7 +1314,7 @@ int Http::Open( char *url_ )
 
     verify = this->tls.verify;
 
-    parse_url(url_, &https, host, port, dir);
+    parse_url(requestUrl, &https, host, port, dir);
 
     if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
         (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0))
@@ -1369,36 +1369,37 @@ int Http::Open( char *url_ )
 String Http::BuildRequest( char const* method, char const* host, char const* port, char const* dir,
                            Headers& headers, String const& bodyData )
 {
-    // FIXME Store lower-cased, format camel-cased
-    headers.Put( STR( "User-Agent" ), STR( "Mozilla/4.0" ) );
-    headers.Put( STR( "Host" ), String::FromFormatTmp( "%s:%s", host, port ) );
-    headers.Put( STR( "Content-Length" ), String::FromFormatTmp( "%d", bodyData.length ) ); 
-    headers.PutIfNotFound( STR( "Connection" ), STR( "Keep-Alive" ) );
-    headers.PutIfNotFound( STR( "Accept" ), STR( "*/*" ) );
-    headers.PutIfNotFound( STR( "Content-Type" ), STR( "application/json; charset=utf-8" ) );
+    // FIXME Store lower-cased, print-out camel-cased
+    headers.Put( "User-Agent"_str, "Mozilla/4.0"_str );
+    headers.Put( "Host"_str, String::FromFormatTmp( "%s:%s", host, port ) );
+    if( bodyData )
+        headers.Put( "Content-Length"_str, String::FromFormatTmp( "%d", bodyData.length ) ); 
+    headers.PutIfNotFound( "Connection"_str, "Keep-Alive"_str );
+    headers.PutIfNotFound( "Accept"_str, "*/*"_str );
+    headers.PutIfNotFound( "Content-Type"_str, "application/json; charset=utf-8"_str );
 
 
     Data* newReq = (Data*)&request;
     // Retrieve request data from headers
-    if( String* h = headers.Get( STR("Content-Type") ) )
+    if( String* h = headers.Get( "Content-Type"_str ) )
         newReq->contentType = String::Clone( *h );
-    if( String* h = headers.Get( STR("Content-Length") ) )
+    if( String* h = headers.Get( "Content-Length"_str ) )
     {
         bool ret = h->ToI32( &newReq->contentLength );
         ASSERT( ret );
     }
-    if( String* h = headers.Get( STR("Cookie") ) )
+    if( String* h = headers.Get( "Cookie"_str ) )
         newReq->cookie = String::Clone( *h );
-    if( String* h = headers.Get( STR("Referer") ) )
+    if( String* h = headers.Get( "Referer"_str ) )
         newReq->referer = String::Clone( *h );
-    if( String* h = headers.Get( STR("Transfer-Encoding") ) )
+    if( String* h = headers.Get( "Transfer-Encoding"_str ) )
     {
-        if( *h == STR("chunked") )
+        if( *h == "chunked"_str )
             newReq->chunked = true;
     }
-    if( String* h = headers.Get( STR("Connection") ) )
+    if( String* h = headers.Get( "Connection"_str ) )
     {
-        if( *h == STR("close") )
+        if( *h == "close"_str )
             newReq->close = true;
     }
 
@@ -1412,8 +1413,10 @@ String Http::BuildRequest( char const* method, char const* host, char const* por
     sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, dir );
     for( auto it = headers.Items(); it; ++it )
         sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
-    sb.Append( STR("\r\n") );
-    sb.AppendFormat( "%s", bodyData.CStr() );
+    // TODO Should we skip this when there's no body?
+    sb.Append( "\r\n"_str );
+    if( bodyData )
+        sb.AppendFormat( "%s", bodyData.CStr() );
 
     return sb.ToStringTmp();
 }

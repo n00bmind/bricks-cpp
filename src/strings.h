@@ -172,10 +172,6 @@ struct String
         , flags( 0 )
     { ASSERT( Valid() ); }
 
-    // Automatically figure out length for string literals
-#define STR(x) \
-    ([]{ static_assert( true, x ); }, String( x, sizeof(x) - 1 ))
-
     String( String const& other )
         : flags( other.flags )
     {
@@ -187,6 +183,9 @@ struct String
         : flags( other.flags )
     {
         flags &= ~Owned;
+        // TODO Check if this is actually not needed (move is supposedly only necessary to convert lvalue refs to rvalue refs)
+        // However according to the very last point in https://stackoverflow.com/questions/5481539/what-does-t-double-ampersand-mean-in-c11
+        // argument 'other' here is named so it's an lvalue, so we do need move? Are we literally out of our minds?
         *this = std::move( other );
     }
 
@@ -221,13 +220,11 @@ struct String
         Clear();
 
         flags = other.flags;
-        if( flags & Owned )
-            InternalClone( other.data, other.length );
-        else
-        {
-            data = other.data;
-            length = other.length;
-        }
+        // We always create just a reference unless explicitly Clone()ing
+        flags &= ~Owned;
+
+        data = other.data;
+        length = other.length;
 
         return *this;
     }
@@ -247,9 +244,10 @@ struct String
         {
             data = other.data;
             length = other.length;
+            // If we have forced a copy we still need to delete rhs
+            other.flags &= ~Owned;
         }
 
-        other.flags &= ~Owned;
         other.Clear();
 
         return *this;
@@ -737,6 +735,13 @@ public:
     }
 #endif
 };
+
+// Automatically figure out length for string literals
+// TODO constexpr
+INLINE String operator"" _str( const char *s, size_t len )
+{
+    return String( s, I32(len) );
+}
 
 // Correctly hash Strings
 template <>
