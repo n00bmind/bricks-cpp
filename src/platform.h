@@ -83,6 +83,7 @@ typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
 
 #define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
+// Returned buffer data must be null-terminated
 #define PLATFORM_READ_ENTIRE_FILE(name) buffer name( char const* filename, Allocator* allocator )
 typedef PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFileFunc);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<buffer> const& chunks, bool overwrite )
@@ -111,12 +112,13 @@ struct PlatformAPI
 
 #if 0
     PlatformGetAbsolutePathFunc* GetAbsolutePath;
+#endif
+
     PlatformReadEntireFileFunc* ReadEntireFile;
     PlatformWriteEntireFileFunc* WriteEntireFile;
 
     PlatformCurrentTimeMillisFunc* CurrentTimeMillis;
     PlatformShellExecuteFunc* ShellExecute;
-#endif
 
     PlatformPrintFunc* Print;
     PlatformPrintFunc* Error;
@@ -129,7 +131,6 @@ struct PlatformAPI
     DebugPlatformListAllAssetsFunc* DEBUGListAllAssets;
     DebugPlatformJoinPathsFunc* DEBUGJoinPaths;
     DebugPlatformGetParentPathFunc* DEBUGGetParentPath;
-    // FIXME Remove. Replace with passed elapsed time in GameInput
 
     bool DEBUGquit;
 #endif

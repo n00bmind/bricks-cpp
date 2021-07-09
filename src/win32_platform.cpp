@@ -46,9 +46,131 @@ namespace Win32
         VirtualFree( memoryBlock, 0, MEM_RELEASE );
     }
 
-    // TODO 
-#define PLATFORM_PRINT(name) void name( const char *fmt, ... )
-#define PLATFORM_PRINT_VA(name) void name( const char *fmt, va_list args )
+
+    PLATFORM_READ_ENTIRE_FILE(ReadEntireFile)
+    {
+        void* resultData = nullptr;
+        sz resultLength = 0;
+
+        HANDLE fileHandle = CreateFile( filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0 );
+        if( fileHandle != INVALID_HANDLE_VALUE )
+        {
+            sz fileSize;
+            if( GetFileSizeEx( fileHandle, (PLARGE_INTEGER)&fileSize ) )
+            {
+                resultData = ALLOC( allocator, fileSize + 1 );
+
+                if( resultData )
+                {
+                    DWORD bytesRead;
+                    if( ReadFile( fileHandle, resultData, U32(fileSize), &bytesRead, 0 )
+                        && (fileSize == bytesRead) )
+                    {
+                        // Null-terminate to help when handling text files
+                        *((u8 *)resultData + fileSize) = '\0';
+                        resultLength = fileSize + 1;
+                    }
+                    else
+                    {
+                        globalPlatform.Error( "ReadFile failed for '%s'", filename );
+                        resultData = 0;
+                    }
+                }
+                else
+                {
+                    globalPlatform.Error( "Couldn't allocate buffer for file contents" );
+                }
+            }
+            else
+            {
+                globalPlatform.Error( "Failed querying file size for '%s'", filename );
+            }
+
+            CloseHandle( fileHandle );
+        }
+        else
+        {
+            globalPlatform.Error( "Failed opening file '%s' for reading", filename );
+        }
+
+        return { resultData, resultLength };
+    }
+
+    PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFile)
+    {
+        DWORD creationMode = CREATE_NEW;
+        if( overwrite ) 
+            creationMode = CREATE_ALWAYS;
+
+        HANDLE outFile = CreateFile( filename, GENERIC_WRITE, 0, NULL,
+                                    creationMode, FILE_ATTRIBUTE_NORMAL, NULL ); 
+        if( outFile == INVALID_HANDLE_VALUE )
+        {
+            globalPlatform.Error( "Could not open '%s' for writing", filename );
+            return false;
+        }
+
+        bool error = false;
+        for( int i = 0; i < chunks.count; ++i )
+        {
+            buffer const& chunk = chunks[i];
+            SetFilePointer( outFile, 0, NULL, FILE_END );
+
+            DWORD bytesWritten;
+            if( !WriteFile( outFile, chunk.data, U32( chunk.length ), &bytesWritten, NULL ) )
+            {
+                globalPlatform.Error( "Failed writing %d bytes to '%s'", chunk.length, filename );
+                error = true;
+                break;
+            }
+        }
+
+        CloseHandle( outFile );
+
+        return !error;
+    }
+
+
+    PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillis)
+    {
+        persistent f64 perfCounterFrequency = 0;
+        if( !perfCounterFrequency )
+            QueryPerformanceFrequency( (PLARGE_INTEGER)&perfCounterFrequency );
+
+        LARGE_INTEGER counter;
+        QueryPerformanceCounter( &counter );
+        f64 result = (f64)counter.QuadPart / perfCounterFrequency * 1000;
+        return result;
+    }
+
+    PLATFORM_SHELL_EXECUTE(ShellExecute)
+    {
+        int exitCode = -1;
+        char outBuffer[2048] = {};
+
+        FILE* pipe = _popen( cmdLine, "rt" );
+        if( pipe == NULL )
+        {
+            _strerror_s( outBuffer, Size( ARRAYCOUNT(outBuffer) ), "Error executing compiler command" );
+            globalPlatform.Error( outBuffer );
+            globalPlatform.Error( "\n" );
+        }
+        else
+        {
+            while( fgets( outBuffer, I32( ARRAYCOUNT(outBuffer) ), pipe ) )
+                globalPlatform.Print( outBuffer );
+
+            if( feof( pipe ) )
+                exitCode = _pclose( pipe );
+            else
+            {
+                globalPlatform.Error( "Failed reading compiler pipe to the end\n" );
+            }
+        }
+
+        return exitCode;
+    }
+
 
     PLATFORM_PRINT(Print)
     {

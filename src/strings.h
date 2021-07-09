@@ -162,13 +162,15 @@ struct String
 
     explicit String( Buffer<char> const& buffer )
         : data( buffer )
-        , length( I32( buffer.length ) )
+        // Don't include null terminator
+        , length( I32( buffer.length - 1 ) )
         , flags( 0 )
     { ASSERT( Valid() ); }
 
     explicit String( buffer const& buffer )
         : data( (char*)buffer.data )
-        , length( I32( buffer.length ) )
+        // Don't include null terminator
+        , length( I32( buffer.length - 1 ) )
         , flags( 0 )
     { ASSERT( Valid() ); }
 
