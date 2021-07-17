@@ -91,7 +91,8 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define PZERO(dest, size) memset( dest, 0, Size( size ) )
 #define PEQUAL(source, dest, size) (memcmp( source, dest, Size( size ) ) == 0)
 
-#define INIT(var) new (&(var))
+// Do a placement new on any variable with simpler syntax
+#define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type
 
 
 #if _MSC_VER

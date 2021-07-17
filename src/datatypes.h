@@ -137,12 +137,17 @@ struct Array
         return data[i];
     }
 
+    // TODO Can we deduce whether we need to construct/destruct or we can skip it at compile time?
+    // https://en.cppreference.com/w/cpp/named_req/PODType
+    // https://en.cppreference.com/w/cpp/named_req/TrivialType
+    // https://en.cppreference.com/w/cpp/named_req/TriviallyCopyable
+    // https://en.cppreference.com/w/cpp/named_req/StandardLayoutType
     T* PushEmpty( bool clear = true )
     {
         ASSERT( count < capacity );
         T* result = data + count++;
         if( clear )
-            *result = {};
+            INIT( *result );
 
         return result;
     }
@@ -150,27 +155,29 @@ struct Array
     T* Push( const T& item )
     {
         T* slot = PushEmpty( false );
-        *slot = item;
+        INIT( *slot )( item );
 
         return slot;
     }
 
-    T Pop()
-    {
-        ASSERT( count > 0 );
-        --count;
-        return data[count];
-    }
-
     void Remove( T* item )
     {
-        ASSERT( count > 0 );
+        ASSERT( item >= begin() && item < end() );
 
-        sz index = item - data;
-        ASSERT( index >= 0 && index < count );
+        T* last = &Last();
+        if( item != last )
+            *item = *last;
 
-        *item = Last();
+        last->~T();
         --count;
+    }
+
+    T Pop()
+    {
+        T result = Last();
+        Remove( &Last() );
+
+        return result;
     }
 
     T* Find( const T& item )
@@ -492,7 +499,7 @@ struct BucketArray
         count++;
         T* result = &last->data[last->count++];
         if( clear )
-            *result = {};
+            INIT( *result );
 
         return result;
     }
@@ -500,45 +507,49 @@ struct BucketArray
     T* Push( const T& item )
     {
         T* slot = PushEmpty( false );
-        *slot = item;
+        INIT( *slot )( item );
         return slot;
     }
 
-    T Remove( const Idx& index )
+    // TODO Test
+    void Remove( const Idx& index, T* itemOut = nullptr )
     {
-        ASSERT( count > 0 );
         ASSERT( index.IsValid() );
 
-        // TODO Maybe add support for removing and shifting inside a bucket and make a separate RemoveSwap() method
-        T result = (T&)index;
+        T* item = &(*index);
+        if( itemOut )
+            *itemOut = *item;
 
-        ASSERT( last->count > 0 );
-        // If index is not pointing to last item, find last item and swap it
-        if( index.base != last || index.index != last->count - 1 )
+        Bucket* b = index.base;
+        // If index is not pointing to last item in the bucket, swap it
+        T* lastItem = &b->data[ b->count - 1 ];
+        if( item != lastItem )
+            *item = *lastItem;
+
+        lastItem->~T();
+        b->count--;
+
+        if( b->count == 0 && b != &first )
         {
-            T& lastItem = last->data[last->count - 1];
-            (T&)index = lastItem;
-        }
+            // Empty now, so unlink it and place it at the beginning of the free list
+            b->prev->next = b->next;
+            b->next->prev = b->prev;
 
-        last->count--;
-        if( last->count == 0 && last != &first )
-        {
-            // Empty now, so place it at the beginning of the free list
-            last->next = firstFree;
-            firstFree = last;
-
-            last = last->prev;
+            // NOTE We don't maintain the prev pointer for stuff in the freelist as it seems pointless?
+            b->prev = nullptr;
+            b->next = firstFree;
+            firstFree = b;
         }
 
         count--;
-        return result;
     }
 
     // TODO RemoveOrdered() moves every item after forward one slot (until end of the bucket)
 
     T Pop()
     {
-        T result = Remove( Last() );
+        T result;
+        Remove( Last(), &result );
         return result;
     }
 
@@ -922,7 +933,7 @@ struct Hashtable
             {
                 keys[i] = key;
                 if( clear )
-                    INIT( values[i] ) V();
+                    INIT( values[i] )();
                 ++count;
                 if( occupiedOut )
                     *occupiedOut = false;
@@ -931,7 +942,7 @@ struct Hashtable
             else if( eqFunc( keys[i], key ) )
             {
                 if( clear )
-                    INIT( values[i] ) V();
+                    INIT( values[i] )();
                 if( occupiedOut )
                     *occupiedOut = true;
                 return &values[i];
@@ -1076,7 +1087,7 @@ private:
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 
         for( int i = 0; i < capacity; ++i )
-            INIT( keys[i] ) K();
+            INIT( keys[i] )();
         for( int i = 0; i < oldCapacity; ++i )
         {
             if( !eqFunc( oldKeys[i], ZeroKey<K> ) )

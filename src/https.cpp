@@ -246,6 +246,7 @@ using socket_t = int;
 #endif
 
 /*---------------------------------------------------------------------*/
+// TODO Remove
 static int _error;
 
 /*---------------------------------------------------------------------*/
@@ -1005,6 +1006,72 @@ Http::~Http()
     https_close( this );
 }
 
+
+/*---------------------------------------------------------------------*/
+bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
+{
+    char        err[100];
+    char        host[256], port[10], dir[1024];
+    int         sock_fd, https, verify;
+    int         ret, opt;
+    socklen_t   slen;
+
+
+    this->url = {};
+    // FIXME We need to pass the lengths here! (probably just pass the final Url struct)
+    parse_url(requestUrl, &https, host, port, dir);
+
+    verify = this->tls.verify;
+
+    if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
+        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0))
+    {
+        if (this->tls.ssl_fd.fd != -1)
+            https_close(this);
+
+        https_init(this, https, verify);
+
+        if ((ret = https_connect(this, host, port)) < 0)
+        {
+            https_close(this);
+
+            mbedtls_strerror(ret, err, 100);
+            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
+            return false;
+        }
+    }
+    else
+    {
+        sock_fd = this->tls.ssl_fd.fd;
+
+        slen = sizeof(int);
+
+        if ((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *)&opt, &slen) < 0) || (opt > 0))
+        {
+            https_close(this);
+
+            https_init(this, https, verify);
+
+            if ((ret = https_connect(this, host, port)) < 0)
+            {
+                https_close(this);
+
+                mbedtls_strerror(ret, err, 100);
+                snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
+                return false;
+            }
+        }
+//      else
+//          printf("socket reuse: %d \n", sock_fd);
+    }
+
+    strcpy(this->url.host, host);
+    strcpy(this->url.port, port);
+    strcpy(this->url.path, dir);
+
+    return true;
+}
+
 /*---------------------------------------------------------------------*/
 int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
 {
@@ -1016,59 +1083,17 @@ int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
 int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen )
 {
     char        err[100];
-    char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
     int         ret, opt;
     socklen_t   slen;
 
 
-    if(NULL == this) return -1;
-
-    verify = this->tls.verify;
-
-    parse_url(requestUrl, &https, host, port, dir);
-
-    if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
-        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
-    {
-        https_close(this);
-
-        https_init(this, https, verify);
-
-        if((ret=https_connect(this, host, port)) < 0)
-        {
-            https_close(this);
-
-            mbedtls_strerror(ret, err, 100);
-            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
-            return -1;
-        }
-    }
-    else
-    {
-        sock_fd = this->tls.ssl_fd.fd;
-
-        slen = sizeof(int);
-
-        if((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *)&opt, &slen) < 0) || (opt > 0))
-        {
-            https_close(this);
-
-            https_init(this, https, verify);
-
-            if((ret=https_connect(this, host, port)) < 0)
-            {
-                https_close(this);
-
-                mbedtls_strerror(ret, err, 100);
-                snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
-                return -1;
-            }
-        }
-    }
+    bool res = Open( requestUrl, responseOut, maxResponseLen );
+    if( !res )
+        return false;
 
     // Add common and 'mandatory' headers to the user provided set
-    String req = BuildRequest( "GET", host, port, dir, headers, {} );
+    String req = BuildRequest( "GET", this->url.host, this->url.port, this->url.path, headers, {} );
 
     if( (ret = https_write(this, req.data, req.length)) != req.length )
     {
@@ -1076,12 +1101,14 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
+        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", req.CStr() );
+#if 0
+    printf("request: %s\n---\n", req.CStr() );
+#endif
 
     this->response.status = 0;
     this->response.contentLength = 0;
@@ -1104,7 +1131,7 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1126,12 +1153,6 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
     if(this->response.close == 1)
     {
         https_close(this);
-    }
-    else
-    {
-        strncpy(this->url.host, host, strlen(host));
-        strncpy(this->url.port, port, strlen(port));
-        strncpy(this->url.path, dir, strlen(dir));
     }
 
     /*
@@ -1156,66 +1177,16 @@ int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut,
 int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen )
 {
     char        err[100];
-    char        host[256], port[10], dir[1024];
     int         sock_fd, https, verify;
     int         ret, opt;
     socklen_t   slen;
 
-
-    if(NULL == this) return -1;
-
-    verify = this->tls.verify;
-
-    parse_url(requestUrl, &https, host, port, dir);
-
-    // TODO All the connection code looks exactly the same as the stuff in Get() so can very probably be extracted
-    // TODO Similarly for the stuff after really!
-    if( (this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
-        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0) )
-    {
-        if(this->tls.ssl_fd.fd != -1)
-            https_close(this);
-
-        https_init(this, https, verify);
-
-        if((ret=https_connect(this, host, port)) < 0)
-        {
-            https_close(this);
-
-            mbedtls_strerror(ret, err, 100);
-            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
-
-            return -1;
-        }
-    }
-    else
-    {
-        sock_fd = this->tls.ssl_fd.fd;
-
-        slen = sizeof(int);
-
-        if((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *)&opt, &slen) < 0) || (opt > 0))
-        {
-            https_close(this);
-
-            https_init(this, https, verify);
-
-            if((ret=https_connect(this, host, port)) < 0)
-            {
-                https_close(this);
-
-                mbedtls_strerror(ret, err, 100);
-                snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
-
-                return -1;
-            }
-        }
-//      else
-//          printf("socket reuse: %d \n", sock_fd);
-    }
+    bool res = Open( requestUrl, responseOut, maxResponseLen );
+    if( !res )
+        return false;
 
     // Add common and 'mandatory' headers to the user provided set
-    String req = BuildRequest( "POST", host, port, dir, headers, bodyData );
+    String req = BuildRequest( "POST", this->url.host, this->url.port, this->url.path, headers, bodyData );
 
     if( (ret = https_write( this, req.data, req.length )) != req.length )
     {
@@ -1223,12 +1194,14 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 
         mbedtls_strerror(ret, err, 100);
 
-        snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
+        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
         return -1;
     }
 
-//  printf("request: %s \r\n\r\n", req.CStr() );
+#if 0
+    printf("request: %s\n---\n", req.CStr() );
+#endif
 
     this->response.status = 0;
     this->response.contentLength = 0;
@@ -1253,7 +1226,7 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 
             mbedtls_strerror(ret, err, 100);
 
-            snprintf(responseOut, 256, "socket error: %s(%d)", err, ret);
+            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1276,12 +1249,6 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
     {
         https_close(this);
     }
-    else
-    {
-        strncpy(this->url.host, host, strlen(host));
-        strncpy(this->url.port, port, strlen(port));
-        strncpy(this->url.path, dir, strlen(dir));
-    }
 
 /*
     printf("status: %d \n", this->response.status);
@@ -1293,76 +1260,6 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 */
 
     return this->response.status;
-}
-
-/*---------------------------------------------------------------------*/
-void http_strerror(char *buf, sz len)
-{
-    mbedtls_strerror(_error, buf, len);
-}
-
-/*---------------------------------------------------------------------*/
-int Http::Open( char *requestUrl )
-{
-    char        host[256], port[10], dir[1024];
-    int         sock_fd, https, verify;
-    int         ret, opt;
-    socklen_t   slen;
-
-
-    if (NULL == this) return -1;
-
-    verify = this->tls.verify;
-
-    parse_url(requestUrl, &https, host, port, dir);
-
-    if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
-        (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0))
-    {
-        if (this->tls.ssl_fd.fd != -1)
-            https_close(this);
-
-        https_init(this, https, verify);
-
-        if ((ret = https_connect(this, host, port)) < 0)
-        {
-            https_close(this);
-
-            _error = ret;
-
-            return -1;
-        }
-    }
-    else
-    {
-        sock_fd = this->tls.ssl_fd.fd;
-
-        slen = sizeof(int);
-
-        if ((getsockopt(sock_fd, SOL_SOCKET, SO_ERROR, (char *) &opt, &slen) < 0) || (opt > 0))
-        {
-            https_close(this);
-
-            https_init(this, https, verify);
-
-            if ((ret = https_connect(this, host, port)) < 0)
-            {
-                https_close(this);
-
-                _error = ret;
-
-                return -1;
-            }
-        }
-//      else
-//          printf("socket reuse: %d \n", sock_fd);
-    }
-
-    strncpy(this->url.host, host, strlen(host));
-    strncpy(this->url.port, port, strlen(port));
-    strncpy(this->url.path, dir, strlen(dir));
-
-    return 0;
 }
 
 

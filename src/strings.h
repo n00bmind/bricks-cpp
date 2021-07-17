@@ -256,13 +256,16 @@ struct String
     }
 
 private:
+    // Length not counting the null terminator (which will be added)
     explicit String( int len, u32 flags_ = 0 )
     {
         flags = flags_ | Owned;
         length = len;
 
         Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-        data = ALLOC_ARRAY( allocator, char, len );
+        data = ALLOC_ARRAY( allocator, char, len + 1 );
+        // Null terminate it even if we expect this to be overwritten
+        ((char*)data)[len] = 0;
     }
 
     void InternalClone( char const* src, int len = 0 )
@@ -370,10 +373,12 @@ private:
         va_list argsCopy;
         va_copy( argsCopy, args );
 #endif
-        int len = 1 + vsnprintf( nullptr, 0, fmt, args );
+        // String constructor below already accounts for the null terminator
+        int len = vsnprintf( nullptr, 0, fmt, args );
 
         String result( len, temporary ? Temporary : None );
-        vsnprintf( (char*)result.data, (size_t)result.length, fmt, args/*Copy*/ );
+        // Actual string buffer has one extra character for the null terminator
+        vsnprintf( (char*)result.data, (size_t)result.length + 1, fmt, args/*Copy*/ );
 #if 0
         va_end( argsCopy );
 #endif
@@ -393,7 +398,6 @@ public:
         String result = FromFormat( fmt, args, false );
         va_end( args );
 
-        ASSERT( result.Valid() );
         return result;
     }
 
@@ -404,7 +408,6 @@ public:
         String result = FromFormat( fmt, args, true );
         va_end( args );
 
-        ASSERT( result.Valid() );
         return result;
     }
 

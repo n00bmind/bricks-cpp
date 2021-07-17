@@ -303,7 +303,7 @@ struct Http
     // TODO Post version to automatically create url-encoded body data from given Params set
 
     // Custom connection handling
-    int Open( char *url );
+    bool Open( char const* url, char* responseOut, int maxResponseLen );
     int Write( char *data, int len );
     int WriteEnd();
     int ReadChunked( char *response, int size );
@@ -320,7 +320,6 @@ private:
 /*---------------------------------------------------------------------*/
 
 char *strtoken(char *src, char *dst, int size);
-void http_strerror(char *buf, sz len);
 
 #endif //HTTPS_CLIENT_HTTPS_H
 

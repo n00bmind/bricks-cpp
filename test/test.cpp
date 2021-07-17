@@ -1257,7 +1257,7 @@ protected:
 TEST_F( HttpsTest, GetPost )
 {
     char* url;
-    char data[1024], response[4096];
+    char data[1024] = {}, response[4096] = {};
     int  ret;
 
     // Init http session. verify: check the server CA cert.
@@ -1274,9 +1274,7 @@ TEST_F( HttpsTest, GetPost )
     printf("return body: %s \n", response);
 #endif
 
-    if( ret != 200 )
-        http_strerror( data, ARRAYCOUNT(data) );
-    ASSERT_EQ( ret, 200 ) << "Error: " << data;
+    ASSERT_EQ( ret, 200 ) << "Error: " << response;
 
     // Test a http post method.
     url = "https://httpbin.org/post";
@@ -1288,9 +1286,7 @@ TEST_F( HttpsTest, GetPost )
     printf("return body: %s \n", response);
 #endif
 
-    if( ret != 200 )
-        http_strerror( data, ARRAYCOUNT(data) );
-    ASSERT_EQ( ret, 200 ) << "Error: " << data;
+    ASSERT_EQ( ret, 200 ) << "Error: " << response;
 }
 
 #if 0
