@@ -210,7 +210,7 @@
 #ifndef HTTPS_CLIENT_HTTPS_H
 #define HTTPS_CLIENT_HTTPS_H
 
-/*---------------------------------------------------------------------*/
+// NOTE mbedTLS has Apache license
 #include "mbedtls/net.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
@@ -304,9 +304,11 @@ struct Http
 
     // Custom connection handling
     bool Open( char const* url, char* responseOut, int maxResponseLen );
-    int Write( char *data, int len );
+    bool Write( char const* data, int length, char* responseOut, int maxResponseLen );
+    int ReadBlocking( char *response, int size );
+
+    int WriteChunked( char *data, int len );
     int WriteEnd();
-    int ReadChunked( char *response, int size );
 
 private:
     static bool s_initialized;

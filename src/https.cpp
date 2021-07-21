@@ -245,6 +245,11 @@ using socket_t = int;
 #pragma warning( disable : 4805 )
 #endif
 
+
+// TODO mbedTLS supports allocating all memory from a static buffer: https://tls.mbed.org/kb/how-to/using-static-memory-instead-of-the-heap
+
+
+
 /*---------------------------------------------------------------------*/
 // TODO Remove
 static int _error;
@@ -253,12 +258,10 @@ static int _error;
 char *strtoken(char *src, char *dst, int size);
 
 static int http_header(Http *hi, char *param);
-static int http_parse(Http *hi);
 
 static int https_init(Http *hi, bool https, bool verify);
 static int https_close(Http *hi);
 static int https_connect(Http *hi, char *host, char *port);
-static int https_read(Http *hi, char *buffer, int len);
 
 /*---------------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size)
@@ -411,7 +414,6 @@ static int http_parse(Http *hi)
     char    *p1, *p2;
     long    len;
 
-
     if(hi->r_len <= 0) return -1;
 
     p1 = hi->r_buf;
@@ -483,7 +485,6 @@ static int http_parse(Http *hi)
                         hi->length = hi->response.contentLength;
                     }
                 }
-
             }
             else
             {
@@ -496,9 +497,7 @@ static int http_parse(Http *hi)
                     hi->r_len = len;
                 }
                 else
-                {
                     hi->r_len = 0;
-                }
 
                 break;
             }
@@ -515,13 +514,9 @@ static int http_parse(Http *hi)
                         *p2 = 0;
 
                         if((hi->length = strtol(p1, NULL, 16)) == 0)
-                        {
                             hi->response.chunked = FALSE;
-                        }
                         else
-                        {
                             hi->response.contentLength += hi->length;
-                        }
 
                         p1 = p2 + 2;    // skip CR+LF
                     }
@@ -539,7 +534,6 @@ static int http_parse(Http *hi)
                 else
                 {
                     hi->r_len = 0;
-
                     break;
                 }
             }
@@ -603,14 +597,16 @@ static int http_parse(Http *hi)
                         hi->length -= len;
                         hi->r_len = 0;
 
-                        if(hi->response.chunked == FALSE && hi->length <= 0) return 1;
+                        if(hi->response.chunked == FALSE && hi->length <= 0)
+                            return 1;
 
                         break;
                     }
                 }
                 else
                 {
-                    if(hi->response.chunked == FALSE) return 1;
+                    if(hi->response.chunked == FALSE)
+                        return 1;
 
                     // chunked size check ..
                     if((hi->r_len > 2) && (memcmp(p1, "\r\n", 2) == 0))
@@ -1079,15 +1075,8 @@ int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
     return Get( requestUrl, headers, responseOut, maxResponseLen );
 }
 
-    //int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
 int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen )
 {
-    char        err[100];
-    int         sock_fd, https, verify;
-    int         ret, opt;
-    socklen_t   slen;
-
-
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
         return false;
@@ -1095,76 +1084,15 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
     // Add common and 'mandatory' headers to the user provided set
     String req = BuildRequest( "GET", this->url.host, this->url.port, this->url.path, headers, {} );
 
-    if( (ret = https_write(this, req.data, req.length)) != req.length )
-    {
-        https_close(this);
-
-        mbedtls_strerror(ret, err, 100);
-
-        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
-
-        return -1;
-    }
+    res = Write( req.data, req.length, responseOut, maxResponseLen );
+    if( !res )
+        return false;
 
 #if 0
     printf("request: %s\n---\n", req.CStr() );
 #endif
 
-    this->response.status = 0;
-    this->response.contentLength = 0;
-    this->response.close = 0;
-
-    this->r_len = 0;
-    this->header_end = 0;
-
-    this->body = responseOut;
-    this->body_size = maxResponseLen;
-    this->body_len = 0;
-
-    while(1)
-    {
-        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
-        if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
-        else if(ret < 0)
-        {
-            https_close(this);
-
-            mbedtls_strerror(ret, err, 100);
-
-            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
-
-            return -1;
-        }
-        else if(ret == 0)
-        {
-            https_close(this);
-            break;
-        }
-
-        this->r_len += ret;
-        this->r_buf[this->r_len] = 0;
-
-        // printf("read(%ld): |%s| \n", this->r_len, this->r_buf);
-        // printf("read(%ld) ... \n", this->r_len);
-
-        if(http_parse(this) != 0) break;
-    }
-
-    if(this->response.close == 1)
-    {
-        https_close(this);
-    }
-
-    /*
-    printf("status: %d \n", this->response.status);
-    printf("cookie: %s \n", this->response.cookie);
-    printf("location: %s \n", this->response.location);
-    printf("referrer: %s \n", this->response.referrer);
-    printf("length: %ld \n", this->response.content_length);
-    printf("body: %ld \n", this->body_len);
-    */
-
-    return this->response.status;
+    return ReadBlocking( responseOut, maxResponseLen );
 
 }
 
@@ -1176,11 +1104,6 @@ int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut,
 
 int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen )
 {
-    char        err[100];
-    int         sock_fd, https, verify;
-    int         ret, opt;
-    socklen_t   slen;
-
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
         return false;
@@ -1188,78 +1111,15 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
     // Add common and 'mandatory' headers to the user provided set
     String req = BuildRequest( "POST", this->url.host, this->url.port, this->url.path, headers, bodyData );
 
-    if( (ret = https_write( this, req.data, req.length )) != req.length )
-    {
-        https_close(this);
-
-        mbedtls_strerror(ret, err, 100);
-
-        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
-
-        return -1;
-    }
+    res = Write( req.data, req.length, responseOut, maxResponseLen );
+    if( !res )
+        return false;
 
 #if 0
     printf("request: %s\n---\n", req.CStr() );
 #endif
 
-    this->response.status = 0;
-    this->response.contentLength = 0;
-    this->response.close = 0;
-
-    this->r_len = 0;
-    this->header_end = 0;
-
-    this->body = responseOut;
-    this->body_size = maxResponseLen;
-    this->body_len = 0;
-
-    this->body[0] = 0;
-
-    while(1)
-    {
-        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
-        if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
-        else if(ret < 0)
-        {
-            https_close(this);
-
-            mbedtls_strerror(ret, err, 100);
-
-            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
-
-            return -1;
-        }
-        else if(ret == 0)
-        {
-            https_close(this);
-            break;
-        }
-
-        this->r_len += ret;
-        this->r_buf[this->r_len] = 0;
-
-//        printf("read(%ld): %s \n", this->r_len, this->r_buf);
-//        printf("read(%ld) \n", this->r_len);
-
-        if(http_parse(this) != 0) break;
-    }
-
-    if(this->response.close == 1)
-    {
-        https_close(this);
-    }
-
-/*
-    printf("status: %d \n", this->response.status);
-    printf("cookie: %s \n", this->response.cookie);
-    printf("location: %s \n", this->response.location);
-    printf("referrer: %s \n", this->response.referrer);
-    printf("length: %d \n", this->response.content_length);
-    printf("body: %d \n", this->body_len);
-*/
-
-    return this->response.status;
+    return ReadBlocking( responseOut, maxResponseLen );
 }
 
 
@@ -1318,8 +1178,28 @@ String Http::BuildRequest( char const* method, char const* host, char const* por
     return sb.ToStringTmp();
 }
 
+bool Http::Write( char const* data, int len, char* responseOut, int maxResponseLen )
+{
+    int ret;
+    char err[100];
+
+    if( (ret = https_write(this, data, len)) != len )
+    {
+        https_close(this);
+
+        mbedtls_strerror( ret, err, sizeof(err) );
+
+        // TODO Store this in a String internal to the class or something, so we don't have to keep passing these around
+        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
+
+        return false;
+    }
+
+    return true;
+}
+
 /*---------------------------------------------------------------------*/
-int Http::Write( char *data, int len )
+int Http::WriteChunked( char *data, int len )
 {
     char        str[10];
     int         ret, l;
@@ -1391,13 +1271,10 @@ int Http::WriteEnd()
 }
 
 /*---------------------------------------------------------------------*/
-int Http::ReadChunked( char *response_, int size )
+int Http::ReadBlocking( char *responseOut, int maxResponseLen )
 {
     int ret;
-
-    if (NULL == this) return -1;
-
-//  printf("request: %s \r\n\r\n", request);
+    char err[100];
 
     this->response.status = 0;
     this->response.contentLength = 0;
@@ -1406,8 +1283,8 @@ int Http::ReadChunked( char *response_, int size )
     this->r_len = 0;
     this->header_end = 0;
 
-    this->body = response_;
-    this->body_size = size;
+    this->body = responseOut;
+    this->body_size = maxResponseLen;
     this->body_len = 0;
 
     this->body[0] = 0;
@@ -1415,11 +1292,15 @@ int Http::ReadChunked( char *response_, int size )
     while(1)
     {
         ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
-        if(ret == MBEDTLS_ERR_SSL_WANT_READ) continue;
+
+        if(ret == MBEDTLS_ERR_SSL_WANT_READ)
+            continue;
         else if(ret < 0)
         {
             https_close(this);
-            _error = ret;
+
+            mbedtls_strerror(ret, err, sizeof(err));
+            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
             return -1;
         }
@@ -1435,7 +1316,9 @@ int Http::ReadChunked( char *response_, int size )
 //        printf("read(%ld): %s \n", this->r_len, this->r_buf);
 //        printf("read(%ld) \n", this->r_len);
 
-        if(http_parse(this) != 0) break;
+        // TODO Add headers to hashtable
+        if(http_parse(this) != 0)
+            break;
     }
 
     if(this->response.close == 1)
@@ -1444,11 +1327,11 @@ int Http::ReadChunked( char *response_, int size )
     }
 
 /*
-    printf("status: %d \n", this->status);
-    printf("cookie: %s \n", this->cookie);
-    printf("location: %s \n", this->location);
-    printf("referrer: %s \n", this->referrer);
-    printf("length: %d \n", this->content_length);
+    printf("status: %d \n", this->response.status);
+    printf("cookie: %s \n", this->response.cookie);
+    printf("location: %s \n", this->response.location);
+    printf("referrer: %s \n", this->response.referrer);
+    printf("length: %d \n", this->response.content_length);
     printf("body: %d \n", this->body_len);
 */
 
