@@ -261,7 +261,6 @@ static int http_header(Http *hi, char *param);
 
 static int https_init(Http *hi, bool https, bool verify);
 static int https_close(Http *hi);
-static int https_connect(Http *hi, char *host, char *port);
 
 /*---------------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size)
@@ -409,12 +408,12 @@ static int http_header(Http *hi, char *param)
 }
 
 /*---------------------------------------------------------------------*/
-static int http_parse(Http *hi)
+static bool http_parse(Http *hi)
 {
     char    *p1, *p2;
     long    len;
 
-    if(hi->r_len <= 0) return -1;
+    if(hi->r_len <= 0) return false;
 
     p1 = hi->r_buf;
 
@@ -572,7 +571,7 @@ static int http_parse(Http *hi)
                         }
                         else
                         {
-                            return -1;
+                            return false;
                         }
                     }
                     else
@@ -598,7 +597,7 @@ static int http_parse(Http *hi)
                         hi->r_len = 0;
 
                         if(hi->response.chunked == FALSE && hi->length <= 0)
-                            return 1;
+                            return true;
 
                         break;
                     }
@@ -606,7 +605,7 @@ static int http_parse(Http *hi)
                 else
                 {
                     if(hi->response.chunked == FALSE)
-                        return 1;
+                        return true;
 
                     // chunked size check ..
                     if((hi->r_len > 2) && (memcmp(p1, "\r\n", 2) == 0))
@@ -624,7 +623,7 @@ static int http_parse(Http *hi)
         }
     }
 
-    return 0;
+    return false;
 }
 
 /*---------------------------------------------------------------------*/
@@ -655,6 +654,7 @@ static int https_init(Http *hi, bool https, bool verify)
     }
 
     hi->tls.verify = verify;
+    hi->url = {};
     hi->url.https = https;
 
 //  printf("https_init ... \n");
@@ -876,6 +876,9 @@ static int https_connect(Http *hi, char *host, char *port)
             return ret;
         }
 
+        // TODO Check against the example clients (ssl_client1.c & ssl_client2.c) in the lib's source code
+        // because most of this config is done there AFTER the connection is established!?
+
         /* OPTIONAL is not optimal for security,
          * but makes interop easier in this simplified example */
         mbedtls_ssl_conf_authmode( &hi->tls.conf, MBEDTLS_SSL_VERIFY_OPTIONAL );
@@ -993,8 +996,13 @@ void Http::Close()
 
 Http::Http( bool verify /*= true*/ )
 {
+    f64 startTime = globalPlatform.CurrentTimeMillis();
+
     Init();
     https_init( this, 0, verify );
+
+    f64 time = globalPlatform.CurrentTimeMillis();
+    fprintf( stdout, "Init: %.1f ms.\n", time - startTime );
 }
 
 Http::~Http()
@@ -1013,12 +1021,19 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
     socklen_t   slen;
 
 
-    this->url = {};
+    f64 startTime = globalPlatform.CurrentTimeMillis();
+
+#if 1
+    // TODO Trying to reuse the connection causes the httbin test to fail
+    // We must be writing something incorrectly because the read comes back almost immediate with a 400
+    url = {};
+#endif
     // FIXME We need to pass the lengths here! (probably just pass the final Url struct)
     parse_url(requestUrl, &https, host, port, dir);
 
     verify = this->tls.verify;
 
+    // FIXME Need to do all this without waiting!
     if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
         (strcmp(this->url.host, host) != 0) || (strcmp(this->url.port, port) != 0))
     {
@@ -1065,6 +1080,9 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
     strcpy(this->url.port, port);
     strcpy(this->url.path, dir);
 
+    f64 time = globalPlatform.CurrentTimeMillis();
+    fprintf( stdout, "Open: %.1f ms.\n", time - startTime );
+
     return true;
 }
 
@@ -1079,21 +1097,29 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
 {
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
-        return false;
+        return 0;
 
     // Add common and 'mandatory' headers to the user provided set
     String req = BuildRequest( "GET", this->url.host, this->url.port, this->url.path, headers, {} );
 
     res = Write( req.data, req.length, responseOut, maxResponseLen );
     if( !res )
-        return false;
+        return 0;
 
-#if 0
-    printf("request: %s\n---\n", req.CStr() );
-#endif
+    this->response.status = 0;
+    this->response.contentLength = 0;
+    this->response.close = 0;
+
+    this->r_len = 0;
+    this->header_end = 0;
+
+    // TODO How do we do this for realz?
+    this->body = responseOut;
+    this->body_size = maxResponseLen;
+    this->body_len = 0;
+    this->body[0] = 0;
 
     return ReadBlocking( responseOut, maxResponseLen );
-
 }
 
 int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut, int maxResponseLen )
@@ -1106,18 +1132,27 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 {
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
-        return false;
+        return 0;
 
     // Add common and 'mandatory' headers to the user provided set
     String req = BuildRequest( "POST", this->url.host, this->url.port, this->url.path, headers, bodyData );
 
     res = Write( req.data, req.length, responseOut, maxResponseLen );
     if( !res )
-        return false;
+        return 0;
 
-#if 0
-    printf("request: %s\n---\n", req.CStr() );
-#endif
+    this->response.status = 0;
+    this->response.contentLength = 0;
+    this->response.close = 0;
+
+    this->r_len = 0;
+    this->header_end = 0;
+
+    // TODO How do we do this for realz?
+    this->body = responseOut;
+    this->body_size = maxResponseLen;
+    this->body_len = 0;
+    this->body[0] = 0;
 
     return ReadBlocking( responseOut, maxResponseLen );
 }
@@ -1175,11 +1210,18 @@ String Http::BuildRequest( char const* method, char const* host, char const* por
     if( bodyData )
         sb.AppendFormat( "%s", bodyData.CStr() );
 
-    return sb.ToStringTmp();
+    String result = sb.ToStringTmp();
+#if 0
+    printf("--- REQ:\n%s\n---\n", result.CStr() );
+#endif
+
+    return result;
 }
 
 bool Http::Write( char const* data, int len, char* responseOut, int maxResponseLen )
 {
+    f64 startTime = globalPlatform.CurrentTimeMillis();
+
     int ret;
     char err[100];
 
@@ -1194,6 +1236,9 @@ bool Http::Write( char const* data, int len, char* responseOut, int maxResponseL
 
         return false;
     }
+
+    f64 time = globalPlatform.CurrentTimeMillis() - startTime;
+    fprintf( stdout, "Write: %.1f ms.\n", time );
 
     return true;
 }
@@ -1271,60 +1316,65 @@ int Http::WriteEnd()
 }
 
 /*---------------------------------------------------------------------*/
-int Http::ReadBlocking( char *responseOut, int maxResponseLen )
+bool Http::Read( char* responseOut, int maxResponseLen )
 {
     int ret;
     char err[100];
 
-    this->response.status = 0;
-    this->response.contentLength = 0;
-    this->response.close = 0;
 
-    this->r_len = 0;
-    this->header_end = 0;
+    ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
 
-    this->body = responseOut;
-    this->body_size = maxResponseLen;
-    this->body_len = 0;
-
-    this->body[0] = 0;
-
-    while(1)
+    if(ret == MBEDTLS_ERR_SSL_WANT_READ)
+        return false;
+    else if(ret < 0)
     {
-        ret = https_read(this, &this->r_buf[this->r_len], (int)(H_READ_SIZE - this->r_len));
+        https_close(this);
 
-        if(ret == MBEDTLS_ERR_SSL_WANT_READ)
-            continue;
-        else if(ret < 0)
-        {
-            https_close(this);
+        mbedtls_strerror(ret, err, sizeof(err));
+        snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
 
-            mbedtls_strerror(ret, err, sizeof(err));
-            snprintf(responseOut, maxResponseLen, "socket error: %s(%d)", err, ret);
+        return true;
+    }
+    else if(ret == 0)
+    {
+        https_close(this);
+        snprintf( responseOut, maxResponseLen, "Connection closed by peer" );
+        return true;
+    }
 
-            return -1;
-        }
-        else if(ret == 0)
-        {
-            https_close(this);
-            break;
-        }
-
-        this->r_len += ret;
-        this->r_buf[this->r_len] = 0;
+    this->r_len += ret;
+    this->r_buf[this->r_len] = 0;
 
 //        printf("read(%ld): %s \n", this->r_len, this->r_buf);
 //        printf("read(%ld) \n", this->r_len);
 
-        // TODO Add headers to hashtable
-        if(http_parse(this) != 0)
+    // TODO Add headers to hashtable
+    if( http_parse(this) )
+    {
+        if(this->response.close == 1)
+            https_close(this);
+
+        return true;
+    }
+
+    // TODO http_parse seems to fail *sometimes*
+    ASSERT( false, "Bad response" );
+    return false;
+}
+
+int Http::ReadBlocking( char *responseOut, int maxResponseLen )
+{
+    f64 startTime = globalPlatform.CurrentTimeMillis();
+
+    while(1)
+    {
+        // TODO Use the logger instead of passing responseOut all the time
+        if( Read( responseOut, maxResponseLen ) )
             break;
     }
 
-    if(this->response.close == 1)
-    {
-        https_close(this);
-    }
+    f64 time = globalPlatform.CurrentTimeMillis() - startTime;
+    fprintf( stdout, "ReadBlocking: %.1f ms.\n", time );
 
 /*
     printf("status: %d \n", this->response.status);

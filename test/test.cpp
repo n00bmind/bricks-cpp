@@ -1162,17 +1162,6 @@ protected:
     // Can be omitted if not needed.
     static void SetUpTestCase()
     {
-        // Init global platform
-        globalPlatform = {};
-        globalPlatform.Alloc = Win32::Alloc;
-        globalPlatform.Free = Win32::Free;
-#if 0
-        globalPlatform.PushContext = PushContext;
-        globalPlatform.PopContext = PopContext;
-#endif
-        globalPlatform.Print = Win32::Print;
-        globalPlatform.Error = Win32::Error;
-
         InitArena( &globalPlatformArena );
         InitArena( &globalTmpArena );
         // Set up an initial context that the platform itself can use
@@ -1254,6 +1243,7 @@ protected:
 };
 #endif
 
+
 TEST_F( HttpsTest, GetPost )
 {
     char* url;
@@ -1277,6 +1267,8 @@ TEST_F( HttpsTest, GetPost )
     ASSERT_EQ( ret, 200 ) << "Error: " << response;
 
     // Test a http post method.
+    // TODO Should be able to reuse the connection to speed this up
+    // TODO How long does curl take to make any of these??
     url = "https://httpbin.org/post";
     snprintf(data, ARRAYCOUNT(data), "{\"message\":\"Hello, https_client!\"}");
     ret = req.Post( url, data, response, sizeof(response) );
@@ -1357,6 +1349,19 @@ TEST_F( HttpTest, ChunkedEncoding )
 GTEST_API_ int main(int argc, char **argv)
 {
     SetUnhandledExceptionFilter( Win32::ExceptionHandler );
+
+    // Init global platform
+    globalPlatform = {};
+    globalPlatform.Alloc = Win32::Alloc;
+    globalPlatform.Free = Win32::Free;
+#if 0
+    globalPlatform.PushContext = PushContext;
+    globalPlatform.PopContext = PopContext;
+#endif
+    globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
+    globalPlatform.Print = Win32::Print;
+    globalPlatform.Error = Win32::Error;
+
 
     testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();

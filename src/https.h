@@ -305,6 +305,7 @@ struct Http
     // Custom connection handling
     bool Open( char const* url, char* responseOut, int maxResponseLen );
     bool Write( char const* data, int length, char* responseOut, int maxResponseLen );
+    bool Read( char* responseOut, int maxResponseLen );
     int ReadBlocking( char *response, int size );
 
     int WriteChunked( char *data, int len );

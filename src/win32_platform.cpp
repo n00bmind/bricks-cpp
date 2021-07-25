@@ -135,7 +135,11 @@ namespace Win32
     {
         persistent f64 perfCounterFrequency = 0;
         if( !perfCounterFrequency )
-            QueryPerformanceFrequency( (PLARGE_INTEGER)&perfCounterFrequency );
+        {
+            LARGE_INTEGER perfCounterFreqMeasure;
+            QueryPerformanceFrequency( &perfCounterFreqMeasure );
+            perfCounterFrequency = (f64)perfCounterFreqMeasure.QuadPart;
+        }
 
         LARGE_INTEGER counter;
         QueryPerformanceCounter( &counter );
