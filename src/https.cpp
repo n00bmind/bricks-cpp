@@ -308,7 +308,7 @@ char *strtoken(char *src, char *dst, int size)
 }
 
 /*---------------------------------------------------------------------*/
-static int parse_url(char const* src_url, int *https, char *host, char *port, char *urlOut )
+static int parse_url(char const* src_url, bool *https, char *host, char *port, char *urlOut )
 {
     char* p1;
     char* p2;
@@ -319,13 +319,13 @@ static int parse_url(char const* src_url, int *https, char *host, char *port, ch
 
     if(strncmp( url, "http://", 7)==0) {
         p1=&url[7];
-        *https = 0;
+        *https = false;
     } else if(strncmp( url, "https://", 8)==0) {
         p1=&url[8];
-        *https = 1;
+        *https = true;
     } else {
         p1 = &url[0];
-        *https = 0;
+        *https = false;
     }
 
     if((p2=strstr(p1, "/")) == NULL)
@@ -349,10 +349,10 @@ static int parse_url(char const* src_url, int *https, char *host, char *port, ch
     {
         snprintf(host, 256, "%s", str);
 
-        if(*https == 0)
-            snprintf(port, 5, "80");
-        else
+        if(*https)
             snprintf(port, 5, "443");
+        else
+            snprintf(port, 5, "80");
     }
 
     return 0;
@@ -631,7 +631,7 @@ static int https_init(Http *hi, bool https, bool verify)
 {
     memset(hi, 0, sizeof(Http));
 
-    if(https == TRUE)
+    if(https)
     {
         mbedtls_ssl_init( &hi->tls.ssl );
         mbedtls_ssl_config_init( &hi->tls.conf );
@@ -1016,7 +1016,7 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
 {
     char        err[100];
     char        host[256], port[10], dir[1024];
-    int         sock_fd, https, verify;
+    int         sock_fd;
     int         ret, opt;
     socklen_t   slen;
 
@@ -1029,9 +1029,10 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
     url = {};
 #endif
     // FIXME We need to pass the lengths here! (probably just pass the final Url struct)
+    bool https;
     parse_url(requestUrl, &https, host, port, dir);
 
-    verify = this->tls.verify;
+    bool verify = this->tls.verify;
 
     // FIXME Need to do all this without waiting!
     if ((this->tls.ssl_fd.fd == -1) || (this->url.https != https) ||
@@ -1113,7 +1114,7 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
     this->r_len = 0;
     this->header_end = 0;
 
-    // TODO How do we do this for realz?
+    // TODO How do we do this for realz? (pass a buffer, for starters)
     this->body = responseOut;
     this->body_size = maxResponseLen;
     this->body_len = 0;

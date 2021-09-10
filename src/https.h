@@ -236,12 +236,11 @@ struct Http
 
     struct Data
     {
-        // TODO Use this to build request data and parse back from response
-        Headers headers;
-
         char method[8];
         char location[H_FIELD_SIZE];
         char boundary[H_FIELD_SIZE];
+        // FIXME Since Strings only create a reference by default, these will now be broken when using the implicit copy constructor
+        // of the owning struct
         String contentType;
         String cookie;
         String referer;
@@ -277,7 +276,7 @@ struct Http
 
     Url        url;
 
-    Data const request;
+    Data       request;
     Data       response;
     Ssl        tls;
 

@@ -989,6 +989,7 @@ struct Hashtable
             current = table.keys - 1;
             Next();
         }
+        virtual ~BaseIterator() {}
 
         explicit operator bool() const { return current != nullptr; }
 
@@ -1225,6 +1226,11 @@ struct RingBuffer
             count += buffer.capacity;
 
         return count;
+    }
+
+    bool Available() const
+    {
+        return Count() < buffer.capacity - 1;
     }
 
     bool Contains( const T& item ) const

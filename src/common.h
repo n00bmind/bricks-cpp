@@ -94,11 +94,19 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 // Do a placement new on any variable with simpler syntax
 #define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type
 
+#define __CONCAT(x, y) x ## y
+#define CONCAT(x, y) __CONCAT(x, y)
 
-#if _MSC_VER
+#define UNIQUE(x) CONCAT(x, __LINE__)
+
+
+#if defined(_MSC_VER)
 #define INLINE __forceinline
+// Crap MSVC will whine about C++ 20 for this
+#define INLINE_LAMBDA [[msvc::forceinline]]
 #else
 #define INLINE inline __attribute__((always_inline))
+#define INLINE_LAMBDA __attribute__((always_inline))
 #endif
 
 
@@ -397,4 +405,18 @@ struct enumName : public EnumBase                                   \
 #define ENUM_STRUCT_WITH_NAMES(enumName, xValueList)                    _CREATE_ENUM(enumName, i32, xValueList, _ENUM_INIT_WITH_NAMES)
 #define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xValueList)        _CREATE_ENUM(enumName, valueType, xValueList, _ENUM_INIT_WITH_VALUES)
 #define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xValueList)  _CREATE_ENUM(enumName, valueType, xValueList, _ENUM_INIT_WITH_NAMES_VALUES)
+
+
+/////     DEFER    /////
+#define DEFER(...)                                                  \
+auto UNIQUE(_deferred_func_) = [&]() INLINE_LAMBDA { __VA_ARGS__ }; \
+struct UNIQUE(Deferred)                                             \
+{                                                                   \
+	INLINE ~UNIQUE(Deferred)()                                      \
+	{                                                               \
+		f();                                                        \
+	}                                                               \
+	decltype(UNIQUE(_deferred_func_)) f;                            \
+};                                                                  \
+UNIQUE(Deferred) UNIQUE(_deferred_) { UNIQUE(_deferred_func_) };
 

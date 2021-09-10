@@ -48,6 +48,7 @@ platform_win = Platform(
             '-wd4464',          # Relative include path contains '..'
             '-wd4505',          # Unreferenced function
             '-wd4514',          # Unreferenced inline function removed
+            '-wd4577',          # Don't whine about exception handling model
             '-wd4582',          # Constructor is not impliclty called
             '-wd4623',          # Default constructor implicitly deleted
             '-wd4625',          # Copy constructor implicitly deleted
@@ -69,6 +70,8 @@ platform_win_clang = platform_win._replace(
         name                  = 'win_clang',
         compiler              = 'clang-cl.exe',
         common_compiler_flags = platform_win.common_compiler_flags + [
+            '-fno-exceptions',
+            '-fno-rtti',
             '-fdiagnostics-absolute-paths',
             '-Wno-missing-braces',
             '-Wno-unused-variable',
@@ -88,12 +91,8 @@ config_win_debug = Config(
         compiler_flags = ['-DCONFIG_DEBUG=1', '-Z7', '-MTd', '-Od'],
         linker_flags   = ['/debug:full']                # Required for debugging after hot reloading (and RemedyBG)
 )
-# This config is a bit confusing and we need to clarify this:
-# The choice of whether we have certain "development" features (like an editor mode) is a platform thing
-# totally unrelated to build mode, and so it should be reflected in the platform - game interface.
-# (for example, by adding keyboard/mouse info for the editor, which a PC would provide but a phone wouldn't)
-# This build only makes sense as a faster non-release build to use during development when Debug is just
-# too slow, for example one that artists could use as their everyday default. (also, it remains to be seen how useful all the debug information is in this context)
+# This build makes sense as a faster non-release build to use during development when Debug is just too slow,
+# for example one that artists could use as their everyday default (not sure how useful all the debug information is in this context).
 config_win_develop = Config(
         name           = 'Develop',
         platform       = platform_win,

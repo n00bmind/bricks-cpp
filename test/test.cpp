@@ -37,6 +37,7 @@ PlatformAPI globalPlatform;
 #pragma warning( disable : 4530 )
 #pragma warning( disable : 4577 )
 #pragma warning( disable : 4702 )
+#pragma warning( disable : 5219 )
 
 // Disable httplib tests for now
 #if 0
