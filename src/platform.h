@@ -64,22 +64,23 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 struct Allocator;
 template <typename T, typename AllocType = Allocator> struct Array;
 
-// Defined by the application
-struct Context;
-
-// TODO Do something better for paths
-#define PLATFORM_PATH_MAX 1024
-
-
 #define PLATFORM_ALLOC(name) void* name( sz sizeBytes, u32 flags )
 typedef PLATFORM_ALLOC(PlatformAllocFunc);
 #define PLATFORM_FREE(name) void name( void* memoryBlock )
 typedef PLATFORM_FREE(PlatformFreeFunc);
 
+
+// Defined by the application
+struct Context;
+
 #define PLATFORM_PUSH_CONTEXT(name) void name( Context const& newContext )
 typedef PLATFORM_PUSH_CONTEXT(PlatformPushContextFunc);
 #define PLATFORM_POP_CONTEXT(name) void name()
 typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
+
+
+// TODO Do something better for paths
+#define PLATFORM_PATH_MAX 1024
 
 #define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
@@ -88,6 +89,20 @@ typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
 typedef PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFileFunc);
 #define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<buffer> const& chunks, bool overwrite )
 typedef PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFileFunc);
+
+
+#define PLATFORM_CREATE_SEMAPHORE(name) void* name( int initialCount )
+typedef PLATFORM_CREATE_SEMAPHORE(PlatformCreateSemaphoreFunc);
+
+#define PLATFORM_DESTROY_SEMAPHORE(name) void name( void* handle )
+typedef PLATFORM_DESTROY_SEMAPHORE(PlatformDestroySemaphoreFunc);
+
+#define PLATFORM_WAIT_SEMAPHORE(name) void name( void* handle )
+typedef PLATFORM_WAIT_SEMAPHORE(PlatformWaitSemaphoreFunc);
+
+#define PLATFORM_SIGNAL_SEMAPHORE(name) void name( void* handle, int count )
+typedef PLATFORM_SIGNAL_SEMAPHORE(PlatformSignalSemaphoreFunc);
+
 
 #define PLATFORM_CURRENT_TIME_MILLIS(name) f64 name()
 typedef PLATFORM_CURRENT_TIME_MILLIS(PlatformCurrentTimeMillisFunc);
@@ -104,26 +119,36 @@ typedef PLATFORM_PRINT_VA(PlatformPrintVAFunc);
 // TODO Shouldn't this be defined by the application really?
 struct PlatformAPI
 {
-    PlatformAllocFunc* Alloc;
-    PlatformFreeFunc* Free;
+    // Memory
+    PlatformAllocFunc*             Alloc;
+    PlatformFreeFunc*              Free;
 
-    PlatformPushContextFunc* PushContext;
-    PlatformPopContextFunc* PopContext;
+    // Context
+    PlatformPushContextFunc*       PushContext;
+    PlatformPopContextFunc*        PopContext;
 
+    // Filesystem
 #if 0
-    PlatformGetAbsolutePathFunc* GetAbsolutePath;
+    PlatformGetAbsolutePathFunc*   GetAbsolutePath;
 #endif
 
-    PlatformReadEntireFileFunc* ReadEntireFile;
-    PlatformWriteEntireFileFunc* WriteEntireFile;
+    PlatformReadEntireFileFunc*    ReadEntireFile;
+    PlatformWriteEntireFileFunc*   WriteEntireFile;
 
+    // Threading
+    PlatformCreateSemaphoreFunc*   CreateSemaphore;
+    PlatformDestroySemaphoreFunc*  DestroySemaphore;
+    PlatformWaitSemaphoreFunc*     WaitSemaphore;
+    PlatformSignalSemaphoreFunc*   SignalSemaphore;
+
+    // Misc
     PlatformCurrentTimeMillisFunc* CurrentTimeMillis;
-    PlatformShellExecuteFunc* ShellExecute;
+    PlatformShellExecuteFunc*      ShellExecute;
 
-    PlatformPrintFunc* Print;
-    PlatformPrintFunc* Error;
-    PlatformPrintVAFunc* PrintVA;
-    PlatformPrintVAFunc* ErrorVA;
+    PlatformPrintFunc*             Print;
+    PlatformPrintFunc*             Error;
+    PlatformPrintVAFunc*           PrintVA;
+    PlatformPrintVAFunc*           ErrorVA;
 
 #if 0
 #if !CONFIG_RELEASE

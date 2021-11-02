@@ -657,7 +657,7 @@ static int https_init(Http *hi, bool https, bool verify)
     hi->url = {};
     hi->url.https = https;
 
-//  printf("https_init ... \n");
+    hi->init = true;
 
     return 0;
 }
@@ -967,6 +967,7 @@ static int https_read(Http *hi, char *buffer, int len)
 
 bool Http::s_initialized = 0;
 
+// static
 void Http::Init()
 {
     if( !s_initialized )
@@ -981,6 +982,7 @@ void Http::Init()
     }
 }
 
+// static
 void Http::Close()
 {
     if( s_initialized )
@@ -995,14 +997,20 @@ void Http::Close()
 }
 
 Http::Http( bool verify /*= true*/ )
+    : url{}
+    , request{}
+    , response{}
+    , tls{}
+    , length( 0 )
+    , r_buf{}
+    , r_len( 0 )
+    , header_end( false )
+    , body( nullptr )
+    , body_size( 0 )
+    , body_len( 0 )
+    , init( false )
 {
-    f64 startTime = globalPlatform.CurrentTimeMillis();
-
-    Init();
-    https_init( this, 0, verify );
-
-    f64 time = globalPlatform.CurrentTimeMillis();
-    fprintf( stdout, "Init: %.1f ms.\n", time - startTime );
+    tls.verify = verify;
 }
 
 Http::~Http()
@@ -1022,6 +1030,16 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
 
 
     f64 startTime = globalPlatform.CurrentTimeMillis();
+
+    if( !init )
+    {
+        Init();
+        https_init( this, 0, tls.verify );
+
+        f64 time = globalPlatform.CurrentTimeMillis();
+        fprintf( stdout, "Init: %.1f ms.\n", time - startTime );
+        startTime = time;
+    }
 
 #if 1
     // TODO Trying to reuse the connection causes the httbin test to fail

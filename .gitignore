@@ -10,3 +10,6 @@ bricks.time
 bin/
 test/test.exe
 *.swo
+.ccls-cache/
+*.log
+

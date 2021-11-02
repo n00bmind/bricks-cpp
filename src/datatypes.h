@@ -884,6 +884,34 @@ struct Hashtable
     Hashtable( const Hashtable& ) = delete;
     Hashtable& operator =( const Hashtable& ) = delete;
 
+    Hashtable( Hashtable&& rhs )
+        : allocator( rhs.allocator )
+        , memParams( rhs.memParams )
+        , flags( rhs.flags )
+    {
+        *this = std::move( rhs );
+    }
+
+#if 0
+    Hashtable& operator =( Hashtable&& rhs )
+    {
+        Destroy();
+
+        // FIXME We need to force a copy (or error out) when the allocators differ?
+        keys     = rhs.keys;
+        value    = rhs.value;
+        hashFunc = rhs.hashFunc;
+        eqFunc   = rhs.eqFunc;
+        count    = rhs.count;
+        capacity = rhs.capacity;
+
+        rhs.Destroy();
+
+        return *this;
+    }
+#else
+    Hashtable& operator =( Hashtable&& ) = delete;
+#endif
 
     V* Get( K const& key )
     {

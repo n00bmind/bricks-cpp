@@ -274,19 +274,21 @@ struct Http
     } Url;
 
 
-    Url        url;
+    Url         url;
 
-    Data       request;
-    Data       response;
-    Ssl        tls;
+    Data        request;
+    Data        response;
+    Ssl         tls;
 
-    long       length;
-    char       r_buf[H_READ_SIZE];
-    long       r_len;
-    bool       header_end;
-    char*      body;
-    long       body_size;
-    long       body_len;
+    long        length;
+    char        r_buf[H_READ_SIZE];
+    long        r_len;
+    bool        header_end;
+    char*       body;
+    long        body_size;
+    long        body_len;
+
+    bool        init;
 
     
     static void Init();
@@ -311,6 +313,7 @@ struct Http
     int WriteEnd();
 
 private:
+    // Global initialization of any http(s) subsystems
     static bool s_initialized;
 
     // Returned String is TEMPORARY

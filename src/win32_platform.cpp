@@ -131,6 +131,28 @@ namespace Win32
     }
 
 
+    PLATFORM_CREATE_SEMAPHORE(CreateSemaphore)
+    {
+        HANDLE h = ::CreateSemaphore( NULL, initialCount, MAXLONG, NULL );
+        return h;
+    }
+
+    PLATFORM_DESTROY_SEMAPHORE(DestroySemaphore)
+    {
+        CloseHandle( (HANDLE)handle );
+    }
+
+    PLATFORM_WAIT_SEMAPHORE(WaitSemaphore)
+    {
+        WaitForSingleObject( (HANDLE)handle, INFINITE );
+    }
+
+    PLATFORM_SIGNAL_SEMAPHORE(SignalSemaphore)
+    {
+        ReleaseSemaphore( (HANDLE)handle, count, NULL );
+    }
+
+
     PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillis)
     {
         persistent f64 perfCounterFrequency = 0;
