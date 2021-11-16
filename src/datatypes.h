@@ -522,6 +522,7 @@ struct BucketArray
 
         Bucket* b = index.base;
         // If index is not pointing to last item in the bucket, swap it
+        // FIXME This is totally incompatible with the Idx idea
         T* lastItem = &b->data[ b->count - 1 ];
         if( item != lastItem )
             *item = *lastItem;
