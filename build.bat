@@ -1,1 +1,1 @@
-python build.py
+py build.py

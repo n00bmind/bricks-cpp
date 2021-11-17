@@ -121,8 +121,9 @@ include_dirs = [
 
 #  TODO Create additional separate lists for Debug/Release
 user_libs = [
-    '3rdparty/openssl/libcrypto-1_1-x64.lib',
-    '3rdparty/openssl/libssl-1_1-x64.lib',
+    # '3rdparty/openssl/libcrypto-1_1-x64.lib',
+    # '3rdparty/openssl/libssl-1_1-x64.lib',
+
     '3rdparty/mbedtls/lib/Debug/mbedTLS.lib',
     # '3rdparty/mbedtls/lib/Release/mbedTLS.lib',
 ]
