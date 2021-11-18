@@ -210,12 +210,12 @@
 #ifndef HTTPS_CLIENT_HTTPS_H
 #define HTTPS_CLIENT_HTTPS_H
 
-#define MBEDTLS_ALLOW_PRIVATE_ACCESS
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS    // For accessing 'fd'
 #include "mbedtls/net_sockets.h"
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
-//#include "mbedtls/certs.h"
+//#include "mbedtls/../../tests/include/test/certs.h"
 
 /*---------------------------------------------------------------------*/
 #define H_FIELD_SIZE    512
