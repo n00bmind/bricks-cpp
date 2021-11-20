@@ -7,6 +7,13 @@
 #include <stdio.h>
 #include <stdint.h>
 
+#define MBEDTLS_ALLOW_PRIVATE_ACCESS    // For accessing 'fd'
+#include "mbedtls/net_sockets.h"
+#include "mbedtls/entropy.h"
+#include "mbedtls/ctr_drbg.h"
+#include "mbedtls/error.h"
+//#include "mbedtls/../../tests/include/test/certs.h"
+
 #pragma warning( push )
 #pragma warning( disable : 4774 )
 #pragma warning( disable : 4388 )
@@ -1207,11 +1214,10 @@ TEST_F( DatatypesTest, HashtablePutGet )
         ASSERT( *table.Get( (void*)i ) == (void*)(i + 1) );
 }
 
-#include "https.h"
-#include "https.cpp"
+#include "http.h"
+#include "http.cpp"
 
-#ifdef _WIN32
-class HttpsTest : public testing::Test
+class HttpTest : public testing::Test
 {
 protected:
     // Per-test-suite set-up.
@@ -1219,12 +1225,8 @@ protected:
     // Can be omitted if not needed.
     static void SetUpTestCase()
     {
-        WSADATA wsaData;
-        int iResult;
-
-        // Initialize Winsock
-        iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-        ASSERT_EQ( iResult, 0 ) << "WSAStartup failed";
+        bool result = Http::Init();
+        ASSERT_EQ( result, true ) << "Http::Init failed";
     }
 
     // Per-test-suite tear-down.
@@ -1232,8 +1234,7 @@ protected:
     // Can be omitted if not needed.
     static void TearDownTestCase()
     {
-        int ret = WSACleanup();
-        ASSERT_EQ(0, ret);
+        Http::Shutdown();
     }
 
     // Per-test setup/teardown
@@ -1241,6 +1242,55 @@ protected:
     { }
     virtual void TearDown()
     { }
+};
+
+TEST_F( HttpTest, Get )
+{
+    auto callback = []( const Http::Response& response, void* userdata  )
+    {
+        // TODO 
+    };
+    bool ret = Http::Get( "https://httpbin.org/get?message=https_client", callback );
+    ASSERT_EQ( ret, true );
+}
+
+// Older Https class
+
+#if 0
+#include "https.h"
+#include "https.cpp"
+
+#ifdef _WIN32
+class HttpsTest : public testing::Test
+{
+    protected:
+        // Per-test-suite set-up.
+        // Called before the first test in this test suite.
+        // Can be omitted if not needed.
+        static void SetUpTestCase()
+        {
+            WSADATA wsaData;
+            int iResult;
+
+            // Initialize Winsock
+            iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
+            ASSERT_EQ( iResult, 0 ) << "WSAStartup failed";
+        }
+
+        // Per-test-suite tear-down.
+        // Called after the last test in this test suite.
+        // Can be omitted if not needed.
+        static void TearDownTestCase()
+        {
+            int ret = WSACleanup();
+            ASSERT_EQ(0, ret);
+        }
+
+        // Per-test setup/teardown
+        virtual void SetUp()
+        { }
+        virtual void TearDown()
+        { }
 };
 #endif
 
@@ -1252,8 +1302,8 @@ TEST_F( HttpsTest, GetPost )
     int  ret;
 
     // Init http session. verify: check the server CA cert.
-    //Http req( false );
-    Http req( true );
+    //Https req( false );
+    Https req( true );
 
     // Test a http get method.
     url = "https://httpbin.org/get?message=https_client";
@@ -1281,19 +1331,20 @@ TEST_F( HttpsTest, GetPost )
 
     ASSERT_EQ( ret, 200 ) << "Error: " << response;
 }
+#endif
 
 #if 0
 // http_open_chunked & http_write_chunked are nowhere to be found
 
-TEST_F( HttpTest, ChunkedEncoding )
+TEST_F( HttpsTest, ChunkedEncoding )
 {
     char* url;
     char data[1024], response[4096];
     int  i, ret, size;
 
     // Init http session. verify: check the server CA cert.
-    //Http req( false );
-    Http req( true );
+    //Https req( false );
+    Https req( true );
 
     // Test a https post with the chunked-encoding data.
     url = "https://httpbin.org/post";

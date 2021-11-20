@@ -101,12 +101,15 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 
 
 #if defined(_MSC_VER)
-#define INLINE __forceinline
-// Crap MSVC will whine about C++ 20 for this
-#define INLINE_LAMBDA [[msvc::forceinline]]
+    #define INLINE __forceinline
+    #if __cplusplus > 201703L
+        #define INLINE_LAMBDA [[msvc::forceinline]]
+    #else
+        #define INLINE_LAMBDA 
+    #endif
 #else
-#define INLINE inline __attribute__((always_inline))
-#define INLINE_LAMBDA __attribute__((always_inline))
+    #define INLINE inline __attribute__((always_inline))
+    #define INLINE_LAMBDA __attribute__((always_inline))
 #endif
 
 

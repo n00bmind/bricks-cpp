@@ -97,6 +97,8 @@ INLINE void StringCopy( char const* src, char* dst, sz dstSize )
 
 INLINE bool StringStartsWith( char const* str, char const* find) { return str && find && strstr(str, find) == str; }
 
+INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
+
 // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found
 inline char* StringToLowercase( char* str, int len = 0 )
 {

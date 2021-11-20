@@ -257,10 +257,10 @@ static int _error;
 /*---------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size);
 
-static int http_header(Http *hi, char *param);
+static int http_header(Https *hi, char *param);
 
-static int https_init(Http *hi, bool https, bool verify);
-static int https_close(Http *hi);
+static int https_init(Https *hi, bool https, bool verify);
+static int https_close(Https *hi);
 
 /*---------------------------------------------------------------------------*/
 char *strtoken(char *src, char *dst, int size)
@@ -360,7 +360,7 @@ static int parse_url(char const* src_url, bool *https, char *host, char *port, c
 }
 
 /*---------------------------------------------------------------------*/
-static int http_header(Http *hi, char *param)
+static int http_header(Https *hi, char *param)
 {
     char *token;
     char t1[256], t2[256];
@@ -408,12 +408,19 @@ static int http_header(Http *hi, char *param)
 }
 
 /*---------------------------------------------------------------------*/
-static bool http_parse(Http *hi)
+static bool http_parse(Https *hi)
 {
     char    *p1, *p2;
     long    len;
 
-    if(hi->r_len <= 0) return false;
+    bool result = false;
+    DEFER
+    (
+        if( !result ) __debugbreak();
+    )
+
+    if(hi->r_len <= 0)
+        return false;
 
     p1 = hi->r_buf;
 
@@ -468,7 +475,7 @@ static bool http_parse(Http *hi)
                                 hi->r_len = len;
                                 hi->length = -1;
 
-                                break;
+                                return false;
                             }
                         }
                         else
@@ -476,7 +483,7 @@ static bool http_parse(Http *hi)
                             hi->r_len = 0;
                             hi->length = -1;
 
-                            break;
+                            return false;
                         }
                     }
                     else
@@ -498,7 +505,7 @@ static bool http_parse(Http *hi)
                 else
                     hi->r_len = 0;
 
-                break;
+                return false;
             }
         }
         else    // body parser ...
@@ -527,13 +534,13 @@ static bool http_parse(Http *hi)
                         hi->r_len = len;
                         hi->length = -1;
 
-                        break;
+                        return false;
                     }
                 }
                 else
                 {
                     hi->r_len = 0;
-                    break;
+                    return false;
                 }
             }
             else
@@ -597,15 +604,21 @@ static bool http_parse(Http *hi)
                         hi->r_len = 0;
 
                         if(hi->response.chunked == FALSE && hi->length <= 0)
+                        {
+                            result = true;
                             return true;
+                        }
 
-                        break;
+                        return false;
                     }
                 }
                 else
                 {
                     if(hi->response.chunked == FALSE)
+                    {
+                        result = true;
                         return true;
+                    }
 
                     // chunked size check ..
                     if((hi->r_len > 2) && (memcmp(p1, "\r\n", 2) == 0))
@@ -627,9 +640,9 @@ static bool http_parse(Http *hi)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_init(Http *hi, bool https, bool verify)
+static int https_init(Https *hi, bool https, bool verify)
 {
-    memset(hi, 0, sizeof(Http));
+    memset(hi, 0, sizeof(Https));
 
     if(https)
     {
@@ -663,7 +676,7 @@ static int https_init(Http *hi, bool https, bool verify)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_close(Http *hi)
+static int https_close(Https *hi)
 {
     if(hi->url.https == 1)
     {
@@ -772,7 +785,6 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
             break;
         }
 
-        /* TODO We should be able to use mbedTLS all the way? Check how this compares to 'mbedtls_net_connect' */
         ret = connect( ctx->fd, cur->ai_addr, cur->ai_addrlen );
         if( ret == 0 )
         {
@@ -850,7 +862,7 @@ static int mbedtls_net_connect_timeout( mbedtls_net_context *ctx, const char *ho
 }
 
 /*---------------------------------------------------------------------*/
-static int https_connect(Http *hi, char *host, char *port)
+static int https_connect(Https *hi, char *host, char *port)
 {
     int ret, https;
 
@@ -928,7 +940,7 @@ static int https_connect(Http *hi, char *host, char *port)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_write(Http *hi, char const* buffer, int len)
+static int https_write(Https *hi, char const* buffer, int len)
 {
     int ret, slen = 0;
 
@@ -951,7 +963,7 @@ static int https_write(Http *hi, char const* buffer, int len)
 }
 
 /*---------------------------------------------------------------------*/
-static int https_read(Http *hi, char *buffer, int len)
+static int https_read(Https *hi, char *buffer, int len)
 {
     if(hi->url.https == 1)
     {
@@ -965,10 +977,10 @@ static int https_read(Http *hi, char *buffer, int len)
 
 
 
-bool Http::s_initialized = 0;
+bool Https::s_initialized = 0;
 
 // static
-void Http::Init()
+void Https::Init()
 {
     if( !s_initialized )
     {
@@ -983,7 +995,7 @@ void Http::Init()
 }
 
 // static
-void Http::Close()
+void Https::Close()
 {
     if( s_initialized )
     {
@@ -996,7 +1008,7 @@ void Http::Close()
     }
 }
 
-Http::Http( bool verify /*= true*/ )
+Https::Https( bool verify /*= true*/ )
     : url{}
     , request{}
     , response{}
@@ -1013,14 +1025,14 @@ Http::Http( bool verify /*= true*/ )
     tls.verify = verify;
 }
 
-Http::~Http()
+Https::~Https()
 {
     https_close( this );
 }
 
 
 /*---------------------------------------------------------------------*/
-bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
+bool Https::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
 {
     char        err[100];
     char        host[256], port[10], dir[1024];
@@ -1106,13 +1118,13 @@ bool Http::Open( char const* requestUrl, char* responseOut, int maxResponseLen )
 }
 
 /*---------------------------------------------------------------------*/
-int Http::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
+int Https::Get( char const* requestUrl, char *responseOut, int maxResponseLen )
 {
-    Http::Headers headers;
+    Https::Headers headers;
     return Get( requestUrl, headers, responseOut, maxResponseLen );
 }
 
-int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen )
+int Https::Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen )
 {
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
@@ -1141,13 +1153,13 @@ int Http::Get( char const* requestUrl, Headers& headers, char *responseOut, int 
     return ReadBlocking( responseOut, maxResponseLen );
 }
 
-int Http::Post( char const* requestUrl, char const* bodyData, char *responseOut, int maxResponseLen )
+int Https::Post( char const* requestUrl, char const* bodyData, char *responseOut, int maxResponseLen )
 {
-    Http::Headers headers;
+    Https::Headers headers;
     return Post( requestUrl, headers, bodyData, responseOut, maxResponseLen );
 }
 
-int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen )
+int Https::Post( char const* requestUrl, Headers& headers, char const* bodyData, char *responseOut, int maxResponseLen )
 {
     bool res = Open( requestUrl, responseOut, maxResponseLen );
     if( !res )
@@ -1177,7 +1189,7 @@ int Http::Post( char const* requestUrl, Headers& headers, char const* bodyData, 
 }
 
 
-String Http::BuildRequest( char const* method, char const* host, char const* port, char const* dir,
+String Https::BuildRequest( char const* method, char const* host, char const* port, char const* dir,
                            Headers& headers, String const& bodyData )
 {
     // FIXME Store lower-cased, print-out camel-cased
@@ -1237,7 +1249,7 @@ String Http::BuildRequest( char const* method, char const* host, char const* por
     return result;
 }
 
-bool Http::Write( char const* data, int len, char* responseOut, int maxResponseLen )
+bool Https::Write( char const* data, int len, char* responseOut, int maxResponseLen )
 {
     f64 startTime = globalPlatform.CurrentTimeMillis();
 
@@ -1263,7 +1275,7 @@ bool Http::Write( char const* data, int len, char* responseOut, int maxResponseL
 }
 
 /*---------------------------------------------------------------------*/
-int Http::WriteChunked( char *data, int len )
+int Https::WriteChunked( char *data, int len )
 {
     char        str[10];
     int         ret, l;
@@ -1307,7 +1319,7 @@ int Http::WriteChunked( char *data, int len )
 }
 
 /*---------------------------------------------------------------------*/
-int Http::WriteEnd()
+int Https::WriteEnd()
 {
     char        str[10];
     int         ret, len;
@@ -1335,7 +1347,7 @@ int Http::WriteEnd()
 }
 
 /*---------------------------------------------------------------------*/
-bool Http::Read( char* responseOut, int maxResponseLen )
+bool Https::Read( char* responseOut, int maxResponseLen )
 {
     int ret;
     char err[100];
@@ -1364,8 +1376,7 @@ bool Http::Read( char* responseOut, int maxResponseLen )
     this->r_len += ret;
     this->r_buf[this->r_len] = 0;
 
-//        printf("read(%ld): %s \n", this->r_len, this->r_buf);
-//        printf("read(%ld) \n", this->r_len);
+    printf("read(%ld):\n%s\n", this->r_len, this->r_buf);
 
     // TODO Add headers to hashtable
     if( http_parse(this) )
@@ -1381,7 +1392,7 @@ bool Http::Read( char* responseOut, int maxResponseLen )
     return false;
 }
 
-int Http::ReadBlocking( char *responseOut, int maxResponseLen )
+int Https::ReadBlocking( char *responseOut, int maxResponseLen )
 {
     f64 startTime = globalPlatform.CurrentTimeMillis();
 

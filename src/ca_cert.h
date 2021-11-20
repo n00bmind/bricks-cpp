@@ -1,5 +1,6 @@
 
-char const* ca_crt_rsa[] = {
+char const* ca_crt_rsa[] =
+{
     "-----BEGIN CERTIFICATE-----\r\n"
     "MIICWjCCAcMCAgGlMA0GCSqGSIb3DQEBBAUAMHUxCzAJBgNVBAYTAlVTMRgwFgYD\r\n"
     "VQQKEw9HVEUgQ29ycG9yYXRpb24xJzAlBgNVBAsTHkdURSBDeWJlclRydXN0IFNv\r\n"

@@ -210,13 +210,6 @@
 #ifndef HTTPS_CLIENT_HTTPS_H
 #define HTTPS_CLIENT_HTTPS_H
 
-#define MBEDTLS_ALLOW_PRIVATE_ACCESS    // For accessing 'fd'
-#include "mbedtls/net_sockets.h"
-#include "mbedtls/entropy.h"
-#include "mbedtls/ctr_drbg.h"
-#include "mbedtls/error.h"
-//#include "mbedtls/../../tests/include/test/certs.h"
-
 /*---------------------------------------------------------------------*/
 #define H_FIELD_SIZE    512
 #define H_READ_SIZE     16384
@@ -230,7 +223,7 @@
 #define FALSE   0
 
 
-struct Http
+struct Https
 {
     using Headers = Hashtable< String, String >;
 
@@ -294,8 +287,8 @@ struct Http
     static void Init();
     static void Close();
 
-    Http( bool verify = true );
-    ~Http();
+    Https( bool verify = true );
+    ~Https();
 
     int Get( char const* requestUrl, char *responseOut, int maxResponseLen );
     int Get( char const* requestUrl, Headers& headers, char *responseOut, int maxResponseLen );
