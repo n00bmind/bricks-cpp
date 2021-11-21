@@ -85,9 +85,9 @@ typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
 #define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
 // Returned buffer data must be null-terminated
-#define PLATFORM_READ_ENTIRE_FILE(name) buffer name( char const* filename, Allocator* allocator )
+#define PLATFORM_READ_ENTIRE_FILE(name) Buffer<> name( char const* filename, Allocator* allocator )
 typedef PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFileFunc);
-#define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<buffer> const& chunks, bool overwrite )
+#define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
 typedef PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFileFunc);
 
 

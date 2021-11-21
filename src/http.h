@@ -9,6 +9,12 @@ namespace Http
         UseExternalCertFile,
     };
 
+    struct Header
+    {
+        char const* name;
+        String value;
+    };
+
     struct Response
     {
         String url;

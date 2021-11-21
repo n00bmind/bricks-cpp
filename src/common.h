@@ -282,7 +282,7 @@ Size( sz value )
 
 /////     BUFFER VIEW    /////
 
-template <typename T>
+template <typename T = void>
 struct Buffer
 {
     T* data;
@@ -305,13 +305,13 @@ public:
     operator bool() const { return data && length; }
 };
 
-using buffer = Buffer<void>;
+using StringBuffer = Buffer<char const>;
 
 // This is the least horrible thing I could come up with ¬¬
 #define BUFFER(T, ...)                                        \
 []()                                                          \
 {                                                             \
-    static T literal[] = { __VA_ARGS__ };                     \
+    static constexpr T literal[] = { __VA_ARGS__ };           \
     return Buffer<T>( literal, sizeof(literal) / sizeof(T) ); \
 }()
     

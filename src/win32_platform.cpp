@@ -113,7 +113,7 @@ namespace Win32
         bool error = false;
         for( int i = 0; i < chunks.count; ++i )
         {
-            buffer const& chunk = chunks[i];
+            Buffer<> const& chunk = chunks[i];
             SetFilePointer( outFile, 0, NULL, FILE_END );
 
             DWORD bytesWritten;

@@ -863,8 +863,8 @@ struct Hashtable
     u32 flags;
 
 
-    explicit Hashtable( int expectedSize = 0, u32 flags_ = 0, AllocType* allocator_ = CTX_ALLOC, 
-                        HashFunc hashFunc_ = DefaultHashFunc<K>, KeysEqFunc eqFunc_ = DefaultEqFunc<K> )
+    explicit Hashtable( int expectedSize = 0, AllocType* allocator_ = CTX_ALLOC, 
+                        HashFunc hashFunc_ = DefaultHashFunc<K>, KeysEqFunc eqFunc_ = DefaultEqFunc<K>, u32 flags_ = 0 )
         : keys( nullptr )
         , values( nullptr )
         , allocator( allocator_ )

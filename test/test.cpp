@@ -1205,7 +1205,7 @@ TEST_F( DatatypesTest, ArrayBasics )
 TEST_F( DatatypesTest, HashtablePutGet )
 {
     persistent LazyAllocator lazyAllocator;
-    Hashtable<void*, void*, LazyAllocator> table( 0, 0, &lazyAllocator );
+    Hashtable<void*, void*, LazyAllocator> table( 0, &lazyAllocator );
 
     const int N = 128 * 1024;
     for( int i = 1; i < N; ++i )

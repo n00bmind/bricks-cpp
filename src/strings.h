@@ -162,16 +162,29 @@ struct String
         , flags( 0 )
     { ASSERT( Valid() ); }
 
-    explicit String( Buffer<char> const& buffer )
-        : data( buffer )
-        // Don't include null terminator
+    explicit String( char const* cString, char const* cStringEnd )
+        : data( cString )
+        , length( cStringEnd ? I32( cStringEnd - cString ) : StringLength( cString ) )
+        , flags( 0 )
+    { ASSERT( Valid() ); }
+
+    explicit String( StringBuffer const& buffer )
+        : data( buffer.data )
+        // Don't count null terminator
         , length( I32( buffer.length - 1 ) )
         , flags( 0 )
     { ASSERT( Valid() ); }
 
-    explicit String( buffer const& buffer )
+    explicit String( Buffer<char> const& buffer )
+        : data( buffer.data )
+        // Don't count null terminator
+        , length( I32( buffer.length - 1 ) )
+        , flags( 0 )
+    { ASSERT( Valid() ); }
+
+    explicit String( Buffer<> const& buffer )
         : data( (char*)buffer.data )
-        // Don't include null terminator
+        // Don't count null terminator
         , length( I32( buffer.length - 1 ) )
         , flags( 0 )
     { ASSERT( Valid() ); }
@@ -300,6 +313,9 @@ public:
     bool Valid() const { return Empty() || data[length] == 0; }
     char const* CStr() const { ASSERT( Valid() ); return data ? data : ""; }
 
+    StringBuffer ToBuffer() const { return StringBuffer( data, length ); }
+    Buffer<u8> ToBufferU8() const { return Buffer<u8>( (u8*)data, length ); }
+
     bool IsEqual( const char* cString, sz len = 0, bool caseSensitive = true ) const
     {
         if( !len )
@@ -335,12 +351,25 @@ public:
         result.InternalClone( src, len );
         return result;
     }
-
     static String CloneTmp( char const* src, int len = 0 )
     {
         String result;
         result.flags |= Temporary;
         result.InternalClone( src, len );
+        return result;
+    }
+
+    static String Clone( char const* src, char const* end )
+    {
+        String result;
+        result.InternalClone( src, end ? I32( end - src ) : 0 );
+        return result;
+    }
+    static String CloneTmp( char const* src, char const* end )
+    {
+        String result;
+        result.flags |= Temporary;
+        result.InternalClone( src, end ? I32( end - src ) : 0 );
         return result;
     }
 
@@ -353,7 +382,6 @@ public:
         ASSERT( result.Valid() );
         return result;
     }
-
     static String CloneTmp( BucketArray<char> const& src )
     {
         String result( src.count, Temporary );
@@ -725,6 +753,12 @@ public:
         }
 
         return result;
+    }
+
+    // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found
+    char* ToLowercase()
+    {
+        return StringToLowercase( (char*)data, length );
     }
 
 #if 0
