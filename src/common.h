@@ -72,6 +72,13 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define SIZEOF(s) Sz( sizeof(s) )
 #define OFFSETOF(type, member) Sz( (uintptr_t)&(((type *)0)->member) )
 #define ARRAYCOUNT(array) Sz( sizeof(array) / sizeof((array)[0]) )
+
+// Quickly check size of a struct at compile time
+// TODO This has the usual problem with templated structs with comma separated args
+#define CHECKSIZE( t ) \
+    template<int s> struct Size; \
+    Size<sizeof( t )> size_of_##t;
+
 #if 0
 #define STR(s) _STR(s)
 #define _STR(s) #s
@@ -356,7 +363,12 @@ int main()
 #define _ENUM_ARGS(...)         { __VA_ARGS__ }
 #define _ENUM_ENTRY(x, ...)     x,
 #define _ENUM_NAME(x, ...)      items[x].name,
-#define _ENUM_REF(x, ...)       static constexpr EnumTypeName::Item const& x = EnumTypeName::items[x];
+// TODO We're constructing values twice, due to referring to items for the values array here
+// TODO We should probably just construct Items on request, since it's kind of an exotic concept which will be seldom used anyway
+// (maybe even remove it entirely!)
+#define _ENUM_VALUE(x, ...)     items[x].value,
+#define _ENUM_ITEM_REF(x, ...)  static constexpr EnumTypeName::Item const& x = EnumTypeName::items[x];
+// TODO We'd ideally remove values entirely so any code using them (serialization!) errors out at compile time
 #define _ENUM_INIT(x)                           { #x, -1, x },
 #define _ENUM_INIT_WITH_NAMES(x, n)             {  n, -1, x },
 #define _ENUM_INIT_WITH_VALUES(x, v)            { #x, _ENUM_ARGS v, x },
@@ -365,49 +377,64 @@ int main()
 struct EnumBase
 { };
 
-#define _CREATE_ENUM(enumName, valueType, xValueList, xInitializer) \
-struct enumName : public EnumBase                                   \
-{                                                                   \
-    using EnumTypeName = enumName;                                      \
-    using ValueType = valueType;                                    \
-                                                                    \
-    enum Enum : i32                                                 \
-    {                                                               \
-        xValueList(_ENUM_ENTRY)                                     \
-    };                                                              \
-                                                                    \
-    struct Item                                                     \
-    {                                                               \
-        char const* name;                                           \
-        valueType value;                                            \
-        i32 index;                                                  \
-                                                                    \
-        bool operator ==( Item const& other ) const                 \
-        { return index == other.index; }                            \
-        bool operator !=( Item const& other ) const                 \
-        { return index != other.index; }                            \
-    };                                                              \
-                                                                    \
-    static constexpr Item items[] =                                 \
-    {                                                               \
-        xValueList(xInitializer)                                    \
-    };                                                              \
-    static constexpr const char* names[] =                          \
-    {                                                               \
-        xValueList(_ENUM_NAME)                                      \
-    };                                                              \
-    static constexpr sz itemCount = ARRAYCOUNT(items);              \
-                                                                    \
-    struct Items                                                    \
-    {                                                               \
-        xValueList(_ENUM_REF)                                       \
-    };                                                              \
+#define _CREATE_ENUM(enumName, valueType, xItemList, xItemInitializer)             \
+struct enumName : public EnumBase                                                  \
+{                                                                                  \
+    i32 index;                                                                     \
+                                                                                   \
+    constexpr enumName( int index_ = 0 ) : index( index_ )                         \
+    {                                                                              \
+        ASSERT( index >= 0 && index < itemCount, #enumName" index out of range" ); \
+    }                                                                              \
+                                                                                   \
+    constexpr char const* Name()  const { return names[index]; }                   \
+    constexpr valueType const& Value() const { return values[index]; }             \
+                                                                                   \
+                                                                                   \
+    using EnumTypeName = enumName;                                                 \
+    using ValueType = valueType;                                                   \
+                                                                                   \
+    enum Enum : i32                                                                \
+    {                                                                              \
+        xItemList(_ENUM_ENTRY)                                                     \
+    };                                                                             \
+                                                                                   \
+    struct Item                                                                    \
+    {                                                                              \
+        char const* name;                                                          \
+        valueType value;                                                           \
+        i32 index;                                                                 \
+                                                                                   \
+        bool operator ==( Item const& other ) const                                \
+        { return index == other.index; }                                           \
+        bool operator !=( Item const& other ) const                                \
+        { return index != other.index; }                                           \
+    };                                                                             \
+                                                                                   \
+    static constexpr Item items[] =                                                \
+    {                                                                              \
+        xItemList(xItemInitializer)                                                \
+    };                                                                             \
+    static constexpr char const* names[] =                                         \
+    {                                                                              \
+        xItemList(_ENUM_NAME)                                                      \
+    };                                                                             \
+    static constexpr valueType values[] =                                          \
+    {                                                                              \
+        xItemList(_ENUM_VALUE)                                                     \
+    };                                                                             \
+    static constexpr sz itemCount = ARRAYCOUNT(items);                             \
+                                                                                   \
+    struct Items                                                                   \
+    {                                                                              \
+        xItemList(_ENUM_ITEM_REF)                                                  \
+    };                                                                             \
 };                                                                  
 
-#define ENUM_STRUCT(enumName, xValueList)                               _CREATE_ENUM(enumName, i32, xValueList, _ENUM_INIT)
-#define ENUM_STRUCT_WITH_NAMES(enumName, xValueList)                    _CREATE_ENUM(enumName, i32, xValueList, _ENUM_INIT_WITH_NAMES)
-#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xValueList)        _CREATE_ENUM(enumName, valueType, xValueList, _ENUM_INIT_WITH_VALUES)
-#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xValueList)  _CREATE_ENUM(enumName, valueType, xValueList, _ENUM_INIT_WITH_NAMES_VALUES)
+#define ENUM_STRUCT(enumName, xItemList)                                _CREATE_ENUM(enumName, i32, xItemList, _ENUM_INIT)
+#define ENUM_STRUCT_WITH_NAMES(enumName, xItemList)                     _CREATE_ENUM(enumName, i32, xItemList, _ENUM_INIT_WITH_NAMES)
+#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xItemList)         _CREATE_ENUM(enumName, valueType, xItemList, _ENUM_INIT_WITH_VALUES)
+#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xItemList)   _CREATE_ENUM(enumName, valueType, xItemList, _ENUM_INIT_WITH_NAMES_VALUES)
 
 
 /////     DEFER    /////
