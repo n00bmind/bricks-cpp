@@ -1,5 +1,7 @@
 #include "ca_cert.h"
 
+// SPEC: https://datatracker.ietf.org/doc/html/rfc2616
+
 namespace Http
 {
     static bool s_initialized = false;
@@ -322,16 +324,16 @@ namespace Http
         return result;
     }
 
-    static bool Write( Request& request, Buffer<u8> buffer )
+    static bool Write( Request* request, Buffer<u8> buffer )
     {
-        int ret, error = 0, slen = 0;
+        int ret = 0, error = 0, slen = 0;
 
         while( true )
         {
-            if( request.https )
-                ret = mbedtls_ssl_write( &request.tls.context, (u_char *)&buffer.data[slen], (size_t)(buffer.length - slen) );
+            if( request->https )
+                ret = mbedtls_ssl_write( &request->tls.context, (u_char *)&buffer.data[slen], (size_t)(buffer.length - slen) );
             else
-                ret = mbedtls_net_send( &request.tls.fd, (u_char *)&buffer.data[slen], (size_t)(buffer.length - slen) );
+                ret = mbedtls_net_send( &request->tls.fd, (u_char *)&buffer.data[slen], (size_t)(buffer.length - slen) );
 
             if( ret == MBEDTLS_ERR_SSL_WANT_WRITE )
                 continue;
@@ -352,7 +354,7 @@ namespace Http
             mbedtls_strerror( error, errorBuf, sizeof(errorBuf) );
             LOGE( /*Net,*/ "Write error (%d): %s", error, errorBuf );
 
-            Close( &request );
+            Close( request );
         }
 
         return error == 0;
@@ -431,10 +433,180 @@ namespace Http
     }
 #endif
 
-    // TODO Headers
+    static bool ParseResponse( Response* response )
+    {
+        // Don't count terminator
+        String responseString( (char const*)response->rawData.data, response->rawData.count - 1 );
+        while( String line = responseString.ConsumeLine() )
+        {
+            if( line.StartsWith( "\r\n" ) )
+            {
+                // Header is over. Save the remainder as the body
+                // TODO Terminator?
+                response->body = { (u8*)responseString.data, responseString.length };
+                break;
+            }
+            else
+            {
+                if( !response->statusCode )
+                {
+                    // Parse status line
+                    String word = line.ConsumeWord();
+                    if( !word || !word.StartsWith( "HTTP/" ) )
+                    {
+                        LOGE( /*Net,*/ "Bad protocol" );
+                        return false;
+                    }
+
+                    if( !(word = line.ConsumeWord()) )
+                    {
+                        LOGE( /*Net,*/ "Bad protocol" );
+                        return false;
+                    }
+                    word.ToI32( &response->statusCode );
+
+                    if( !(word = line.ConsumeWord()) )
+                    {
+                        LOGE( /*Net,*/ "Bad protocol" );
+                        return false;
+                    }
+                    response->reason = word.data;
+                }
+                else
+                {
+                    // Parse headers
+                    // TODO Fill up relevant info in the Response
+
+                    String word = line.ConsumeWord();
+                    if( !word || !word.EndsWith( ":" ) )
+                    {
+                        LOGW( /*Net,*/ "Malformed response header: '%s'", line.CStr() );
+                        continue;
+                    }
+                    char const* name = word.data;
+
+                    if( !(word = line.ConsumeWord()) )
+                    {
+                        LOGW( /*Net,*/ "Malformed response header: '%s'", line.CStr() );
+                        continue;
+                    }
+
+                    Header* h = response->headers.PushEmpty( false );
+                    *h = { name, std::move( word ) };
+                }
+            }
+        }
+
+        response->done = true;
+        return true;
+    }
+
+    // Return true if there's more data to read
+    bool Read( Request* request, BucketArray<Array<u8>>* readChunks, Response* response )
+    {
+        ASSERT( !response->done );
+
+        static constexpr int chunkSize = 4096;
+        // Get a new chunk or reuse the last one
+        Array<u8>* chunk = nullptr;
+        if( readChunks->Empty() || (*readChunks->Last()).Available() == 0 )
+        {
+            chunk = readChunks->PushEmpty( false );
+            INIT( *chunk )( chunkSize, CTX_TMPALLOC );
+        }
+        else
+            chunk = &(*readChunks->Last());
+
+        // Read into the new chunk
+        int ret = 0, error = 0;
+        if( request->https )
+            ret = mbedtls_ssl_read( &request->tls.context, (u_char *)chunk->end(), (size_t)chunk->Available() );
+        else
+            ret = mbedtls_net_recv_timeout( &request->tls.fd, (u_char *)chunk->end(), (size_t)chunk->Available(), 5000 );
+
+        if( ret == MBEDTLS_ERR_SSL_WANT_READ )
+            return true;
+        else if( ret <= 0 )
+        {
+            if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
+            {
+                // Connection closed gracefully
+                Close( request );
+            }
+            else
+            {
+                error = ret;
+
+                if( ret == 0 || ret == MBEDTLS_ERR_NET_CONN_RESET )
+                    LOGE( /*Net,*/ "Connection closed by peer" );
+                else
+                {
+                    char errorBuf[128];
+                    mbedtls_strerror( error, errorBuf, sizeof(errorBuf) );
+                    LOGE( /*Net,*/ "Read error (%d): %s", error, errorBuf );
+                }
+
+                Close( request );
+                return false;
+            }
+        }
+
+        if( ret > 0 )
+            chunk->count += ret;
+
+        // TODO Technically, we should parse the http contents to ensure we've finished receiving all data
+        // (see https://github.com/ARMmbed/mbedtls/blob/146247de712f00220226829dcf13e99f62133ad6/programs/ssl/ssl_client2.c#L2627)
+        // For now, just try again if we last read a full chunk
+        bool completed = ret < chunkSize;
+        if( completed )
+        {
+            // Compact down and null terminate the buffer
+            ASSERT( response->rawData.capacity == 0 );
+
+            int totalSize = 0;
+            for( Array<u8> const& c : *readChunks )
+                totalSize += c.count;
+            INIT( response->rawData )( totalSize );
+
+            for( Array<u8> const& c : *readChunks )
+                response->rawData.Append( c );
+            // TODO For binary data we probably want to avoid this?
+            response->rawData.Push( 0 );
+
+            if( ParseResponse( response ) )
+            {
+                if( response->close )
+                    Close( request );
+
+                return false;
+            }
+
+            ASSERT( false, "Bad response" );
+            return false;
+        }
+        else
+            return true;
+    }
+
+    int ReadBlocking( Request* request )
+    {
+        Response response = {};
+        BucketArray<Array<u8>> readChunks( 8, CTX_TMPALLOC );
+
+        while(1)
+        {
+            if( !Read( request, &readChunks, &response ) )
+                break;
+        }
+
+        return response.statusCode;
+    }
+
     // TODO We're gonna want some way of reusing connections to the same server etc
     bool Get( char const* url, Array<Header> const& headers, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
+        // TODO Enqueue to the http thread and return immediately
+
         Request request;
         if( !Connect( url, &request ) )
             return false;
@@ -443,7 +615,11 @@ namespace Http
         String reqStr = BuildRequest( request, headers, {} );
 
         // TODO This is supposed to be non-blocking now? How is that supposed to work?
-        if( !Write( request, reqStr.ToBufferU8() ) )
+        if( !Write( &request, reqStr.ToBufferU8() ) )
+            return false;
+
+        // TODO Do this non-blocking too
+        if( !ReadBlocking( &request ) )
             return false;
 
         return true;

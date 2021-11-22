@@ -95,9 +95,29 @@ INLINE void StringCopy( char const* src, char* dst, sz dstSize )
     strncpy( dst, src, Size( dstSize ) );
 }
 
-INLINE bool StringStartsWith( char const* str, char const* find) { return str && find && strstr(str, find) == str; }
-
 INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
+inline char const* StringFindSuffix( const char* str, const char* find )
+{
+    if ( !str || !find )
+        return nullptr;
+
+    size_t strLen = strlen( str );
+    size_t sufLen = strlen( find );
+    if ( sufLen >  strLen )
+        return nullptr;
+
+    if ( strncmp( str + strLen - sufLen, find, sufLen ) == 0 )
+	{
+		// Found it
+		return str + strLen - sufLen;
+	}
+
+	// Fail
+	return nullptr;
+}
+
+INLINE bool StringStartsWith( char const* str, char const* find ) { return str && find && strstr( str, find ) == str; }
+INLINE bool StringEndsWith( char const* str, char const* find ) { return StringFindSuffix( str, find ) != nullptr; }
 
 // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found
 inline char* StringToLowercase( char* str, int len = 0 )
@@ -237,6 +257,7 @@ struct String
         Clear();
 
         flags = other.flags;
+        // FIXME 
         // We always create just a reference unless explicitly Clone()ing
         flags &= ~Owned;
 
@@ -454,23 +475,19 @@ public:
 
     bool StartsWith( const char* cString ) const
     {
-        ASSERT( *cString );
         if( Empty() )
             return false;
 
-        const char* nextThis = data;
-        const char* nextThat = cString;
+        return StringStartsWith( data, cString );
+    }
 
-        while( *nextThis && *nextThis == *nextThat )
-        {
-            nextThis++;
-            nextThat++;
+    bool EndsWith ( char const* cString ) const
+    {
+        if( Empty() )
+            return false;
 
-            if( *nextThat == '\0' )
-                return true;
-        }
-
-        return false;
+        // TODO Could be faster
+        return StringEndsWith( data, cString );
     }
 
     const char* FindString( const char* cString ) const
@@ -552,8 +569,11 @@ public:
         ASSERT( Valid() );
     }
 
+    // NOTE All 'Consume' methods mutate the current String by inserting NLs at the consumed boundaries
+    // (ideally we'd like to be able to return non-null terminated Strings to avoid modifying the input)
     String ConsumeLine()
     {
+        // TODO ???
         ASSERT( !(flags & Owned) );
 
         int lineLen = length;
@@ -564,21 +584,23 @@ public:
         {
             atNL = onePastNL;
             onePastNL++;
-            // Account for stupid Windows "double" NLs
+            // Account for 'double' NLs
             if( *(atNL - 1) == '\r' )
                 atNL--;
+            else if( *onePastNL == '\r' )
+                onePastNL++;
 
             lineLen = I32( onePastNL - data );
         }
-
         ASSERT( lineLen <= length );
+
         *(char*)atNL = '\0';
         String line( data, I32( atNL - data ) );
 
         data = onePastNL;
         length -= lineLen;
-
         ASSERT( Valid() );
+
         return line;
     }
 
@@ -607,8 +629,8 @@ public:
         wordLen++;
         data += wordLen;
         length -= wordLen;
-
         ASSERT( Valid() );
+
         return result;
     }
 

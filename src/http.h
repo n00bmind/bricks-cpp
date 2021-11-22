@@ -17,9 +17,15 @@ namespace Http
 
     struct Response
     {
+        Array<u8> rawData;
+        Array<Header> headers;
+        Buffer<u8> body;
         String url;
-        String rawContent;
+        char const* reason;
         int statusCode;
+        // TODO If this is not found in the response data.. what should the default be?
+        bool close = true;
+        bool done;
     };
 
     typedef void(*Callback)( const Response& response, void* userdata );

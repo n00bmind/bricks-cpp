@@ -142,7 +142,7 @@ struct Array
     // https://en.cppreference.com/w/cpp/named_req/TrivialType
     // https://en.cppreference.com/w/cpp/named_req/TriviallyCopyable
     // https://en.cppreference.com/w/cpp/named_req/StandardLayoutType
-    T* PushEmpty( bool clear = true )
+    T* PushEmpty( bool clear = false )
     {
         ASSERT( count < capacity );
         T* result = data + count++;
@@ -237,6 +237,20 @@ struct Array
         return slot != nullptr;
     }
 
+    void Append( T const* buffer, int bufferCount )
+    {
+        ASSERT( Available() >= bufferCount );
+
+        for( int i = 0; i < bufferCount; ++i )
+            Push( buffer[i] );
+    }
+
+    template <typename AllocType2 = Allocator>
+    void Append( Array<T, AllocType2> const& array )
+    {
+        Append( array.data, array.count );
+    }
+
     // Deep copy
     template <typename AllocType2 = Allocator>
     Array<T, AllocType2> Clone( AllocType2* allocator = nullptr ) const
@@ -282,6 +296,22 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 
 /////     BUCKET ARRAY     /////
 
+// TODO There's two conflicting views on this datatype rn:
+// - One would be that we want to keep it fast (both to iterate and to compact into an array), so we want to keep buckets compacted
+//   at all times, where any item removed is swapped with the last one (or subsequent items are moved down) so that we can iterate
+//   each bucket fast with just the pointer to the start of the bucket and its count.
+// - The second view is that this is a datatype used mainly for storage, and so we want items to keep a stable address, and be able
+//   to return an Idx/Handle to them. For that we'd need to keep items in place always, and keep something like an occupancy bitfield.
+//
+// Now, Part Pools in KoM have this same exact duality, and I think the concept of a roster used there can help, but used in the
+// opposite sense it's currently being used there.. Instead of the roster being a way to iterate consecutively even in the presence
+// of gaps in the pool, we'd much rather have the buckets be consecutive always (option 1) and use the roster as the thing that
+// a Handle points to (for option 2).
+//
+// The smart thing to do is probably separate these two objectives in two separate datatypes: BucketArray tries to be as simple as
+// possible and just compacts its items down inside the buckets, while PagedPool is composed of a BucketArray plus a roster that it
+// uses to hand out Handles to any added items (complete with generation numbers etc.)
+
 template <typename T, typename AllocType = Allocator>
 struct BucketArray
 {
@@ -324,6 +354,8 @@ struct BucketArray
             FREE( allocator, data, memParams );
         }
 
+        bool Empty() const { return count == 0; }
+
         void Clear()
         {
             count = 0;
@@ -346,7 +378,7 @@ struct BucketArray
         bool IsValid() const { return base && index >= 0 && index < base->count; }
         explicit operator bool() const { return IsValid(); }
 
-        operator V() const { ASSERT( IsValid() ); return base->data[index]; }
+        operator   V() const { ASSERT( IsValid() ); return base->data[index]; }
         V operator *() const { return (V)*this; }
 
         bool operator ==( IdxBase<V, B> const& other ) const { return base == other.base && index == other.index; }
@@ -364,8 +396,8 @@ struct BucketArray
             }
         }
 
-        IdxBase& operator ++() { Next(); return *this; }
-        IdxBase operator ++( int ) { IdxBase result(*this); Next(); return result; }
+        IdxBase& operator ++()      { Next(); return *this; }
+        IdxBase  operator ++( int ) { IdxBase result(*this); Next(); return result; }
 
         void Prev()
         {
@@ -395,7 +427,9 @@ struct BucketArray
     i32 count;
 
 
+#if 0
     static const BucketArray<T> Empty;
+#endif
 
     BucketArray()
         : last( nullptr )
@@ -447,12 +481,21 @@ struct BucketArray
     BucketArray( const BucketArray& ) = delete;
     BucketArray& operator =( const BucketArray& ) = delete;
 
-    Idx         First()          { return { &first, 0 }; }
-    ConstIdx    First() const    { return { &first, 0 }; }
-    Idx         Last()           { return { last, last->count - 1 }; }
-    ConstIdx    Last()  const    { return { last, last->count - 1 }; }
-    Idx         End()            { return { last, last->count }; }
-    ConstIdx    End()   const    { return { last, last->count }; }
+    bool        Empty() const { return count == 0; }
+
+    Idx         begin()       { return { &first, 0 }; }
+    ConstIdx    begin() const { return { &first, 0 }; }
+    Idx         end()         { return { last, last->count }; }
+    ConstIdx    end()   const { return { last, last->count }; }
+
+    Idx         Begin()       { return { &first, 0 }; }
+    ConstIdx    Begin() const { return { &first, 0 }; }
+    Idx         End()         { return { last, last->count }; }
+    ConstIdx    End()   const { return { last, last->count }; }
+    Idx         First()       { return { &first, 0 }; }
+    ConstIdx    First() const { return { &first, 0 }; }
+    Idx         Last()        { return { last, last->count - 1 }; }
+    ConstIdx    Last()  const { return { last, last->count - 1 }; }
 
     T& operator[]( const Idx& idx ) { ASSERT( idx.IsValid() ); return (T&)idx; }
     const T& operator[]( const ConstIdx& idx ) const { ASSERT( idx.IsValid() ); return (T const&)idx; }
@@ -512,6 +555,7 @@ struct BucketArray
     }
 
     // TODO Test
+    // FIXME This is totally incompatible with the Idx idea
     void Remove( const Idx& index, T* itemOut = nullptr )
     {
         ASSERT( index.IsValid() );
@@ -544,8 +588,6 @@ struct BucketArray
 
         count--;
     }
-
-    // TODO RemoveOrdered() moves every item after forward one slot (until end of the bucket)
 
     T Pop()
     {
@@ -770,8 +812,10 @@ private:
     }
 };
 
+#if 0
 template <typename T, typename AllocType>
 const BucketArray<T, AllocType> BucketArray<T, AllocType>::Empty = {};
+#endif
 
 
 /////     HASHTABLE     /////
