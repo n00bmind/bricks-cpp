@@ -1,5 +1,7 @@
 #include "ca_cert.h"
 
+#define HTTP_PRINT_CONTENTS 1
+
 // SPEC: https://datatracker.ietf.org/doc/html/rfc2616
 
 namespace Http
@@ -317,7 +319,7 @@ namespace Http
             sb.AppendFormat( "%s", bodyData.CStr() );
 
         String result = sb.ToStringTmp();
-#if 1
+#if HTTP_PRINT_CONTENTS
         printf("--- REQ:\n%s---\n", result.CStr() );
 #endif
 
@@ -437,6 +439,10 @@ namespace Http
     {
         // Don't count terminator
         String responseString( (char const*)response->rawData.data, response->rawData.count - 1 );
+#if HTTP_PRINT_CONTENTS
+        printf("--- RSP:\n%s---\n", responseString.CStr() );
+#endif
+
         while( String line = responseString.ConsumeLine() )
         {
             if( line.StartsWith( "\r\n" ) )
@@ -474,6 +480,10 @@ namespace Http
                 }
                 else
                 {
+                    // Save a ref so we can re-parse them if the user wants the headers at some point
+                    if( !response->headers )
+                        response->headers = String::Ref( responseString );
+
                     // Parse headers
                     // TODO Fill up relevant info in the Response
 
@@ -491,8 +501,7 @@ namespace Http
                         continue;
                     }
 
-                    Header* h = response->headers.PushEmpty( false );
-                    *h = { name, std::move( word ) };
+                    Header h = { name, std::move( word ) };
                 }
             }
         }
@@ -566,7 +575,7 @@ namespace Http
             int totalSize = 0;
             for( Array<u8> const& c : *readChunks )
                 totalSize += c.count;
-            INIT( response->rawData )( totalSize );
+            INIT( response->rawData )( totalSize + 1 );
 
             for( Array<u8> const& c : *readChunks )
                 response->rawData.Append( c );

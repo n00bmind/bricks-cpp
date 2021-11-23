@@ -387,9 +387,10 @@ struct BucketArray
 
         void Next()
         {
-            if( index < base->count - 1 )
+            if( index < base->count )
                 index++;
-            else
+            // If there's no next bucket, stay at end()
+            if( index == base->count && base->next )
             {
                 base = base->next;
                 index = 0;
@@ -403,10 +404,11 @@ struct BucketArray
         {
             if( index > 0 )
                 index--;
-            else
+            // If there's no previous bucket, stay at begin()
+            if( index == 0 && base->prev )
             {
                 base = base->prev;
-                index = base ? base->count - 1 : 0;
+                index = base->count - 1;
             }
         }
 

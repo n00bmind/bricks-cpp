@@ -366,6 +366,16 @@ public:
     }
 
 
+    static String Ref( char const* src, int len = 0 )
+    {
+        String result( src, len );
+        return result;
+    }
+    static String Ref( String const& other )
+    {
+        return Ref( other.data, other.length );
+    }
+
     static String Clone( char const* src, int len = 0 )
     {
         String result;
