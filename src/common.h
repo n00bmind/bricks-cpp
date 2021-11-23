@@ -450,3 +450,10 @@ struct UNIQUE(Deferred)                                             \
 };                                                                  \
 UNIQUE(Deferred) UNIQUE(_deferred_) { UNIQUE(_deferred_func_) };
 
+
+/////     CALLABLE    /////
+// TODO Create a wrapper similar in spirit to Allocator + Will's Functors
+// The wrapper just calls to operator() and the internal implementations are just objects with a byte array of a maximum size
+// to store their "captures" (which are specified in their construction, each type decides whether by ref or value, etc)
+// https://stackoverflow.com/questions/25985248/speed-of-bound-lambda-via-stdfunction-vs-operator-of-functor-struct
+// https://devblogs.microsoft.com/oldnewthing/20200515-00/?p=103755

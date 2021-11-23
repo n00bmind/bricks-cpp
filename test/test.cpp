@@ -1246,12 +1246,23 @@ protected:
 
 TEST_F( HttpTest, Get )
 {
+    bool done = false;
     auto callback = []( const Http::Response& response, void* userdata  )
     {
-        // TODO 
+        bool* done = (bool*)userdata;
+        *done = true;
+
+        ASSERT_EQ( response.statusCode, 200 );
     };
-    bool ret = Http::Get( "https://httpbin.org/get?message=https_client", callback );
-    ASSERT_EQ( ret, true );
+
+    bool ret = Http::Get( "https://httpbin.org/get?message=https_client", callback, &done );
+    ASSERT_TRUE( ret );
+
+#if 0
+    f32 start = Clock::AppTime();
+    while( !done && Clock::AppTime() - start < 10.f )
+        ; // Wait
+#endif
 }
 
 // Older Https class
@@ -1259,41 +1270,6 @@ TEST_F( HttpTest, Get )
 #if 0
 #include "https.h"
 #include "https.cpp"
-
-#ifdef _WIN32
-class HttpsTest : public testing::Test
-{
-    protected:
-        // Per-test-suite set-up.
-        // Called before the first test in this test suite.
-        // Can be omitted if not needed.
-        static void SetUpTestCase()
-        {
-            WSADATA wsaData;
-            int iResult;
-
-            // Initialize Winsock
-            iResult = WSAStartup(MAKEWORD(2,2), &wsaData);
-            ASSERT_EQ( iResult, 0 ) << "WSAStartup failed";
-        }
-
-        // Per-test-suite tear-down.
-        // Called after the last test in this test suite.
-        // Can be omitted if not needed.
-        static void TearDownTestCase()
-        {
-            int ret = WSACleanup();
-            ASSERT_EQ(0, ret);
-        }
-
-        // Per-test setup/teardown
-        virtual void SetUp()
-        { }
-        virtual void TearDown()
-        { }
-};
-#endif
-
 
 TEST_F( HttpsTest, GetPost )
 {

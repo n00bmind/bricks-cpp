@@ -22,10 +22,11 @@ namespace Http
         String headers;
         Buffer<u8> body;
         char const* reason;
-        int statusCode;
+        i32 statusCode;
         // TODO If this is not found in the response data.. what should the default be?
         bool close = true;
-        bool done;
+        // TODO Turn this into an enum/string probably?
+        bool errored;
     };
 
     typedef void(*Callback)( const Response& response, void* userdata );

@@ -40,7 +40,9 @@ struct Array
     MemoryParams memParams;
 
 
+#if 0
     static const Array<T, AllocType> Empty;
+#endif
 
     Array()
         : data( nullptr )
@@ -83,15 +85,17 @@ struct Array
     }
 
 
-    T*       begin()         { return data; }
-    const T* begin() const   { return data; }
-    T*       end()           { return data + count; }
-    const T* end() const     { return data + count; }
+    T*          begin()         { return data; }
+    const T*    begin() const   { return data; }
+    T*          end()           { return data + count; }
+    const T*    end() const     { return data + count; }
 
-    T&       First()         { ASSERT( count > 0 ); return data[0]; }
-    T const& First() const   { ASSERT( count > 0 ); return data[0]; }
-    T&       Last()          { ASSERT( count > 0 ); return data[count - 1]; }
-    T const& Last() const    { ASSERT( count > 0 ); return data[count - 1]; }
+    T&          First()         { ASSERT( count > 0 ); return data[0]; }
+    T const&    First() const   { ASSERT( count > 0 ); return data[0]; }
+    T&          Last()          { ASSERT( count > 0 ); return data[count - 1]; }
+    T const&    Last() const    { ASSERT( count > 0 ); return data[count - 1]; }
+
+    bool        Empty() const   { return count == 0; }
 
     template <typename AllocType2 = Allocator>
     bool operator ==( Array<T, AllocType2> const& other ) const
@@ -290,8 +294,10 @@ struct Array
     }
 };
 
+#if 0
 template <typename T, typename AllocType>
 const Array<T, AllocType> Array<T, AllocType>::Empty = {};
+#endif
 
 
 /////     BUCKET ARRAY     /////
