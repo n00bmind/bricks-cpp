@@ -131,6 +131,33 @@ namespace Win32
     }
 
 
+    internal DWORD WINAPI WorkerThreadProc( LPVOID lpParam )
+    {
+        Platform::ThreadFunc* func = (Platform::ThreadFunc*)lpParam;
+        // TODO Pass userdata
+        return (DWORD)func( nullptr );
+    }
+
+    PLATFORM_CREATE_THREAD(CreateThread)
+    {
+        DWORD threadId;
+        HANDLE handle = ::CreateThread( 0, MEGABYTES(1),
+                                        WorkerThreadProc, (LPVOID)threadFunc,
+                                        0, &threadId );
+        return (Platform::ThreadHandle)handle;
+    }
+
+    PLATFORM_JOIN_THREAD(JoinThread)
+    {
+        WaitForSingleObject( handle, INFINITE );
+
+        DWORD exitCode;
+        GetExitCodeThread( handle, &exitCode );
+        CloseHandle( handle );
+
+        return (int)exitCode;
+    }
+
     PLATFORM_CREATE_SEMAPHORE(CreateSemaphore)
     {
         HANDLE h = ::CreateSemaphore( NULL, initialCount, MAXLONG, NULL );

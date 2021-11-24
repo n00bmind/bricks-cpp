@@ -64,111 +64,126 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 struct Allocator;
 template <typename T, typename AllocType = Allocator> struct Array;
 
-#define PLATFORM_ALLOC(name) void* name( sz sizeBytes, u32 flags )
-typedef PLATFORM_ALLOC(PlatformAllocFunc);
-#define PLATFORM_FREE(name) void name( void* memoryBlock )
-typedef PLATFORM_FREE(PlatformFreeFunc);
-
-
 // Defined by the application
 struct Context;
 
-#define PLATFORM_PUSH_CONTEXT(name) void name( Context const& newContext )
-typedef PLATFORM_PUSH_CONTEXT(PlatformPushContextFunc);
-#define PLATFORM_POP_CONTEXT(name) void name()
-typedef PLATFORM_POP_CONTEXT(PlatformPopContextFunc);
+
+namespace Platform
+{
+
+#define PLATFORM_ALLOC(name)               void* name( sz sizeBytes, u32 flags )
+typedef PLATFORM_ALLOC(AllocFunc);
+#define PLATFORM_FREE(name)                void name( void* memoryBlock )
+typedef PLATFORM_FREE(FreeFunc);
+
+
+#define PLATFORM_PUSH_CONTEXT(name)        void name( Context const& newContext )
+typedef PLATFORM_PUSH_CONTEXT(PushContextFunc);
+#define PLATFORM_POP_CONTEXT(name)         void name()
+typedef PLATFORM_POP_CONTEXT(PopContextFunc);
 
 
 // TODO Do something better for paths
-#define PLATFORM_PATH_MAX 1024
+#define PLATFORM_PATH_MAX                  1024
 
-#define PLATFORM_GET_ABSOLUTE_PATH(name) bool name( char const* filename, char* outBuffer, sz outBufferLen )
-typedef PLATFORM_GET_ABSOLUTE_PATH(PlatformGetAbsolutePathFunc);
+#define PLATFORM_GET_ABSOLUTE_PATH(name)   bool name( char const* filename, char* outBuffer, sz outBufferLen )
+typedef PLATFORM_GET_ABSOLUTE_PATH(GetAbsolutePathFunc);
 // Returned buffer data must be null-terminated
-#define PLATFORM_READ_ENTIRE_FILE(name) Buffer<> name( char const* filename, Allocator* allocator )
-typedef PLATFORM_READ_ENTIRE_FILE(PlatformReadEntireFileFunc);
-#define PLATFORM_WRITE_ENTIRE_FILE(name) bool name( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
-typedef PLATFORM_WRITE_ENTIRE_FILE(PlatformWriteEntireFileFunc);
+#define PLATFORM_READ_ENTIRE_FILE(name)    Buffer<> name( char const* filename, Allocator* allocator )
+typedef PLATFORM_READ_ENTIRE_FILE(ReadEntireFileFunc);
+#define PLATFORM_WRITE_ENTIRE_FILE(name)   bool name( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
+typedef PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFileFunc);
 
+    
+    typedef void* ThreadHandle;
 
-#define PLATFORM_CREATE_SEMAPHORE(name) void* name( int initialCount )
-typedef PLATFORM_CREATE_SEMAPHORE(PlatformCreateSemaphoreFunc);
+#define PLATFORM_THREAD_FUNC(name)         int name( void* userdata )
+typedef PLATFORM_THREAD_FUNC(ThreadFunc);
+#define PLATFORM_CREATE_THREAD(name)       Platform::ThreadHandle name( char const* name, Platform::ThreadFunc* threadFunc, void* userdata )
+typedef PLATFORM_CREATE_THREAD(CreateThreadFunc);
+// Returns the thread's exit code
+#define PLATFORM_JOIN_THREAD(name)         int name( Platform::ThreadHandle handle )
+typedef PLATFORM_JOIN_THREAD(JoinThreadFunc);
 
-#define PLATFORM_DESTROY_SEMAPHORE(name) void name( void* handle )
-typedef PLATFORM_DESTROY_SEMAPHORE(PlatformDestroySemaphoreFunc);
-
-#define PLATFORM_WAIT_SEMAPHORE(name) void name( void* handle )
-typedef PLATFORM_WAIT_SEMAPHORE(PlatformWaitSemaphoreFunc);
-
-#define PLATFORM_SIGNAL_SEMAPHORE(name) void name( void* handle, int count )
-typedef PLATFORM_SIGNAL_SEMAPHORE(PlatformSignalSemaphoreFunc);
+#define PLATFORM_CREATE_SEMAPHORE(name)    void* name( int initialCount )
+typedef PLATFORM_CREATE_SEMAPHORE(CreateSemaphoreFunc);
+#define PLATFORM_DESTROY_SEMAPHORE(name)   void name( void* handle )
+typedef PLATFORM_DESTROY_SEMAPHORE(DestroySemaphoreFunc);
+#define PLATFORM_WAIT_SEMAPHORE(name)      void name( void* handle )
+typedef PLATFORM_WAIT_SEMAPHORE(WaitSemaphoreFunc);
+#define PLATFORM_SIGNAL_SEMAPHORE(name)    void name( void* handle, int count )
+typedef PLATFORM_SIGNAL_SEMAPHORE(SignalSemaphoreFunc);
 
 
 #define PLATFORM_CURRENT_TIME_MILLIS(name) f64 name()
-typedef PLATFORM_CURRENT_TIME_MILLIS(PlatformCurrentTimeMillisFunc);
+typedef PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillisFunc);
 
-#define PLATFORM_SHELL_EXECUTE(name) int name( char const* cmdLine )
-typedef PLATFORM_SHELL_EXECUTE(PlatformShellExecuteFunc);
+#define PLATFORM_SHELL_EXECUTE(name)       int name( char const* cmdLine )
+typedef PLATFORM_SHELL_EXECUTE(ShellExecuteFunc);
 
-#define PLATFORM_PRINT(name) void name( const char *fmt, ... )
-typedef PLATFORM_PRINT(PlatformPrintFunc);
-#define PLATFORM_PRINT_VA(name) void name( const char *fmt, va_list args )
-typedef PLATFORM_PRINT_VA(PlatformPrintVAFunc);
+#define PLATFORM_PRINT(name)               void name( const char *fmt, ... )
+typedef PLATFORM_PRINT(PrintFunc);
+#define PLATFORM_PRINT_VA(name)            void name( const char *fmt, va_list args )
+typedef PLATFORM_PRINT_VA(PrintVAFunc);
+
+} // namespace Platform
 
 
 // TODO Shouldn't this be defined by the application really?
 struct PlatformAPI
 {
     // Memory
-    PlatformAllocFunc*             Alloc;
-    PlatformFreeFunc*              Free;
+    Platform::AllocFunc*                        Alloc;
+    Platform::FreeFunc*                         Free;
 
     // Context
-    PlatformPushContextFunc*       PushContext;
-    PlatformPopContextFunc*        PopContext;
+    Platform::PushContextFunc*                  PushContext;
+    Platform::PopContextFunc*                   PopContext;
 
     // Filesystem
 #if 0
-    PlatformGetAbsolutePathFunc*   GetAbsolutePath;
+    Platform::GetAbsolutePathFunc*              GetAbsolutePath;
 #endif
 
-    PlatformReadEntireFileFunc*    ReadEntireFile;
-    PlatformWriteEntireFileFunc*   WriteEntireFile;
+    Platform::ReadEntireFileFunc*               ReadEntireFile;
+    Platform::WriteEntireFileFunc*              WriteEntireFile;
 
     // Threading
-    PlatformCreateSemaphoreFunc*   CreateSemaphore;
-    PlatformDestroySemaphoreFunc*  DestroySemaphore;
-    PlatformWaitSemaphoreFunc*     WaitSemaphore;
-    PlatformSignalSemaphoreFunc*   SignalSemaphore;
+    Platform::CreateThreadFunc*                 CreateThread;
+    Platform::JoinThreadFunc*                   JoinThread;
+    Platform::CreateSemaphoreFunc*              CreateSemaphore;
+    Platform::DestroySemaphoreFunc*             DestroySemaphore;
+    Platform::WaitSemaphoreFunc*                WaitSemaphore;
+    Platform::SignalSemaphoreFunc*              SignalSemaphore;
 
     // Misc
-    PlatformCurrentTimeMillisFunc* CurrentTimeMillis;
-    PlatformShellExecuteFunc*      ShellExecute;
+    Platform::CurrentTimeMillisFunc*            CurrentTimeMillis;
+    Platform::ShellExecuteFunc*                 ShellExecute;
 
-    PlatformPrintFunc*             Print;
-    PlatformPrintFunc*             Error;
-    PlatformPrintVAFunc*           PrintVA;
-    PlatformPrintVAFunc*           ErrorVA;
+    Platform::PrintFunc*                        Print;
+    Platform::PrintFunc*                        Error;
+    Platform::PrintVAFunc*                      PrintVA;
+    Platform::PrintVAFunc*                      ErrorVA;
 
 #if 0
 #if !CONFIG_RELEASE
-    DebugPlatformFreeFileMemoryFunc* DEBUGFreeFileMemory;
-    DebugPlatformListAllAssetsFunc* DEBUGListAllAssets;
-    DebugPlatformJoinPathsFunc* DEBUGJoinPaths;
-    DebugPlatformGetParentPathFunc* DEBUGGetParentPath;
+    Platform::DebugFreeFileMemoryFunc*          DEBUGFreeFileMemory;
+    Platform::DebugListAllAssetsFunc*           DEBUGListAllAssets;
+    Platform::DebugJoinPathsFunc*               DEBUGJoinPaths;
+    Platform::DebugGetParentPathFunc*           DEBUGGetParentPath;
 
     bool DEBUGquit;
 #endif
 
-    PlatformAddNewJobFunc* AddNewJob;
-    PlatformCompleteAllJobsFunc* CompleteAllJobs;
-    PlatformJobQueue* hiPriorityQueue;
-    //PlatformJobQueue* loPriorityQueue;
+    Platform::AddNewJobFunc*                    AddNewJob;
+    Platform::CompleteAllJobsFunc*              CompleteAllJobs;
+    Platform::JobQueue*                         hiPriorityQueue;
+    //JobQueue* loPriorityQueue;
     // NOTE Includes the main thread! (0)
     i32 coreThreadsCount;
 
-    PlatformAllocateOrUpdateTextureFunc* AllocateOrUpdateTexture;
-    PlatformDeallocateTextureFunc* DeallocateTexture;
+    Platform::AllocateOrUpdateTextureFunc*      AllocateOrUpdateTexture;
+    Platform::DeallocateTextureFunc*            DeallocateTexture;
 #endif
 };
 extern PlatformAPI globalPlatform;
