@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <mutex>
 
 #define MBEDTLS_ALLOW_PRIVATE_ACCESS    // For accessing 'fd'
 #include "mbedtls/net_sockets.h"
@@ -27,6 +28,7 @@
 #include "maths.h"
 #include "platform.h"
 #include "memory.h"
+#include "threading.h"
 #include "datatypes.h"
 #include "strings.h"
 
@@ -1225,8 +1227,6 @@ protected:
     // Can be omitted if not needed.
     static void SetUpTestCase()
     {
-        bool result = Http::Init();
-        ASSERT_EQ( result, true ) << "Http::Init failed";
     }
 
     // Per-test-suite tear-down.
@@ -1234,7 +1234,6 @@ protected:
     // Can be omitted if not needed.
     static void TearDownTestCase()
     {
-        Http::Shutdown();
     }
 
     // Per-test setup/teardown
@@ -1376,22 +1375,26 @@ TEST_F( HttpsTest, ChunkedEncoding )
 
 GTEST_API_ int main(int argc, char **argv)
 {
+#if 1
     SetUnhandledExceptionFilter( Win32::ExceptionHandler );
-
-    // Init global platform
-    globalPlatform = {};
-    globalPlatform.Alloc = Win32::Alloc;
-    globalPlatform.Free = Win32::Free;
-#if 0
-    globalPlatform.PushContext = PushContext;
-    globalPlatform.PopContext = PopContext;
 #endif
-    globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
-    globalPlatform.Print = Win32::Print;
-    globalPlatform.Error = Win32::Error;
 
+    InitGlobalPlatform();
+
+    struct
+    {
+        Http::State http;
+
+    } globalState = {};
+
+
+    bool result = Http::Init( &globalState.http );
+    ASSERT_EQ( result, true ) << "Http::Init failed";
 
     testing::InitGoogleTest(&argc, argv);
-    return RUN_ALL_TESTS();
+    int testResult = RUN_ALL_TESTS();
+
+    Http::Shutdown( &globalState.http );
+    return testResult;
 }
 

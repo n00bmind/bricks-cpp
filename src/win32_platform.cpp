@@ -243,9 +243,16 @@ namespace Win32
         fprintf( stderr, "\n" );
     }
 
+    PLATFORM_PRINT_VA(PrintVA)
+    {
+        vfprintf( stdout, fmt, args );
+        fprintf( stdout, "\n" );
+    }
+
     PLATFORM_PRINT_VA(ErrorVA)
     {
         vfprintf( stderr, fmt, args );
+        fprintf( stderr, "\n" );
     }
 
     DWORD GetLastError( char* result_string = nullptr, sz result_string_len = 0 )
@@ -288,6 +295,7 @@ namespace Win32
     }
 
     // Leave at least one byte for the terminator
+    // TODO This is buggy! Check latest version in KoM
 #define APPEND_TO_BUFFER( fmt, ... ) { int msg_len = snprintf( buffer, ASSERT_SIZE( buffer_end - buffer - 1 ), fmt, ##__VA_ARGS__ ); buffer += msg_len; }
 
     void DumpCallstackToBuffer( char* buffer, sz buffer_length, int ignore_number_of_frames = 0 )
@@ -420,7 +428,7 @@ namespace Win32
         char callstack[16384];
         DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 8 );
 
-        Error( "UNHANDLED EXCEPTION\n" );
+        Error( "### UNHANDLED EXCEPTION ###\n" );
         Error( "%s", callstack );
 
         return EXCEPTION_EXECUTE_HANDLER;
@@ -447,3 +455,27 @@ ASSERT_HANDLER(DefaultAssertHandler)
 }
 
 
+void InitGlobalPlatform()
+{
+    globalPlatform = {};
+    globalPlatform.Alloc = Win32::Alloc;
+    globalPlatform.Free = Win32::Free;
+#if 0
+    globalPlatform.PushContext = PushContext;
+    globalPlatform.PopContext = PopContext;
+#endif
+    globalPlatform.ReadEntireFile = Win32::ReadEntireFile;
+    globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
+    globalPlatform.CreateThread = Win32::CreateThread;
+    globalPlatform.JoinThread = Win32::JoinThread;
+    globalPlatform.CreateSemaphore = Win32::CreateSemaphore;
+    globalPlatform.DestroySemaphore = Win32::DestroySemaphore;
+    globalPlatform.WaitSemaphore = Win32:: WaitSemaphore;
+    globalPlatform.SignalSemaphore = Win32::SignalSemaphore;
+    globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
+    globalPlatform.ShellExecute = Win32::ShellExecute;
+    globalPlatform.Print = Win32::Print;
+    globalPlatform.Error = Win32::Error;
+    globalPlatform.PrintVA = Win32::PrintVA;
+    globalPlatform.ErrorVA = Win32::ErrorVA;
+}

@@ -64,8 +64,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 struct Allocator;
 template <typename T, typename AllocType = Allocator> struct Array;
 
-// Defined by the application
+// NOTE These must be defined by the application
 struct Context;
+//struct AppState;
 
 
 namespace Platform

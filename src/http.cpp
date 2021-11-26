@@ -6,12 +6,21 @@
 
 namespace Http
 {
-    static bool s_initialized = false;
-
-
-    bool Init()
+    struct State
     {
-        if( s_initialized )
+        Platform::ThreadHandle thread;
+        bool initialized;
+    };
+
+
+    PLATFORM_THREAD_FUNC(ThreadMain)
+    {
+        return 0;
+    }
+
+    bool Init( State* state )
+    {
+        if( state->initialized )
             return true;
 
         // TODO Move to the platform layer
@@ -21,13 +30,16 @@ namespace Http
         ASSERT( ret == 0 );
 #endif
 
-        s_initialized = true;
+        // Create http thread
+        state->thread = Core::CreateThread( "HttpThread", ThreadMain );
+        state->initialized = true;
+
         return true;
     }
 
-    void Shutdown()
+    void Shutdown( State* state )
     {
-        if( !s_initialized )
+        if( !state->initialized )
             return;
 
         // TODO Move to the platform layer
@@ -36,7 +48,7 @@ namespace Http
         ASSERT( ret == 0 );
 #endif
 
-        s_initialized = false;
+        state->initialized = false;
     }
 
     
@@ -86,11 +98,13 @@ namespace Http
 
     static bool Connect( char const* url, Request* request, u32 flags = 0 )
     {
+#if 0
         if( !s_initialized )
         {
             if( !Init() )
                 return false;
         }
+#endif
 
         *request = {};
 

@@ -4,6 +4,16 @@
 // implement the most useful primitives using the same underlying platform semaphore primitive
 
 
+namespace Core
+{
+    inline Platform::ThreadHandle CreateThread( char const* name, Platform::ThreadFunc threadFunc, void* userdata = nullptr )
+    {
+        return globalPlatform.CreateThread( name, threadFunc, userdata );
+    }
+} // namespace Core
+
+
+
 /////     SEMAPHORE     /////
 
 struct PlatformSemaphore
