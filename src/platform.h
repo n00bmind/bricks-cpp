@@ -61,70 +61,70 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
+struct Context;
 struct Allocator;
 template <typename T, typename AllocType = Allocator> struct Array;
 
-// NOTE These must be defined by the application
-struct Context;
+// NOTE This must be defined by the application
 //struct AppState;
 
 
 namespace Platform
 {
 
-#define PLATFORM_ALLOC(name)               void* name( sz sizeBytes, u32 flags )
+#define PLATFORM_ALLOC(x)               void* x( sz sizeBytes, u32 flags )
 typedef PLATFORM_ALLOC(AllocFunc);
-#define PLATFORM_FREE(name)                void name( void* memoryBlock )
+#define PLATFORM_FREE(x)                void x( void* memoryBlock )
 typedef PLATFORM_FREE(FreeFunc);
 
 
-#define PLATFORM_PUSH_CONTEXT(name)        void name( Context const& newContext )
+#define PLATFORM_PUSH_CONTEXT(x)        void x( Context const& newContext )
 typedef PLATFORM_PUSH_CONTEXT(PushContextFunc);
-#define PLATFORM_POP_CONTEXT(name)         void name()
+#define PLATFORM_POP_CONTEXT(x)         void x()
 typedef PLATFORM_POP_CONTEXT(PopContextFunc);
 
 
 // TODO Do something better for paths
 #define PLATFORM_PATH_MAX                  1024
 
-#define PLATFORM_GET_ABSOLUTE_PATH(name)   bool name( char const* filename, char* outBuffer, sz outBufferLen )
+#define PLATFORM_GET_ABSOLUTE_PATH(x)   bool x( char const* filename, char* outBuffer, sz outBufferLen )
 typedef PLATFORM_GET_ABSOLUTE_PATH(GetAbsolutePathFunc);
 // Returned buffer data must be null-terminated
-#define PLATFORM_READ_ENTIRE_FILE(name)    Buffer<> name( char const* filename, Allocator* allocator )
+#define PLATFORM_READ_ENTIRE_FILE(x)    Buffer<> x( char const* filename, Allocator* allocator )
 typedef PLATFORM_READ_ENTIRE_FILE(ReadEntireFileFunc);
-#define PLATFORM_WRITE_ENTIRE_FILE(name)   bool name( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
+#define PLATFORM_WRITE_ENTIRE_FILE(x)   bool x( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
 typedef PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFileFunc);
 
     
     typedef void* ThreadHandle;
 
-#define PLATFORM_THREAD_FUNC(name)         int name( void* userdata )
+#define PLATFORM_THREAD_FUNC(x)         int x( void* userdata )
 typedef PLATFORM_THREAD_FUNC(ThreadFunc);
-#define PLATFORM_CREATE_THREAD(name)       Platform::ThreadHandle name( char const* name, Platform::ThreadFunc* threadFunc, void* userdata )
+#define PLATFORM_CREATE_THREAD(x)       Platform::ThreadHandle x( char const* name, Platform::ThreadFunc* threadFunc, void* userdata )
 typedef PLATFORM_CREATE_THREAD(CreateThreadFunc);
 // Returns the thread's exit code
-#define PLATFORM_JOIN_THREAD(name)         int name( Platform::ThreadHandle handle )
+#define PLATFORM_JOIN_THREAD(x)         int x( Platform::ThreadHandle handle )
 typedef PLATFORM_JOIN_THREAD(JoinThreadFunc);
 
-#define PLATFORM_CREATE_SEMAPHORE(name)    void* name( int initialCount )
+#define PLATFORM_CREATE_SEMAPHORE(x)    void* x( int initialCount )
 typedef PLATFORM_CREATE_SEMAPHORE(CreateSemaphoreFunc);
-#define PLATFORM_DESTROY_SEMAPHORE(name)   void name( void* handle )
+#define PLATFORM_DESTROY_SEMAPHORE(x)   void x( void* handle )
 typedef PLATFORM_DESTROY_SEMAPHORE(DestroySemaphoreFunc);
-#define PLATFORM_WAIT_SEMAPHORE(name)      void name( void* handle )
+#define PLATFORM_WAIT_SEMAPHORE(x)      void x( void* handle )
 typedef PLATFORM_WAIT_SEMAPHORE(WaitSemaphoreFunc);
-#define PLATFORM_SIGNAL_SEMAPHORE(name)    void name( void* handle, int count )
+#define PLATFORM_SIGNAL_SEMAPHORE(x)    void x( void* handle, int count )
 typedef PLATFORM_SIGNAL_SEMAPHORE(SignalSemaphoreFunc);
 
 
-#define PLATFORM_CURRENT_TIME_MILLIS(name) f64 name()
+#define PLATFORM_CURRENT_TIME_MILLIS(x) f64 x()
 typedef PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillisFunc);
 
-#define PLATFORM_SHELL_EXECUTE(name)       int name( char const* cmdLine )
+#define PLATFORM_SHELL_EXECUTE(x)       int x( char const* cmdLine )
 typedef PLATFORM_SHELL_EXECUTE(ShellExecuteFunc);
 
-#define PLATFORM_PRINT(name)               void name( const char *fmt, ... )
+#define PLATFORM_PRINT(x)               void x( const char *fmt, ... )
 typedef PLATFORM_PRINT(PrintFunc);
-#define PLATFORM_PRINT_VA(name)            void name( const char *fmt, va_list args )
+#define PLATFORM_PRINT_VA(x)            void x( const char *fmt, va_list args )
 typedef PLATFORM_PRINT_VA(PrintVAFunc);
 
 } // namespace Platform

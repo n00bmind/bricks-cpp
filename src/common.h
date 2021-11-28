@@ -104,6 +104,7 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define __CONCAT(x, y) x ## y
 #define CONCAT(x, y) __CONCAT(x, y)
 
+// NOTE May cause trouble for stuff used at global scope!
 #define UNIQUE(x) CONCAT(x, __LINE__)
 
 
@@ -134,6 +135,10 @@ typedef float f32;
 typedef double f64;
 
 typedef int64_t sz;
+
+
+typedef std::atomic<bool> atomic_bool;
+
 
 #define I8MIN INT8_MIN
 #define I8MAX INT8_MAX

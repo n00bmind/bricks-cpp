@@ -10,6 +10,11 @@ namespace Core
     {
         return globalPlatform.CreateThread( name, threadFunc, userdata );
     }
+
+    inline int JoinThread( Platform::ThreadHandle handle )
+    {
+        return globalPlatform.JoinThread( handle );
+    }
 } // namespace Core
 
 

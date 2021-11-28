@@ -36,6 +36,24 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 namespace Win32
 {
+    struct ThreadInfo
+    {
+        char const* name;
+        wchar_t* nameOwned;
+        Platform::ThreadHandle handle;
+        Platform::ThreadFunc* func;
+        void* userData;
+        u32 id;
+    };
+
+    struct State
+    {
+        ARRAY(ThreadInfo, 16, liveThreads );
+    };
+    static State platform = {};
+
+
+
     PLATFORM_ALLOC(Alloc)
     {
         return VirtualAlloc( 0, (size_t)sizeBytes, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE );
@@ -133,22 +151,87 @@ namespace Win32
 
     internal DWORD WINAPI WorkerThreadProc( LPVOID lpParam )
     {
-        Platform::ThreadFunc* func = (Platform::ThreadFunc*)lpParam;
-        // TODO Pass userdata
-        return (DWORD)func( nullptr );
+        ThreadInfo* info = (ThreadInfo*)lpParam;
+
+        return (DWORD)info->func( info->userData );
+    }
+
+    internal void SetThreadName( ThreadInfo* info )
+    {
+        // Jump through hoops just to set the fucking name of the fucking thread
+        bool didWeActuallySetTheFuckingName = false;
+
+        HMODULE hKernelBase = GetModuleHandleA("KernelBase.dll");
+        if( hKernelBase )
+        {
+            typedef HRESULT (WINAPI *TSetThreadDescription)( HANDLE, PCWSTR );
+            auto setThreadDescription = (TSetThreadDescription)(void*)GetProcAddress( hKernelBase, "SetThreadDescription" );
+            if( setThreadDescription )
+            {
+                // Can't be bothered to find out the actual length first so yeah
+                constexpr int maxLenName = 64;
+                info->nameOwned = ALLOC_ARRAY( CTX_ALLOC, wchar_t, maxLenName );
+                int ret = MultiByteToWideChar( CP_UTF8, 0, info->name, -1, info->nameOwned, maxLenName );
+
+                if( ret > 0 )
+                {
+                    HRESULT result = setThreadDescription( info->handle, info->nameOwned );
+                    didWeActuallySetTheFuckingName = !FAILED( result );
+                }
+                else
+                    FREE( CTX_ALLOC, info->nameOwned );
+            }
+        }
+
+        if( !didWeActuallySetTheFuckingName )
+        {
+#pragma pack(push, 8)
+            struct ThreadName
+            {
+                DWORD  type;
+                LPCSTR name;
+                DWORD  id;
+                DWORD  flags;
+            };
+#pragma pack(pop)
+            ThreadName tn;
+            tn.type  = 0x1000;
+            tn.name  = info->name;
+            tn.id    = info->id;
+            tn.flags = 0;
+
+            __try
+            {
+                RaiseException( 0x406d1388, 0, sizeof(tn) / sizeof(ULONG_PTR), (ULONG_PTR*)&tn );
+            }
+            __except(EXCEPTION_EXECUTE_HANDLER)
+            { }
+        }
     }
 
     PLATFORM_CREATE_THREAD(CreateThread)
     {
-        DWORD threadId;
-        HANDLE handle = ::CreateThread( 0, MEGABYTES(1),
-                                        WorkerThreadProc, (LPVOID)threadFunc,
-                                        0, &threadId );
-        return (Platform::ThreadHandle)handle;
+        ThreadInfo* info = platform.liveThreads.PushEmpty();
+        info->name = name;
+        info->func = threadFunc;
+        info->userData = userdata;
+
+        info->handle = ::CreateThread( 0, MEGABYTES(1),
+                                       WorkerThreadProc, (LPVOID)info,
+                                       0, (LPDWORD)&info->id );
+
+        SetThreadName( info );
+        return (Platform::ThreadHandle)info->handle;
     }
 
     PLATFORM_JOIN_THREAD(JoinThread)
     {
+        ThreadInfo* info = platform.liveThreads.Find( [handle]( ThreadInfo const& i ) { return i.handle == handle; } );
+        if( info )
+            platform.liveThreads.Remove( info );
+        else
+            LOGW( /*Core,*/ "Thread with handle 0x%x not found!", handle );
+
         WaitForSingleObject( handle, INFINITE );
 
         DWORD exitCode;
@@ -455,6 +538,9 @@ ASSERT_HANDLER(DefaultAssertHandler)
 }
 
 
+MemoryArena globalPlatformArena;
+MemoryArena globalTmpArena;
+
 void InitGlobalPlatform()
 {
     globalPlatform = {};
@@ -478,4 +564,14 @@ void InitGlobalPlatform()
     globalPlatform.Error = Win32::Error;
     globalPlatform.PrintVA = Win32::PrintVA;
     globalPlatform.ErrorVA = Win32::ErrorVA;
+
+    InitArena( &globalPlatformArena );
+    InitArena( &globalTmpArena );
+    // Set up an initial context that the platform itself can use
+    Context platformContext =
+    {
+        Allocator::CreateFrom( &globalPlatformArena ),
+        Allocator::CreateFrom( &globalTmpArena ),
+    };
+    InitContextStack( platformContext );
 }

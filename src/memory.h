@@ -188,37 +188,10 @@ struct Context
 
 // NOTE TODO This is pretty weird to use in a non-unity build, as this pointer would get defined in each
 // translation unit that includes this, but I have no idea how to forward-declare a thread_local variable!?
-#if 0
-thread_local Context   globalContextStack[64];
-thread_local Context*  globalContextPtr;
-#endif
 thread_local Context** globalContext;
 #define CTX (**globalContext)
 #define CTX_ALLOC &CTX.allocator
 #define CTX_TMPALLOC &CTX.tmpAllocator
-
-#if 0
-inline void InitContextStack( Context const& baseContext )
-{
-    globalContextPtr  = globalContextStack;
-    *globalContextPtr = baseContext;
-    globalContext     = &globalContextPtr;
-}
-
-inline PLATFORM_PUSH_CONTEXT( PushContext )
-{
-    globalContextPtr++;
-    ASSERT( globalContextPtr < globalContextStack + ARRAYCOUNT(globalContextStack) );
-    *globalContextPtr = newContext;
-}
-
-inline PLATFORM_POP_CONTEXT( PopContext )
-{
-    if( globalContextPtr > globalContextStack )
-        globalContextPtr--;
-}
-#endif
-
 
 struct ScopedContext
 {

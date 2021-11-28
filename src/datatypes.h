@@ -64,14 +64,18 @@ struct Array
         data = ALLOC_ARRAY( allocator, T, capacity, memParams );
     }
 
-    // NOTE All arrays initialized from a buffer start with count equal to the full capacity
-    Array( T* buffer, i32 bufferCount )
+    Array( T* buffer, i32 count_, i32 capacity_ )
         : data( buffer )
-        , count( bufferCount )
-        , capacity( bufferCount )
+        , count( count_ )
+        , capacity( capacity_ )
     {
-        ASSERT( buffer && bufferCount > 0 );
+        ASSERT( data && count >= 0 && capacity > 0 && count <= capacity );
     }
+
+    // NOTE Arrays initialized from a buffer have count set equal to their capacity by default
+    Array( T* buffer, i32 bufferLen )
+        : Array( buffer, bufferLen, bufferLen )
+    {}
 
     ~Array()
     {
@@ -241,11 +245,11 @@ struct Array
         return slot != nullptr;
     }
 
-    void Append( T const* buffer, int bufferCount )
+    void Append( T const* buffer, int bufferLen )
     {
-        ASSERT( Available() >= bufferCount );
+        ASSERT( Available() >= bufferLen );
 
-        for( int i = 0; i < bufferCount; ++i )
+        for( int i = 0; i < bufferLen; ++i )
             Push( buffer[i] );
     }
 
@@ -293,6 +297,10 @@ struct Array
         PCOPY( buffer, data, count_ * SIZEOF(T) );
     }
 };
+
+#define ARRAY( T, len, name ) \
+        T UNIQUE(__array_storage)[len] = {}; \
+        Array<T> name = { UNIQUE(__array_storage), 0, len };
 
 #if 0
 template <typename T, typename AllocType>
@@ -730,14 +738,14 @@ struct BucketArray
     }
 
 
-    void Append( T const* buffer, int bufferCount )
+    void Append( T const* buffer, int bufferLen )
     {
         int totalCopied = 0;
         Bucket*& bucket = last;
 
-        while( totalCopied < bufferCount )
+        while( totalCopied < bufferLen )
         {
-            int remaining = bufferCount - totalCopied;
+            int remaining = bufferLen - totalCopied;
             int available = bucket->capacity - bucket->count;
 
             int copied = Min( remaining, available );
@@ -758,9 +766,9 @@ struct BucketArray
         Append( array.data, array.count );
     }
 
-    void CopyTo( T* buffer, sz bufferCount ) const
+    void CopyTo( T* buffer, sz bufferLen ) const
     {
-        ASSERT( count <= bufferCount );
+        ASSERT( count <= bufferLen );
 
         const Bucket* bucket = &first;
         while( bucket )

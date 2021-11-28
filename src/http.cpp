@@ -9,12 +9,24 @@ namespace Http
     struct State
     {
         Platform::ThreadHandle thread;
+        atomic_bool threadRunning;
         bool initialized;
     };
 
 
     PLATFORM_THREAD_FUNC(ThreadMain)
     {
+        State* state = (State*)userdata;
+
+        printf( "### HTTP THREAD STARTED ###\n" );
+
+        state->threadRunning.store( true );
+        while( state->threadRunning.load() )
+        {
+
+        }
+        
+        printf( "### HTTP THREAD STOPPED ###\n" );
         return 0;
     }
 
@@ -31,7 +43,7 @@ namespace Http
 #endif
 
         // Create http thread
-        state->thread = Core::CreateThread( "HttpThread", ThreadMain );
+        state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );
         state->initialized = true;
 
         return true;
@@ -41,6 +53,9 @@ namespace Http
     {
         if( !state->initialized )
             return;
+
+        state->threadRunning.store( false );
+        Core::JoinThread( state->thread );
 
         // TODO Move to the platform layer
 #ifdef _WIN32

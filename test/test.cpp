@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <atomic>
 #include <mutex>
 
 #define MBEDTLS_ALLOW_PRIVATE_ACCESS    // For accessing 'fd'
@@ -1161,9 +1162,6 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 #endif
 
 
-MemoryArena globalPlatformArena;
-MemoryArena globalTmpArena;
-
 class DatatypesTest : public testing::Test
 {
 protected:
@@ -1172,15 +1170,6 @@ protected:
     // Can be omitted if not needed.
     static void SetUpTestCase()
     {
-        InitArena( &globalPlatformArena );
-        InitArena( &globalTmpArena );
-        // Set up an initial context that the platform itself can use
-        Context platformContext =
-        {
-            Allocator::CreateFrom( &globalPlatformArena ),
-            Allocator::CreateFrom( &globalTmpArena ),
-        };
-        InitContextStack( platformContext );
     }
 
     // Per-test-suite tear-down.
