@@ -50,9 +50,9 @@ PlatformAPI globalPlatform;
 #pragma warning( disable : 5219 )
 
 // Disable httplib tests for now
+// TODO Incorporate some of these to the new lib's tests
 #if 0
 
-// TODO Fix all warnings
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include "httplib.h"
 
@@ -1202,7 +1202,35 @@ TEST_F( DatatypesTest, HashtablePutGet )
     for( int i = 1; i < N; ++i )
         table.Put( (void*)i, (void*)(i + 1) );
     for( int i = 1; i < N; ++i )
-        ASSERT( *table.Get( (void*)i ) == (void*)(i + 1) );
+        ASSERT_EQ( *table.Get( (void*)i ), (void*)(i + 1) );
+}
+
+TEST_F( DatatypesTest, RingBufferBasics )
+{
+    RingBuffer<int> buffer( 128 );
+    ASSERT_EQ( buffer.count, 0 );
+
+    for( int i = 0; i < buffer.Capacity(); ++i )
+        buffer.Push( i );
+    ASSERT_EQ( buffer.count, buffer.Capacity() );
+
+    for( int i = 0; i < buffer.Capacity(); ++i )
+    {
+        int x = buffer.Pop();
+        ASSERT_EQ( x, i );
+    }
+    ASSERT_EQ( buffer.count, 0 );
+
+    for( int i = 0; i < buffer.Capacity(); ++i )
+        buffer.Push( i );
+    ASSERT_EQ( buffer.count, buffer.Capacity() );
+
+    for( int i = 0; i < buffer.Capacity(); ++i )
+    {
+        int x = buffer.PopHead();
+        ASSERT_EQ( x, buffer.Capacity() - i - 1 );
+    }
+    ASSERT_EQ( buffer.count, 0 );
 }
 
 #include "http.h"

@@ -1196,8 +1196,9 @@ private:
 // Head and tail will wrap around when needed and can never overlap.
 // Can be iterated both from tail to head (oldest to newest) or the other way around.
 
-// TODO Make this thread-safe by masking the indices (instead of resetting them to 0), and using atomic increment
+// TODO Make a separate version SyncRingBuffer which is thread-safe by masking the indices (instead of resetting them to 0), and using atomic increment
 // We could then easily use this as a fixed-capacity thread-safe queue
+// TODO Make a separate Queue struct that can chain several of this (thread-safely) to create a generic growable queue.
 
 // TODO Look at the code inside #ifdef MEM_REPLACE_PLACEHOLDER in https://github.com/cmuratori/refterm/blob/main/refterm_example_source_buffer.c
 // for an example of how to speed up linear reads & writes that go beyond the end of the buffer,
@@ -1208,43 +1209,44 @@ struct RingBuffer
 {
     Array<T, AllocType> buffer;
     i32 onePastHeadIndex;       // Points to next slot to write
-    i32 tailIndex;
+    i32 count;
+
+#if 0
+    union
+    {
+        struct
+        {
+            i32 onePastHeadIndex;
+            i32 count;
+        };
+        i64 _indexData;
+    };
+#endif
 
 
     RingBuffer()
-    {}
+    {
+#if 0
+        static_assert( offsetof(RingBuffer, onePastHeadIndex) == offsetof(RingBuffer, _indexData), "Bad layout" );
+        static_assert( offsetof(RingBuffer, count) == offsetof(RingBuffer, onePastHeadIndex) + 4, "Bad layout" );
+#endif
+    }
 
     RingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
         : buffer( capacity, allocator, params )
         , onePastHeadIndex( 0 )
-        , tailIndex( 0 )
+        , count( 0 )
     {
+        ASSERT( IsPowerOf2( capacity ) );
         buffer.ResizeToCapacity();
     }
 
-    template <typename AllocType2 = Allocator>
-    static RingBuffer FromArray( Array<T, AllocType2> const& a )
-    {
-        int itemCount = a.count;
-
-        RingBuffer result = {};
-        if( itemCount )
-        {
-            // Make space for one more at the end
-            result.buffer.Resize( itemCount + 1 );
-            result.buffer.CopyFrom( a );
-
-            result.onePastHeadIndex = itemCount;
-            result.tailIndex = 0;
-        }
-
-        return result;
-    }
+    int Capacity() const { return buffer.capacity; }
 
     void Clear()
     {
         onePastHeadIndex = 0;
-        tailIndex = 0;
+        count = 0;
     }
 
     void ClearToZero()
@@ -1255,20 +1257,13 @@ struct RingBuffer
 
     T* PushEmpty( bool clear = true )
     {
-        T* result = buffer.data + onePastHeadIndex++;
-
-        if( onePastHeadIndex == buffer.capacity )
-            onePastHeadIndex = 0;
-        if( onePastHeadIndex == tailIndex )
-        {
-            tailIndex++;
-            if( tailIndex == buffer.capacity )
-                tailIndex = 0;
-        }
+        T* result = buffer.data + onePastHeadIndex;
+        onePastHeadIndex = (onePastHeadIndex + 1) & (buffer.capacity - 1);
+        if( Available() )
+            count++;
 
         if( clear )
             PZERO( result, sizeof(T) );
-
         return result;
     }
 
@@ -1281,45 +1276,25 @@ struct RingBuffer
 
     T Pop()
     {
-        ASSERT( Count() > 0 );
-        int prevTailIndex = tailIndex;
-        if( tailIndex != onePastHeadIndex )
-        {
-            tailIndex++;
-            if( tailIndex == buffer.capacity )
-                tailIndex = 0;
-        }
+        ASSERT( count > 0 );
+        int tailIndex = TailIndex();
+        count--;
 
         return buffer.data[tailIndex];
     }
 
     T PopHead()
     {
-        ASSERT( Count() > 0 );
-        int headIndex = onePastHeadIndex;
-        if( tailIndex != onePastHeadIndex )
-        {
-            onePastHeadIndex--;
-            if( onePastHeadIndex < 0 )
-                onePastHeadIndex = buffer.capacity - 1;
-            headIndex = onePastHeadIndex;
-        }
+        ASSERT( count > 0 );
+        onePastHeadIndex = (onePastHeadIndex - 1) & (buffer.capacity - 1);
+        count--;
 
-        return buffer.data[headIndex];
-    }
-
-    int Count() const
-    {
-        int count = onePastHeadIndex - tailIndex;
-        if( count < 0 )
-            count += buffer.capacity;
-
-        return count;
+        return buffer.data[onePastHeadIndex];
     }
 
     bool Available() const
     {
-        return Count() < buffer.capacity - 1;
+        return count < buffer.capacity;
     }
 
     bool Contains( const T& item ) const
@@ -1327,22 +1302,38 @@ struct RingBuffer
         return buffer.Contains( item );
     }
 
-    T& FromHead( int offset = 0 )
+    T& Head( int offset = 0 )
     {
         ASSERT( offset >= 0, "Only positive offsets" );
-        ASSERT( Count() > offset, "Not enough items in buffer" );
+        ASSERT( count > offset, "Not enough items in buffer" );
         int index = IndexFromHeadOffset( -offset );
         return buffer.data[index];
     }
-
-    T const& FromHead( int offset = 0 ) const
+    T const& Head( int offset = 0 ) const
     {
-        T& result = ((RingBuffer*)this)->FromHead( offset );
-        return (T const&)result;
+        return ((RingBuffer<T>*)this)->Head( offset );
+    }
+
+    T& Tail( int offset = 0 )
+    {
+        ASSERT( offset >= 0, "Only positive offsets" );
+        ASSERT( count > offset, "Not enough items in buffer" );
+        int head_offset = count - 1 - offset;
+        int idx = IndexFromHeadOffset( -head_offset );
+        return buffer.data[idx];
+    }
+    T const& Tail( int offset = 0 ) const
+    {
+        return ((RingBuffer<T>*)this)->Tail( offset );
+    }
+
+    int TailIndex() const
+    {
+        return (int)(&Tail() - buffer.data);
     }
 
 
-    struct IteratorInfo
+    struct Iterator
     {
     protected:
         RingBuffer<T>& b;
@@ -1351,56 +1342,47 @@ struct RingBuffer
         bool forward;
 
     public:
-        IteratorInfo( RingBuffer& buffer_, bool forward_ = true )
+        Iterator( RingBuffer& buffer_, bool forward_ = true )
             : b( buffer_ )
             , forward( forward_ )
         {
-            currentIndex = forward ? b.tailIndex : b.IndexFromHeadOffset( 0 );
+            currentIndex = forward ? b.TailIndex() : b.IndexFromHeadOffset( 0 );
             current = b.Count() ? &b.buffer.data[currentIndex] : nullptr;
         }
 
-        T* operator * () { return current; }
+        T& operator * () { return *current; }
         T* operator ->() { return current; }
 
         // Prefix
-        inline IteratorInfo& operator ++()
+        inline Iterator& operator ++()
         {
             if( current )
             {
                 if( forward )
                 {
-                    currentIndex++;
-                    if( currentIndex >= b.buffer.capacity )
-                        currentIndex = 0;
-
+                    currentIndex = (currentIndex + 1) & (b.buffer.capacity - 1);
                     current = (currentIndex == b.onePastHeadIndex) ? nullptr : &b.buffer.data[currentIndex];
                 }
                 else
                 {
-                    currentIndex--;
-                    if( currentIndex < 0 )
-                        currentIndex = b.buffer.capacity - 1;
-
-                    current = (currentIndex < b.tailIndex) ? nullptr : &b.buffer.data[currentIndex];
+                    currentIndex = (currentIndex - 1) & (b.buffer.capacity - 1);
+                    current = (currentIndex < b.TailIndex()) ? nullptr : &b.buffer.data[currentIndex];
                 }
             }
 
             return *this;
         }
     };
-    IteratorInfo Iterator( bool forward = true )
+    Iterator MakeIterator( bool forward = true )
     {
-        return IteratorInfo( *this, forward );
+        return Iterator( *this, forward );
     }
 
 private:
     int IndexFromHeadOffset( int offset )
     {
         int result = onePastHeadIndex + offset - 1;
-        while( result < 0 )
-            result += buffer.capacity;
-        while( result >= buffer.capacity )
-            result -= buffer.capacity;
+        result &= (buffer.capacity - 1);
 
         return result;
     }

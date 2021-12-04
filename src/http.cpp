@@ -6,8 +6,35 @@
 
 namespace Http
 {
+#define METHOD(x) \
+    x(Get,  "GET") \
+    x(Post, "POST") \
+
+    ENUM_STRUCT_WITH_NAMES(Method, METHOD)
+
+    struct Request
+    {
+        struct
+        {
+            mbedtls_net_context         fd;
+            mbedtls_ssl_context         context;
+            mbedtls_ssl_config          config;
+            mbedtls_entropy_context     entropy;
+            mbedtls_ctr_drbg_context    ctrDrbg;
+            mbedtls_x509_crt            cacert;
+        } tls;
+
+        // FIXME Fix String so it actually copies in its copy constructor!
+        String host;
+        String port;
+        String resource;
+        Method method;
+        bool https;
+    };
+
     struct State
     {
+        RingBuffer<Request> requestQueue;
         Platform::ThreadHandle thread;
         atomic_bool threadRunning;
         bool initialized;
@@ -67,32 +94,6 @@ namespace Http
     }
 
     
-#define METHOD(x) \
-        x(Get,  "GET") \
-        x(Post, "POST") \
-
-    ENUM_STRUCT_WITH_NAMES(Method, METHOD)
-
-    struct Request
-    {
-        struct
-        {
-            mbedtls_net_context         fd;
-            mbedtls_ssl_context         context;
-            mbedtls_ssl_config          config;
-            mbedtls_entropy_context     entropy;
-            mbedtls_ctr_drbg_context    ctrDrbg;
-            mbedtls_x509_crt            cacert;
-        } tls;
-
-        // FIXME Fix String so it actually copies in its copy constructor!
-        String host;
-        String port;
-        String resource;
-        Method method;
-        bool https;
-    };
-
     static void Close( Request* request, Response* response, bool error = false )
     {
         if( request->https )
