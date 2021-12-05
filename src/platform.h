@@ -192,6 +192,7 @@ extern PlatformAPI globalPlatform;
 
 // TODO Add support for different log severities and categories/filters
 // TODO Use the Context!
+// https://preshing.com/20120522/lightweight-in-memory-logging
 #define LOG globalPlatform.Print
 #define LOGW globalPlatform.Error
 #define LOGE globalPlatform.Error

@@ -162,7 +162,7 @@ typedef std::atomic<i64> atomic_i64;
 
 #define LOAD_ACQUIRE() load( std::memory_order_acquire )
 #define STORE_RELEASE(x) store( x, std::memory_order_release )
-#define COMPARE_EXCHANGE(exp, des) compare_exchange_weak( exp, des, std::memory_order_acq_rel )
+#define COMPARE_EXCHANGE_ACQREL(exp, des) compare_exchange_weak( exp, des, std::memory_order_acq_rel )
 
 // TODO See how to turn these into actual constexprs by using a constexpr-compatible assert expression
 // TODO (may need to use C's assert?)

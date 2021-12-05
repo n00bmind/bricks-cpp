@@ -1393,12 +1393,13 @@ struct SyncRingBuffer
     Array<T, AllocType> buffer;
     union
     {
+#if 0
         struct
         {
-            // NOTE Don't ever access these directly
             i32 _onePastHeadIndex;
             i32 _count;
         };
+#endif
         atomic_i64 indexData;
     };
 
@@ -1410,18 +1411,20 @@ struct SyncRingBuffer
 
     SyncRingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
         : buffer( capacity, allocator, params )
-        , _onePastHeadIndex( 0 )
-        , _count( 0 )
+        , indexData( 0 )
     {
         _CheckLayout();
         ASSERT( IsPowerOf2( capacity ) );
         buffer.ResizeToCapacity();
     }
 
-    static void _CheckLayout()
+    void _CheckLayout()
     {
+#if 0
         static_assert( offsetof(SyncRingBuffer, _onePastHeadIndex) == offsetof(SyncRingBuffer, indexData), "Bad layout" );
         static_assert( offsetof(SyncRingBuffer, _count) == offsetof(SyncRingBuffer, _onePastHeadIndex) + 4, "Bad layout" );
+#endif
+        ASSERT( indexData.is_lock_free(), "'indexData' attribute is not lock-free (check alignment?)" );
     };
 
     int Count() const { return (indexData.LOAD_ACQUIRE() >> 32); }
@@ -1447,7 +1450,7 @@ struct SyncRingBuffer
                 count++;
 
             newData = (count << 32) | onePastHeadIndex;
-        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         T* result = buffer.data + headIndex;
         if( clear )
@@ -1478,7 +1481,7 @@ struct SyncRingBuffer
                 INVALID_CODE_PATH;
 
             newData = (count << 32) | onePastHeadIndex;
-        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         // count was already decremented so account for that
         i64 tailIndex = onePastHeadIndex - count - 1;
@@ -1500,7 +1503,7 @@ struct SyncRingBuffer
             int newCount = (count > 0) ? count - 1 : count;
             newData = (newCount << 32) | onePastHeadIndex;
 
-        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         bool success = count > 0;
         if( success )
@@ -1529,7 +1532,7 @@ struct SyncRingBuffer
                 INVALID_CODE_PATH;
 
             newData = (count << 32) | onePastHeadIndex;
-        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         return buffer.data[onePastHeadIndex];
     }
@@ -1548,7 +1551,7 @@ struct SyncRingBuffer
             int newCount     = count > 0 ? (count - 1) : count;
             newData = (newCount << 32) | onePastHeadIndex;
 
-        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         bool success = count > 0;
         if( success )
