@@ -121,23 +121,19 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #endif
 
 
-typedef int8_t i8;
-typedef int16_t i16;
-typedef int32_t i32;
-typedef int64_t i64;
+typedef int8_t   i8;
+typedef int16_t  i16;
+typedef int32_t  i32;
+typedef int64_t  i64;
+typedef int64_t  sz;
 
-typedef uint8_t u8;
+typedef uint8_t  u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
-typedef unsigned long long u64;
+typedef uint64_t u64;
 
-typedef float f32;
-typedef double f64;
-
-typedef int64_t sz;
-
-
-typedef std::atomic<bool> atomic_bool;
+typedef float    f32;
+typedef double   f64;
 
 
 #define I8MIN INT8_MIN
@@ -159,6 +155,14 @@ typedef std::atomic<bool> atomic_bool;
 #define F64MAX DBL_MAX
 #define F64MIN DBL_MIN
 #define F64INF (f64)INFINITY
+
+
+typedef std::atomic<bool> atomic_bool;
+typedef std::atomic<i64> atomic_i64;
+
+#define LOAD_ACQUIRE() load( std::memory_order_acquire )
+#define STORE_RELEASE(x) store( x, std::memory_order_release )
+#define COMPARE_EXCHANGE(exp, des) compare_exchange_weak( exp, des, std::memory_order_acq_rel )
 
 // TODO See how to turn these into actual constexprs by using a constexpr-compatible assert expression
 // TODO (may need to use C's assert?)

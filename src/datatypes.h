@@ -1196,10 +1196,6 @@ private:
 // Head and tail will wrap around when needed and can never overlap.
 // Can be iterated both from tail to head (oldest to newest) or the other way around.
 
-// TODO Make a separate version SyncRingBuffer which is thread-safe by masking the indices (instead of resetting them to 0), and using atomic increment
-// We could then easily use this as a fixed-capacity thread-safe queue
-// TODO Make a separate Queue struct that can chain several of this (thread-safely) to create a generic growable queue.
-
 // TODO Look at the code inside #ifdef MEM_REPLACE_PLACEHOLDER in https://github.com/cmuratori/refterm/blob/main/refterm_example_source_buffer.c
 // for an example of how to speed up linear reads & writes that go beyond the end of the buffer,
 // by just mapping the same block of memory twice back to back!
@@ -1211,26 +1207,9 @@ struct RingBuffer
     i32 onePastHeadIndex;       // Points to next slot to write
     i32 count;
 
-#if 0
-    union
-    {
-        struct
-        {
-            i32 onePastHeadIndex;
-            i32 count;
-        };
-        i64 _indexData;
-    };
-#endif
-
 
     RingBuffer()
-    {
-#if 0
-        static_assert( offsetof(RingBuffer, onePastHeadIndex) == offsetof(RingBuffer, _indexData), "Bad layout" );
-        static_assert( offsetof(RingBuffer, count) == offsetof(RingBuffer, onePastHeadIndex) + 4, "Bad layout" );
-#endif
-    }
+    {}
 
     RingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
         : buffer( capacity, allocator, params )
@@ -1241,7 +1220,9 @@ struct RingBuffer
         buffer.ResizeToCapacity();
     }
 
+    int Count() const { return count; }
     int Capacity() const { return buffer.capacity; }
+    bool Available() const { return count < buffer.capacity; }
 
     void Clear()
     {
@@ -1282,6 +1263,14 @@ struct RingBuffer
 
         return buffer.data[tailIndex];
     }
+    bool TryPop( T* out )
+    {
+        bool canPop = count > 0; 
+        if( canPop )
+            *out = Pop();
+
+        return canPop;
+    }
 
     T PopHead()
     {
@@ -1291,10 +1280,13 @@ struct RingBuffer
 
         return buffer.data[onePastHeadIndex];
     }
-
-    bool Available() const
+    bool TryPopHead( T* out )
     {
-        return count < buffer.capacity;
+        bool canPop = count > 0; 
+        if( canPop )
+            *out = PopHead();
+
+        return canPop;
     }
 
     bool Contains( const T& item ) const
@@ -1388,3 +1380,288 @@ private:
     }
 };
 
+
+// A Version of RingBuffer that is thread-safe and lock-free
+// Any operations that would require locking the full buffer have been removed
+// Can be used as a fixed-capacity thread-safe queue
+
+// TODO Make a separate Queue struct that can chain several of this (thread-safely) to create a generic growable queue.
+
+template <typename T, typename AllocType = Allocator>
+struct SyncRingBuffer
+{
+    Array<T, AllocType> buffer;
+    union
+    {
+        struct
+        {
+            // NOTE Don't ever access these directly
+            i32 _onePastHeadIndex;
+            i32 _count;
+        };
+        atomic_i64 indexData;
+    };
+
+
+    SyncRingBuffer()
+    {
+        _CheckLayout();
+    }
+
+    SyncRingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
+        : buffer( capacity, allocator, params )
+        , _onePastHeadIndex( 0 )
+        , _count( 0 )
+    {
+        _CheckLayout();
+        ASSERT( IsPowerOf2( capacity ) );
+        buffer.ResizeToCapacity();
+    }
+
+    static void _CheckLayout()
+    {
+        static_assert( offsetof(SyncRingBuffer, _onePastHeadIndex) == offsetof(SyncRingBuffer, indexData), "Bad layout" );
+        static_assert( offsetof(SyncRingBuffer, _count) == offsetof(SyncRingBuffer, _onePastHeadIndex) + 4, "Bad layout" );
+    };
+
+    int Count() const { return (indexData.LOAD_ACQUIRE() >> 32); }
+    int Capacity() const { return buffer.capacity; }
+    bool Available() const { return Count() < buffer.capacity; }
+
+    void Clear()
+    {
+        indexData.STORE_RELEASE( 0 );
+    }
+
+    T* PushEmpty( bool clear = true )
+    {
+        i32 headIndex;
+        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        do
+        {
+            headIndex = curData & 0xFFFFFFFF;
+            i64 count = curData >> 32;
+
+            i64 onePastHeadIndex = (headIndex + 1) & (buffer.capacity - 1);
+            if( count < buffer.capacity )
+                count++;
+
+            newData = (count << 32) | onePastHeadIndex;
+        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+
+        T* result = buffer.data + headIndex;
+        if( clear )
+            PZERO( result, sizeof(T) );
+
+        return result;
+    }
+
+    T* Push( const T& item )
+    {
+        T* result = PushEmpty( false );
+        *result = item;
+        return result;
+    }
+
+    T Pop()
+    {
+        i64 count, onePastHeadIndex;
+        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        do
+        {
+            onePastHeadIndex = curData & 0xFFFFFFFF;
+            count = curData >> 32;
+
+            if( count > 0 )
+                count--;
+            else
+                INVALID_CODE_PATH;
+
+            newData = (count << 32) | onePastHeadIndex;
+        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+
+        // count was already decremented so account for that
+        i64 tailIndex = onePastHeadIndex - count - 1;
+        tailIndex &= (buffer.capacity - 1);
+
+        return buffer.data[tailIndex];
+    }
+
+    bool TryPop( T* out )
+    {
+        i64 count, onePastHeadIndex;
+        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        do
+        {
+            onePastHeadIndex = curData & 0xFFFFFFFF;
+            count = curData >> 32;
+
+            // Try to do the whole #! and just return whether we did anything at the end
+            int newCount = (count > 0) ? count - 1 : count;
+            newData = (newCount << 32) | onePastHeadIndex;
+
+        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+
+        bool success = count > 0;
+        if( success )
+        {
+            // count was _not_ decremented this time
+            i64 tailIndex = onePastHeadIndex - count;
+            tailIndex &= (buffer.capacity - 1);
+            *out = buffer.data[tailIndex];
+        }
+        return success;
+    }
+
+    T PopHead()
+    {
+        i64 count, onePastHeadIndex;
+        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        do
+        {
+            onePastHeadIndex = curData & 0xFFFFFFFF;
+            count = curData >> 32;
+
+            onePastHeadIndex = (onePastHeadIndex - 1) & (buffer.capacity - 1);
+            if( count > 0 )
+                count--;
+            else
+                INVALID_CODE_PATH;
+
+            newData = (count << 32) | onePastHeadIndex;
+        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+
+        return buffer.data[onePastHeadIndex];
+    }
+
+    bool TryPopHead( T* out )
+    {
+        i64 count, onePastHeadIndex;
+        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        do
+        {
+            onePastHeadIndex = curData & 0xFFFFFFFF;
+            count = curData >> 32;
+
+            // Try to do the whole #! and just return whether we did anything at the end
+            onePastHeadIndex = count > 0 ? ((onePastHeadIndex - 1) & (buffer.capacity - 1)) : onePastHeadIndex;
+            int newCount     = count > 0 ? (count - 1) : count;
+            newData = (newCount << 32) | onePastHeadIndex;
+
+        } while( !indexData.COMPARE_EXCHANGE( curData, newData ) );
+
+        bool success = count > 0;
+        if( success )
+            *out = buffer.data[onePastHeadIndex];
+
+        return success;
+    }
+
+    // TODO PeekHead & PeekTail
+
+    T& Head( int offset = 0 )
+    {
+        ASSERT( offset >= 0, "Only positive offsets" );
+        int count = 0;
+        int index = IndexFromHeadOffset( -offset, &count );
+        ASSERT( count > offset, "Not enough items in buffer" );
+
+        return buffer.data[index];
+    }
+    T const& Head( int offset = 0 ) const
+    {
+        return ((SyncRingBuffer<T>*)this)->Head( offset );
+    }
+
+    T& Tail( int offset = 0 )
+    {
+        ASSERT( offset >= 0, "Only positive offsets" );
+        int count = 0;
+        int idx = IndexFromTailOffset( offset, &count );
+        ASSERT( count > offset, "Not enough items in buffer" );
+
+        return buffer.data[idx];
+    }
+    T const& Tail( int offset = 0 ) const
+    {
+        return ((SyncRingBuffer<T>*)this)->Tail( offset );
+    }
+
+    int TailIndex() const
+    {
+        return IndexFromTailOffset( 0, nullptr );
+    }
+
+private:
+    int IndexFromHeadOffset( int offset, int* countOut )
+    {
+        i64 curData = indexData.LOAD_ACQUIRE();
+        i32 onePastHeadIndex = curData & 0xFFFFFFFF;
+        *countOut = curData >> 32;
+
+        int result = onePastHeadIndex + offset - 1;
+        result &= (buffer.capacity - 1);
+
+        return result;
+    }
+
+    int IndexFromTailOffset( int offset, int* countOut )
+    {
+        i64 curData = indexData.LOAD_ACQUIRE();
+        i32 onePastHeadIndex = curData & 0xFFFFFFFF;
+        int count = curData >> 32;
+
+        int result = onePastHeadIndex - count + offset;
+        result &= (buffer.capacity - 1);
+
+        *countOut = count;
+        return result;
+    }
+#if 0
+public:
+    struct Iterator
+    {
+        protected:
+            SyncRingBuffer<T>& b;
+            T* current;
+            i32 currentIndex;
+            bool forward;
+
+        public:
+            Iterator( SyncRingBuffer& buffer_, bool forward_ = true )
+                : b( buffer_ )
+                  , forward( forward_ )
+        {
+            currentIndex = forward ? b.TailIndex() : b.IndexFromHeadOffset( 0 );
+            current = b.Count() ? &b.buffer.data[currentIndex] : nullptr;
+        }
+
+            T& operator * () { return *current; }
+            T* operator ->() { return current; }
+
+            // Prefix
+            inline Iterator& operator ++()
+            {
+                if( current )
+                {
+                    if( forward )
+                    {
+                        currentIndex = (currentIndex + 1) & (b.buffer.capacity - 1);
+                        current = (currentIndex == b._onePastHeadIndex) ? nullptr : &b.buffer.data[currentIndex];
+                    }
+                    else
+                    {
+                        currentIndex = (currentIndex - 1) & (b.buffer.capacity - 1);
+                        current = (currentIndex < b.TailIndex()) ? nullptr : &b.buffer.data[currentIndex];
+                    }
+                }
+
+                return *this;
+            }
+    };
+    Iterator MakeIterator( bool forward = true )
+    {
+        return Iterator( *this, forward );
+    }
+#endif
+};

@@ -1205,32 +1205,39 @@ TEST_F( DatatypesTest, HashtablePutGet )
         ASSERT_EQ( *table.Get( (void*)i ), (void*)(i + 1) );
 }
 
-TEST_F( DatatypesTest, RingBufferBasics )
+template <typename DataType>
+void TestPushPop()
 {
-    RingBuffer<int> buffer( 128 );
-    ASSERT_EQ( buffer.count, 0 );
+    DataType buffer( 128 );
+    ASSERT_EQ( buffer.Count(), 0 );
 
     for( int i = 0; i < buffer.Capacity(); ++i )
         buffer.Push( i );
-    ASSERT_EQ( buffer.count, buffer.Capacity() );
+    ASSERT_EQ( buffer.Count(), buffer.Capacity() );
 
     for( int i = 0; i < buffer.Capacity(); ++i )
     {
         int x = buffer.Pop();
         ASSERT_EQ( x, i );
     }
-    ASSERT_EQ( buffer.count, 0 );
+    ASSERT_EQ( buffer.Count(), 0 );
 
     for( int i = 0; i < buffer.Capacity(); ++i )
         buffer.Push( i );
-    ASSERT_EQ( buffer.count, buffer.Capacity() );
+    ASSERT_EQ( buffer.Count(), buffer.Capacity() );
 
     for( int i = 0; i < buffer.Capacity(); ++i )
     {
         int x = buffer.PopHead();
         ASSERT_EQ( x, buffer.Capacity() - i - 1 );
     }
-    ASSERT_EQ( buffer.count, 0 );
+    ASSERT_EQ( buffer.Count(), 0 );
+}
+
+TEST_F( DatatypesTest, RingBufferBasics )
+{
+    TestPushPop< RingBuffer<int> >();
+    TestPushPop< SyncRingBuffer<int> >();
 }
 
 #include "http.h"
