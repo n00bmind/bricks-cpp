@@ -749,7 +749,7 @@ struct BucketArray
             int available = bucket->capacity - bucket->count;
 
             int copied = Min( remaining, available );
-            PCOPY( buffer + totalCopied, bucket->data + bucket->count, copied * SIZEOF(T) );
+            COPYP( buffer + totalCopied, bucket->data + bucket->count, copied * SIZEOF(T) );
             totalCopied += copied;
 
             bucket->count += copied;
@@ -773,7 +773,7 @@ struct BucketArray
         const Bucket* bucket = &first;
         while( bucket )
         {
-            PCOPY( bucket->data, buffer, bucket->count * SIZEOF(T) );
+            COPYP( bucket->data, buffer, bucket->count * SIZEOF(T) );
             buffer += bucket->count;
             bucket = bucket->next;
         }
@@ -789,7 +789,7 @@ struct BucketArray
         const Bucket* bucket = &first;
         while( bucket )
         {
-            PCOPY( bucket->data, buffer, bucket->count * SIZEOF(T) );
+            COPYP( bucket->data, buffer, bucket->count * SIZEOF(T) );
             buffer += bucket->count;
             bucket = bucket->next;
         }
@@ -1244,7 +1244,7 @@ struct RingBuffer
             count++;
 
         if( clear )
-            PZERO( result, sizeof(T) );
+            ZEROP( result, sizeof(T) );
         return result;
     }
 
@@ -1439,6 +1439,8 @@ struct SyncRingBuffer
     T* PushEmpty( bool clear = true )
     {
         i32 headIndex;
+        // TODO Given that we already do an acquire in the CAS below this can probably be relaxed?
+        // Does this affect our chances of looping back in any way?
         i64 newData, curData = indexData.LOAD_ACQUIRE();
         do
         {
@@ -1454,7 +1456,7 @@ struct SyncRingBuffer
 
         T* result = buffer.data + headIndex;
         if( clear )
-            PZERO( result, sizeof(T) );
+            ZEROP( result, sizeof(T) );
 
         return result;
     }

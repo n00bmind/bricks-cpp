@@ -86,17 +86,17 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 
 #define KILOBYTES(value) ((value)*1024)
 #define MEGABYTES(value) (KILOBYTES(value)*1024)
-#define GIGABYTES(value) (MEGABYTES((u64)value)*1024)
+#define GIGABYTES(value) (MEGABYTES(value)*1024LL)
 
 #define COPY(source, dest) memcpy( &dest, &source, sizeof(dest) )
 #define SET(dest, value) memset( &dest, value, sizeof(dest) )
 #define ZERO(dest) memset( &dest, 0, sizeof(dest) )
 #define EQUAL(source, dest) (memcmp( &source, &dest, sizeof(source) ) == 0)
 
-#define PCOPY(source, dest, size) memcpy( dest, source, Size( size ) )
-#define PSET(dest, value, size) memset( dest, value, Size( size ) )
-#define PZERO(dest, size) memset( dest, 0, Size( size ) )
-#define PEQUAL(source, dest, size) (memcmp( source, dest, Size( size ) ) == 0)
+#define COPYP(source, dest, size) memcpy( dest, source, Size( size ) )
+#define SETP(dest, value, size) memset( dest, value, Size( size ) )
+#define ZEROP(dest, size) memset( dest, 0, Size( size ) )
+#define EQUALP(source, dest, size) (memcmp( source, dest, Size( size ) ) == 0)
 
 // Do a placement new on any variable with simpler syntax
 #define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type

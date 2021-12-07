@@ -314,7 +314,7 @@ private:
             Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
             char* dst = ALLOC_ARRAY( allocator, char, new_len + 1 );
 
-            PCOPY( src, dst, new_len );
+            COPYP( src, dst, new_len );
             dst[new_len] = 0;
 
             data = dst;

@@ -216,7 +216,7 @@ ALLOC_FUNC( LazyAllocator )
     void* result = malloc( Size( sizeBytes ) );
 
     if( !params.IsSet( Memory::NoClear ) )
-        PZERO( result, sizeBytes );
+        ZEROP( result, sizeBytes );
 
     return result;
 }
@@ -382,7 +382,7 @@ _PushSize( MemoryArena *arena, sz size, sz minAlignment, MemoryParams params = {
 
     // Have already moved up the block's pointer, so just clear the requested size
     if( !(params.flags & Memory::NoClear) )
-        PZERO( result, size );
+        ZEROP( result, size );
 
     return result;
 }
@@ -476,119 +476,182 @@ CheckTemporaryBlocks( MemoryArena *arena )
 
 
 
-///// STATIC MEMORY POOL
-// General memory pool of a fixed initial size, can allocate any object type or size
-// Merges free contiguous blocks and searches linearly
+///// GENERIC HEAP
+// General memory heap of a fixed initial size, can allocate any object type or size
+// Merges free contiguous blocks and searches for empty blocks linearly, continuing where it last left off
+// in circular buffer fashion, so it's appropriate for continuously allocating transient data with a limited lifetime.
+// Could be easily extended to grow on request, by just allocating new chunks from the OS and adding them to the chain.
+// 
+// NOT THREAD SAFE atm
 
-
-enum MemoryBlockFlags : u32
+struct GenericHeap
 {
-    None = 0,
-    Used = 0x01,
-};
-
-struct MemoryBlock
-{
-    MemoryBlock* prev;
-    MemoryBlock* next;
-
-    sz size;
-    u32 flags;
-};
-
-inline MemoryBlock*
-InsertBlock( MemoryBlock* prev, sz size, void* memory )
-{
-    // TODO 'size' includes the MemoryBlock struct itself for now
-    // Are we sure we wanna do this??
-    ASSERT( size > SIZEOF(MemoryBlock) );
-    MemoryBlock* block = (MemoryBlock*)memory;
-    // TODO Are we sure this shouldn't be the other way around??
-    block->size = size - SIZEOF(MemoryBlock);
-    block->flags = MemoryBlockFlags::None;
-    block->prev = prev;
-    block->next = prev->next;
-    block->prev->next = block;
-    block->next->prev = block;
-
-    return block;
-}
-
-inline MemoryBlock*
-FindBlockForSize( MemoryBlock* sentinel, sz size )
-{
-    MemoryBlock* result = nullptr;
-
-    // TODO Best match block! (find smallest that fits)
-    // TODO Could also continue search where we last left it, for ring-type allocation patterns
-    for( MemoryBlock* block = sentinel->next; block != sentinel; block = block->next )
+    enum BlockFlags : u32
     {
-        if( block->size >= size && !(block->flags & MemoryBlockFlags::Used) )
+        None    = 0,
+        Used    = 0x01,
+        Deleted = 0x02,
+    };
+
+    struct Block
+    {
+        Block* prev;
+        Block* next;
+
+        i32 size;
+        u32 flags;
+    };
+
+    Block sentinel;
+    Block* lastAllocated;
+    sz allocatedBlocks;
+
+    GenericHeap()
+        : lastAllocated( &sentinel )
+        , allocatedBlocks( 0 )
+    {
+        // Initialize empty sentinel
+        sentinel.prev = &sentinel;
+        sentinel.next = &sentinel;
+        sentinel.size = 0;
+        sentinel.flags = 0;
+
+        // Insert empty block with the whole memory chunk
+        static constexpr sz c_initialHeapSize = 256 * 1024 * 1024LL;
+        InsertBlock( &sentinel, (u8*)globalPlatform.Alloc( c_initialHeapSize, 0 ), c_initialHeapSize );
+    }
+
+    void* Alloc( sz size_bytes )
+    {
+        void* result = nullptr;
+
+        Block* block = FindBlockForSize( size_bytes );
+        if( block )
         {
-            result = block;
-            break;
+            result = UseBlock( block, size_bytes );
+            lastAllocated = block;
+            allocatedBlocks++;
         }
-    }
-
-    return result;
-}
-
-inline void*
-UseBlock( MemoryBlock* block, sz size, sz splitThreshold )
-{
-    ASSERT( size <= block->size );
-
-    block->flags |= MemoryBlockFlags::Used;
-    void* result = (block + 1);
-
-    sz remainingSize = block->size - size;
-    if( remainingSize > splitThreshold )
-    {
-        block->size -= remainingSize;
-        InsertBlock( block, remainingSize, (u8*)result + size );
-    }
-    else
-    {
-        // TODO Record the unused portion so that it can be merged with neighbours
-    }
-
-    return result;
-}
-
-inline bool
-MergeIfPossible( MemoryBlock* first, MemoryBlock* second, MemoryBlock* sentinel )
-{
-    bool result = false;
-
-    if( first != sentinel && second != sentinel &&
-        !(first->flags & MemoryBlockFlags::Used) &&
-        !(second->flags & MemoryBlockFlags::Used) )
-    {
-        // This check only needed so we can support discontiguous memory pools if needed
-        u8* expectedOffset = (u8*)first + SIZEOF(MemoryBlock) + first->size;
-        if( (u8*)second == expectedOffset )
+        else
         {
-            second->next->prev = second->prev;
-            second->prev->next = second->next;
-
-            first->size += SIZEOF(MemoryBlock) + second->size;
-
-            result = true;
+            // TODO Allocate a new block with size Max( size_bytes, c_initialHeapSize ) and add it to the chain
+            // (keep track of all blocks in a vector for stats/freeing)
+            ASSERT( false, "FULL" );
         }
+
+        return result;
     }
 
-    return result;
-}
+    void Free( void* memory )
+    {
+        Block* block = (Block*)memory - 1;
+        ASSERT( block->flags & BlockFlags::Used, "Can't free a free block!" );
+        block->flags &= ~BlockFlags::Used;
 
-// TODO Abstract the sentinel inside a 'MemoryPool' struct and put a pointer to that in the block
-// so that we don't need to pass the sentinel, and we can remove the 'ownerPool' idea from the meshes
-inline void
-ReleaseBlockAt( void* memory, MemoryBlock* sentinel )
-{
-    MemoryBlock* block = (MemoryBlock*)memory - 1;
-    block->flags &= ~MemoryBlockFlags::Used;
+        bool merged_next = MergeIfPossible( block, block->next );
+        bool merged_prev = MergeIfPossible( block->prev, block );
 
-    MergeIfPossible( block, block->next, sentinel );
-    MergeIfPossible( block->prev, block, sentinel );
-}
+        // In case we merged around the lastAllocated pointer, search backwards for a new used block
+        if( lastAllocated->flags & BlockFlags::Deleted || !(lastAllocated->flags & BlockFlags::Used) )
+        {
+            lastAllocated = nullptr;
+            Block* start_block = block->prev;
+            for( Block* b = start_block->prev; b != start_block; b = b->prev )
+            {
+                if( b->flags & BlockFlags::Used )
+                {
+                    lastAllocated = b;
+                    break;
+                }
+            }
+            if( !lastAllocated )
+                lastAllocated = &sentinel;
+        }
+        allocatedBlocks--;
+    }
 
+    private:
+    Block* InsertBlock( Block* prev, void* block_start, sz available_size )
+    {
+        ASSERT( available_size > sizeof(Block), "Need more space" );
+        Block* block = (Block*)block_start;
+        block->size = I32(available_size - sizeof(Block));
+        block->flags = 0;
+        block->prev = prev;
+        block->next = prev->next;
+        block->prev->next = block;
+        block->next->prev = block;
+
+        return block;
+    }
+
+    Block* FindBlockForSize( sz size )
+    {
+        Block* result = nullptr;
+        for( Block* block = lastAllocated->next; block != lastAllocated; block = block->next )
+        {
+            // TODO Keep a separate list of free blocks?
+            if( !(block->flags & BlockFlags::Used) && block->size >= size )
+            {
+                result = block;
+                break;
+            }
+        }
+
+        return result;
+    }
+
+    void* UseBlock( Block* block, sz useBytes )
+    {
+        ASSERT( useBytes <= block->size, "Block can't hold %llu bytes", useBytes );
+
+        block->flags |= BlockFlags::Used;
+        void* result = (block + 1);
+
+        sz remainingSize = block->size - useBytes;
+        // TODO Tune this based on the smallest size we will typically have
+        static constexpr sz c_splitThreshold = sizeof(Block) + 16;
+        if( remainingSize > c_splitThreshold )
+        {
+            // Chop given block in two
+            block->size = I32(useBytes);
+            InsertBlock( block, (u8*)result + useBytes, remainingSize );
+        }
+        else
+        {
+            // TODO Record the unused portion so that it can be merged with neighbours
+        }
+
+        return result;
+    }
+
+    bool MergeIfPossible( Block* first, Block* second )
+    {
+        ASSERT( first->next == second, "Blocks are not linked" );
+        ASSERT( second->prev == first, "Blocks are not linked" );
+
+        bool result = false;
+
+        if( first != &sentinel && second != &sentinel &&
+            !(first->flags & BlockFlags::Used) &&
+            !(second->flags & BlockFlags::Used) )
+        {
+            // This check only needed so we can support discontiguous memory pools if needed
+            void* expectedOffset = (u8*)first + sizeof(Block) + first->size;
+            ASSERT( second == expectedOffset, "Block is not at the expected location" );
+            if( second == expectedOffset )
+            {
+                second->next->prev = first;
+                first->next = second->next;
+                first->size += sizeof(Block) + second->size;
+                // Mark the merged block as deleted so we can correctly reposition lastAllocated pointer
+                // (and to help with debugging)
+                second->flags |= BlockFlags::Deleted;
+
+                result = true;
+            }
+        }
+
+        return result;
+    }
+};
