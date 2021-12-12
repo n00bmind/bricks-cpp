@@ -2,6 +2,7 @@
 
 // TODO Take the ideas from https://preshing.com/20150316/semaphores-are-surprisingly-versatile/ to
 // implement the most useful primitives using the same underlying platform semaphore primitive
+// For ref, a lib by Preshing: http://mintomic.github.io/,  https://github.com/preshing/turf
 
 
 namespace Core
@@ -67,12 +68,12 @@ struct Mutex
     void Lock()     { m.lock(); }
     void Unlock()   { m.unlock(); }
 
-    struct ScopedLock
+    struct Scope
     {
         Mutex& m;
 
-        ScopedLock( Mutex& m_ ) : m( m_ ) { m.Lock(); }
-        ~ScopedLock()                     { m.Unlock(); }
+        Scope( Mutex& m_ ) : m( m_ ) { m.Lock(); }
+        ~Scope()                     { m.Unlock(); }
     };
 };
 

@@ -1217,7 +1217,9 @@ void TestPushPop()
 
     for( int i = 0; i < buffer.Capacity(); ++i )
     {
-        int x = buffer.Pop();
+        int x;
+        bool res = buffer.TryPop( &x );
+        ASSERT_TRUE( res );
         ASSERT_EQ( x, i );
     }
     ASSERT_EQ( buffer.Count(), 0 );
@@ -1228,7 +1230,9 @@ void TestPushPop()
 
     for( int i = 0; i < buffer.Capacity(); ++i )
     {
-        int x = buffer.PopHead();
+        int x;
+        bool res = buffer.TryPopHead( &x );
+        ASSERT_TRUE( res );
         ASSERT_EQ( x, buffer.Capacity() - i - 1 );
     }
     ASSERT_EQ( buffer.Count(), 0 );
@@ -1239,6 +1243,23 @@ TEST_F( DatatypesTest, RingBufferBasics )
     TestPushPop< RingBuffer<int> >();
     TestPushPop< SyncRingBuffer<int> >();
 }
+
+TEST_F( DatatypesTest, SyncQueuePushPop )
+{
+    SyncQueue<int> q( 128 );
+
+    const int N = 128 * 1024;
+    for( int i = 0; i < N; ++i )
+        q.Push( i );
+    for( int i = 0; i < N; ++i )
+    {
+        int it;
+        bool res = q.TryPop( &it );
+        ASSERT_TRUE( res );
+        ASSERT_EQ( it, i );
+    }
+}
+
 
 #include "http.h"
 #include "http.cpp"

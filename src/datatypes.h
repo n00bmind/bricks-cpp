@@ -1381,11 +1381,9 @@ private:
 };
 
 
-// A Version of RingBuffer that is thread-safe and lock-free
-// Any operations that would require locking the full buffer have been removed
-// Can be used as a fixed-capacity thread-safe queue
-
-// TODO Make a separate Queue struct that can chain several of this (thread-safely) to create a generic growable queue.
+// A Version of RingBuffer that is thread-safe and lock-free (multi-producer, multi-consumer).
+// Any operations that would require locking the full buffer have been removed.
+// Can be used as a fixed-capacity thread-safe queue.
 
 template <typename T, typename AllocType = Allocator>
 struct SyncRingBuffer
@@ -1468,6 +1466,7 @@ struct SyncRingBuffer
         return result;
     }
 
+#if 0
     T Pop()
     {
         i64 count, onePastHeadIndex;
@@ -1491,6 +1490,7 @@ struct SyncRingBuffer
 
         return buffer.data[tailIndex];
     }
+#endif
 
     bool TryPop( T* out )
     {
@@ -1502,7 +1502,7 @@ struct SyncRingBuffer
             count = curData >> 32;
 
             // Try to do the whole #! and just return whether we did anything at the end
-            int newCount = (count > 0) ? count - 1 : count;
+            i64 newCount = (count > 0) ? count - 1 : count;
             newData = (newCount << 32) | onePastHeadIndex;
 
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
@@ -1518,6 +1518,7 @@ struct SyncRingBuffer
         return success;
     }
 
+#if 0
     T PopHead()
     {
         i64 count, onePastHeadIndex;
@@ -1538,6 +1539,7 @@ struct SyncRingBuffer
 
         return buffer.data[onePastHeadIndex];
     }
+#endif
 
     bool TryPopHead( T* out )
     {
@@ -1550,7 +1552,7 @@ struct SyncRingBuffer
 
             // Try to do the whole #! and just return whether we did anything at the end
             onePastHeadIndex = count > 0 ? ((onePastHeadIndex - 1) & (buffer.capacity - 1)) : onePastHeadIndex;
-            int newCount     = count > 0 ? (count - 1) : count;
+            i64 newCount     = count > 0 ? (count - 1) : count;
             newData = (newCount << 32) | onePastHeadIndex;
 
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
@@ -1669,4 +1671,127 @@ public:
         return Iterator( *this, forward );
     }
 #endif
+};
+
+
+
+/////     SYNC QUEUE    /////
+// Thread safe queue.
+// TODO Lock-free
+
+template <typename T, typename AllocType = Allocator>
+struct SyncQueue
+{
+    struct Page
+    {
+        Page* next;
+        i32 capacity;
+        i32 count;
+        i32 onePastHeadIndex;
+
+        int TailIndex() const
+        {
+            int result = onePastHeadIndex - count;
+            result &= (capacity - 1 );
+            return result;
+        }
+    };
+
+    Mutex mutex;
+    AllocType* allocator;
+
+    Page* head;
+    Page* tail;
+    Page* firstFree;
+    i32 count;
+
+    SyncQueue( int pageCapacity, AllocType* allocator_ = CTX_ALLOC )
+        : allocator( allocator_ )
+        , head( nullptr )
+        , tail( nullptr )
+        , firstFree( nullptr )
+        , count( 0 )
+    {
+        ASSERT( IsPowerOf2( pageCapacity ) );
+        head = tail = AllocPage( pageCapacity );
+    }
+
+    T* PushEmpty( bool clear = true )
+    {
+        T* result = nullptr;
+        {
+            Mutex::Scope lock( mutex );
+
+            if( head->count >= head->capacity )
+            {
+                head->next = AllocPage( head->capacity );
+                head = head->next;
+            }
+
+            result = (T*)((u8*)head + sizeof(Page) + head->onePastHeadIndex * sizeof(T));
+            head->onePastHeadIndex = (head->onePastHeadIndex + 1) & (head->capacity - 1);
+            head->count++;
+
+            count++;
+        }
+
+        if( clear )
+            ZEROP( result, sizeof(T) );
+        return result;
+    }
+
+    T* Push( const T& item )
+    {
+        T* result = PushEmpty( false );
+        *result = item;
+        return result;
+    }
+
+    bool TryPop( T* out )
+    {
+        Mutex::Scope lock( mutex );
+
+        bool canPop = count > 0;
+        if( canPop )
+        {
+            T* result = (T*)((u8*)tail + sizeof(Page) + tail->TailIndex() * sizeof(T));
+            *out = *result;
+            tail->count--;
+
+            if( tail->count == 0 && tail != head )
+            {
+                Page* newTail = tail->next;
+
+                tail->next = firstFree;
+                firstFree = tail;
+                tail = newTail;
+            }
+
+            count--;
+        }
+
+        return canPop;
+    }
+
+private:
+
+    Page* AllocPage( int pageCapacity )
+    {
+        Page* result = nullptr;
+
+        if( firstFree )
+        {
+            result = firstFree;
+            firstFree = firstFree->next;
+        }
+        else
+        {
+            result = (Page*)ALLOC( allocator, sizeof(Page) + pageCapacity * sizeof(T) );
+        }
+
+        *result = {};
+        result->capacity = pageCapacity;
+
+        return result;
+    }
 };
