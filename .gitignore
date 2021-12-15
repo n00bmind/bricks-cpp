@@ -13,3 +13,4 @@ test/test.exe
 .ccls-cache/
 *.log
 .vs/
+*.rdbg

@@ -158,6 +158,7 @@ typedef double   f64;
 
 
 typedef std::atomic<bool> atomic_bool;
+typedef std::atomic<i32> atomic_i32;
 typedef std::atomic<i64> atomic_i64;
 
 #define LOAD_ACQUIRE() load( std::memory_order_acquire )

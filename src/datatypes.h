@@ -1697,13 +1697,22 @@ struct SyncQueue
         }
     };
 
-    Mutex mutex;
+    // TODO 
+    StdMutex mutex;
     AllocType* allocator;
 
     Page* head;
     Page* tail;
     Page* firstFree;
     i32 count;
+
+    SyncQueue()
+        : allocator( nullptr )
+        , head( nullptr )
+        , tail( nullptr )
+        , firstFree( nullptr )
+        , count( 0 )
+    {}
 
     SyncQueue( int pageCapacity, AllocType* allocator_ = CTX_ALLOC )
         : allocator( allocator_ )
@@ -1720,7 +1729,7 @@ struct SyncQueue
     {
         T* result = nullptr;
         {
-            Mutex::Scope lock( mutex );
+            StdMutex::Scope lock( mutex );
 
             if( head->count >= head->capacity )
             {
@@ -1749,7 +1758,7 @@ struct SyncQueue
 
     bool TryPop( T* out )
     {
-        Mutex::Scope lock( mutex );
+        StdMutex::Scope lock( mutex );
 
         bool canPop = count > 0;
         if( canPop )

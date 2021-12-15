@@ -34,7 +34,7 @@ namespace Http
 
     struct State
     {
-        RingBuffer<Request> requestQueue;
+        SyncQueue<Request> requestQueue;
         Platform::ThreadHandle thread;
         atomic_bool threadRunning;
         bool initialized;
@@ -68,6 +68,8 @@ namespace Http
         int ret = WSAStartup(MAKEWORD(2,2), &wsaData);
         ASSERT( ret == 0 );
 #endif
+
+        INIT( state->requestQueue )( 16 );
 
         // Create http thread
         state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );

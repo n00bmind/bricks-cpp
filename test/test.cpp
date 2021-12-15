@@ -1261,6 +1261,62 @@ TEST_F( DatatypesTest, SyncQueuePushPop )
 }
 
 
+template <typename T>
+PLATFORM_THREAD_FUNC(MutexTesterThread);
+template <typename T>
+struct MutexTester
+{
+    T mutex;
+    const int iterationCount;
+    const int threadCount;
+    i64 value;
+
+    MutexTester( int threadCount_, int iterationCount_ )
+        : iterationCount( iterationCount_ )
+        , threadCount( threadCount_ )
+        , value( 0 )
+    {}
+
+    void Test()
+    {
+        value = 0;
+
+        Array<Platform::ThreadHandle> threads( threadCount );
+        for (int i = 0; i < threadCount; i++)
+            threads.Push( Core::CreateThread( "Test thread", MutexTesterThread<T>, this ) );
+        for( Platform::ThreadHandle& t : threads )
+            Core::JoinThread( t );
+
+        ASSERT_EQ( value, threadCount * iterationCount );
+    }
+};
+template <typename T>
+PLATFORM_THREAD_FUNC(MutexTesterThread)
+{
+    MutexTester<T>* tester = (MutexTester<T>*)userdata;
+
+    for( int i = 0; i < tester->iterationCount; i++ )
+    {
+        tester->mutex.Lock();
+        tester->value++;
+        tester->mutex.Unlock();
+    }
+    return 0;
+}
+
+TEST( Threading, MutexTest )
+{
+    MutexTester<StdMutex>( 4, 100000 ).Test();
+
+    MutexTester<NonRecursiveMutex<PlatformSemaphore>>( 4, 10000 ).Test();
+    MutexTester<NonRecursiveMutex<Semaphore>>( 4, 100000 ).Test();
+    MutexTester<NonRecursiveMutex<StdSemaphore>>( 4, 100000 ).Test();
+
+    MutexTester<Mutex<PlatformSemaphore>>( 4, 10000 ).Test();
+    MutexTester<Mutex<Semaphore>>( 4, 100000 ).Test();
+    MutexTester<Mutex<StdSemaphore>>( 4, 100000 ).Test();
+}
+
 #include "http.h"
 #include "http.cpp"
 
