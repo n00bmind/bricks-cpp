@@ -61,8 +61,8 @@ platform_win = Platform(
             '-wd5027',          # Move assignment implicitly deleted
             '-wd5045',          # Spectre mitigations
             ],
-        libs                  = ['dbghelp.lib', 'ws2_32.lib', 'advapi32.lib',],
-                                #'user32.lib', 'gdi32.lib', 'winmm.lib', 'ole32.lib', 'opengl32.lib', 'shlwapi.lib'],
+        libs                  = ['dbghelp.lib', 'ws2_32.lib', 'advapi32.lib', 'shlwapi.lib'],
+                                #'user32.lib', 'gdi32.lib', 'winmm.lib', 'ole32.lib', 'opengl32.lib', ],
         common_linker_flags   = ['/opt:ref', '/incremental:no']
 )
 
@@ -119,7 +119,12 @@ include_dirs = [
     '3rdparty/mbedtls/include'
 ]
 
-#  TODO Create additional separate lists for Debug/Release
+lib_dirs = [
+    'bench/benchmark',
+]
+
+# FIXME Remove this variable and just add the mbedtls dir to the list above plus use a separate pragma lib per config like the benchmark lib above
+# TODO Can we use the release libs in Develop?
 user_libs = [
     # '3rdparty/openssl/libcrypto-1_1-x64.lib',
     # '3rdparty/openssl/libssl-1_1-x64.lib',
@@ -260,6 +265,31 @@ if __name__ == '__main__':
                 print('\nBuilding test suite...')
                 print_color(out_args, colors.GRAY)
             cfg_file.write(f'Test suite args:\n{out_args}\n\n')
+
+            ret |= subprocess.call(out_args, cwd=binpath)
+
+            #
+            # Build benchmark suite
+            out_args = [platform.compiler]
+            out_args.extend(platform.common_compiler_flags)
+            out_args.extend(config.compiler_flags)
+            for inc in include_dirs:
+                out_args.append(f'/I{os.path.join(rootpath, inc)}')
+            out_args.append(os.path.join(rootpath, 'bench\\bench.cpp'))
+            out_args.append('/link')
+            out_args.extend(platform.common_linker_flags)
+            out_args.extend(config.linker_flags)
+            out_args.append('-subsystem:console,5.2')
+            for lib in lib_dirs:
+                out_args.append(f'/libpath:{os.path.join(rootpath, lib)}')
+            out_args.extend(platform.libs)
+            for lib in user_libs:
+                out_args.append(f'{os.path.join(rootpath, lib)}')
+
+            if in_args.verbose:
+                print('\nBuilding benchmarks...')
+                print_color(out_args, colors.GRAY)
+            cfg_file.write(f'Benchmark suite args:\n{out_args}\n\n')
 
             ret |= subprocess.call(out_args, cwd=binpath)
 
