@@ -169,7 +169,7 @@ public:
 
 struct StdMutex
 {
-    // TODO Not super clear how more 'lightweight' stuff (like CriticalSection) compares with mutex in recent times
+    // TODO Would be interesting to compare straight use of CriticalSection against this
     std::mutex m;
 
     void Lock()     { m.lock(); }
@@ -180,6 +180,25 @@ struct StdMutex
         StdMutex& m;
 
         Scope( StdMutex& m_ ) : m( m_ )
+        { m.Lock(); }
+
+        ~Scope()
+        { m.Unlock(); }
+    };
+};
+
+struct RecursiveStdMutex
+{
+    std::recursive_mutex m;
+
+    void Lock()     { m.lock(); }
+    void Unlock()   { m.unlock(); }
+
+    struct Scope
+    {
+        RecursiveStdMutex& m;
+
+        Scope( RecursiveStdMutex& m_ ) : m( m_ )
         { m.Lock(); }
 
         ~Scope()

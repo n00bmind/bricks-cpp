@@ -80,20 +80,38 @@ PLATFORM_THREAD_FUNC(MutexTesterThread)
     return 0;
 }
 
-struct NoMutex
+// Taken from https://rigtorp.se/spinlock/
+struct SpinLockMutex
 {
-    // TODO Not super clear how more 'lightweight' stuff (like CriticalSection) compares with mutex in recent times
-    std::mutex m;
+    atomic_bool lock;
 
-    void Lock()     { /*m.lock();*/ }
-    void Unlock()   { /*m.unlock();*/ }
+    SpinLockMutex()
+        : lock( false )
+    {}
+
+    void Lock()
+    {
+        for( ;; )
+        {
+            if( !lock.exchange( true, std::memory_order_acquire ) )
+                break;
+
+            while( lock.load( std::memory_order_relaxed ) )
+                _mm_pause();
+        }
+    }
+
+    void Unlock()
+    {
+        lock.store( false, std::memory_order_release );
+    }
 };
 
 
 template <typename T>
 static void TestMutex( benchmark::State& state )
 {
-    MutexTester<T> mutex( 4, 1000000 );
+    MutexTester<T> mutex( 2, 1000000 );
     for( auto _ : state )
     {
         bool result = mutex.Test();
@@ -113,6 +131,7 @@ static void TestMutex( benchmark::State& state )
 // TODO 
 // TODO Check the assembly to ensure this is actually doing work!
 TEST_MUTEX(StdMutex);
+TEST_MUTEX(RecursiveStdMutex);
 //TEST_MUTEX(NonRecursiveMutex<PlatformSemaphore>);
 TEST_MUTEX(NonRecursiveMutex<Semaphore>);
 TEST_MUTEX(NonRecursiveMutex<StdSemaphore>);
@@ -120,7 +139,8 @@ TEST_MUTEX(NonRecursiveMutex<StdSemaphore>);
 TEST_MUTEX(Mutex<Semaphore>);
 TEST_MUTEX(Mutex<StdSemaphore>);
 
-TEST_MUTEX(NoMutex);
+TEST_MUTEX(SpinLockMutex);
+
 
 int main(int argc, char** argv)
 {
