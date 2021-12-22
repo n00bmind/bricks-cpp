@@ -1697,8 +1697,7 @@ struct SyncQueue
         }
     };
 
-    // TODO 
-    StdMutex mutex;
+    Mutex mutex;
     AllocType* allocator;
 
     Page* head;
@@ -1729,7 +1728,7 @@ struct SyncQueue
     {
         T* result = nullptr;
         {
-            StdMutex::Scope lock( mutex );
+            Mutex::Scope lock( mutex );
 
             if( head->count >= head->capacity )
             {
@@ -1758,7 +1757,7 @@ struct SyncQueue
 
     bool TryPop( T* out )
     {
-        StdMutex::Scope lock( mutex );
+        Mutex::Scope lock( mutex );
 
         bool canPop = count > 0;
         if( canPop )

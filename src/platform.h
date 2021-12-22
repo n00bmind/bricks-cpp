@@ -115,6 +115,15 @@ typedef PLATFORM_WAIT_SEMAPHORE(WaitSemaphoreFunc);
 #define PLATFORM_SIGNAL_SEMAPHORE(x)    void x( void* handle, int count )
 typedef PLATFORM_SIGNAL_SEMAPHORE(SignalSemaphoreFunc);
 
+#define PLATFORM_CREATE_MUTEX(x)    void* x()
+typedef PLATFORM_CREATE_MUTEX(CreateMutexFunc);
+#define PLATFORM_DESTROY_MUTEX(x)   void x( void* handle )
+typedef PLATFORM_DESTROY_MUTEX(DestroyMutexFunc);
+#define PLATFORM_LOCK_MUTEX(x)      void x( void* handle )
+typedef PLATFORM_LOCK_MUTEX(LockMutexFunc);
+#define PLATFORM_UNLOCK_MUTEX(x)    void x( void* handle )
+typedef PLATFORM_UNLOCK_MUTEX(UnlockMutexFunc);
+
 
 #define PLATFORM_CURRENT_TIME_MILLIS(x) f64 x()
 typedef PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillisFunc);
@@ -156,6 +165,10 @@ struct PlatformAPI
     Platform::DestroySemaphoreFunc*             DestroySemaphore;
     Platform::WaitSemaphoreFunc*                WaitSemaphore;
     Platform::SignalSemaphoreFunc*              SignalSemaphore;
+    Platform::CreateMutexFunc*                  CreateMutex;
+    Platform::DestroyMutexFunc*                 DestroyMutex;
+    Platform::LockMutexFunc*                    LockMutex;
+    Platform::UnlockMutexFunc*                  UnlockMutex;
 
     // Misc
     Platform::CurrentTimeMillisFunc*            CurrentTimeMillis;

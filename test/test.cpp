@@ -1306,15 +1306,15 @@ PLATFORM_THREAD_FUNC(MutexTesterThread)
 
 TEST( Threading, MutexTest )
 {
-    MutexTester<StdMutex>( 4, 100000 ).Test();
+    MutexTester<Mutex>( 4, 100000 ).Test();
 
-    MutexTester<NonRecursiveMutex<PlatformSemaphore>>( 4, 10000 ).Test();
-    MutexTester<NonRecursiveMutex<Semaphore>>( 4, 100000 ).Test();
-    MutexTester<NonRecursiveMutex<StdSemaphore>>( 4, 100000 ).Test();
+    //MutexTester<Benaphore<PlatformSemaphore>>( 4, 10000 ).Test();
+    MutexTester<Benaphore<PreshingSemaphore>>( 4, 100000 ).Test();
+    MutexTester<Benaphore<Semaphore>>( 4, 100000 ).Test();
 
-    MutexTester<Mutex<PlatformSemaphore>>( 4, 10000 ).Test();
-    MutexTester<Mutex<Semaphore>>( 4, 100000 ).Test();
-    MutexTester<Mutex<StdSemaphore>>( 4, 100000 ).Test();
+    //MutexTester<RecursiveBenaphore<PlatformSemaphore>>( 4, 10000 ).Test();
+    MutexTester<RecursiveBenaphore<PreshingSemaphore>>( 4, 100000 ).Test();
+    MutexTester<RecursiveBenaphore<Semaphore>>( 4, 100000 ).Test();
 }
 
 #include "http.h"

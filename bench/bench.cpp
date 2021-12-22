@@ -111,7 +111,7 @@ struct SpinLockMutex
 template <typename T>
 static void TestMutex( benchmark::State& state )
 {
-    MutexTester<T> mutex( 2, 1000000 );
+    MutexTester<T> mutex( 4, 1000000 );
     for( auto _ : state )
     {
         bool result = mutex.Test();
@@ -128,16 +128,16 @@ static void TestMutex( benchmark::State& state )
         ->Unit(benchmark::kMillisecond) \
         ->MeasureProcessCPUTime();
 
-// TODO 
-// TODO Check the assembly to ensure this is actually doing work!
-TEST_MUTEX(StdMutex);
-TEST_MUTEX(RecursiveStdMutex);
-//TEST_MUTEX(NonRecursiveMutex<PlatformSemaphore>);
-TEST_MUTEX(NonRecursiveMutex<Semaphore>);
-TEST_MUTEX(NonRecursiveMutex<StdSemaphore>);
-//TEST_MUTEX(Mutex<PlatformSemaphore>);
-TEST_MUTEX(Mutex<Semaphore>);
-TEST_MUTEX(Mutex<StdSemaphore>);
+// TODO Would be interesting to give the threads a more 'realistic' workload, to see if the differences remain that big
+TEST_MUTEX(Mutex);
+TEST_MUTEX(RecursiveMutex);
+TEST_MUTEX(PlatformMutex);
+//TEST_MUTEX(Benaphore<PlatformSemaphore>);
+TEST_MUTEX(Benaphore<PreshingSemaphore>);
+TEST_MUTEX(Benaphore<Semaphore>);
+//TEST_MUTEX(RecursiveBenaphore<PlatformSemaphore>);
+TEST_MUTEX(RecursiveBenaphore<PreshingSemaphore>);
+TEST_MUTEX(RecursiveBenaphore<Semaphore>);
 
 TEST_MUTEX(SpinLockMutex);
 

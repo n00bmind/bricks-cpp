@@ -262,6 +262,29 @@ namespace Win32
         ReleaseSemaphore( (HANDLE)handle, count, NULL );
     }
 
+    PLATFORM_CREATE_MUTEX(CreateMutex)
+    {
+        // FIXME Maintain a list of these on the platform state
+        static CRITICAL_SECTION mutex;
+        InitializeCriticalSectionEx( &mutex, 4000, 0 );   // docs recommend 4000 spincount as sane default
+        return &mutex;
+    }
+
+    PLATFORM_DESTROY_MUTEX(DestroyMutex)
+    {
+        DeleteCriticalSection( (CRITICAL_SECTION*)handle );
+    }
+
+    PLATFORM_LOCK_MUTEX(LockMutex)
+    {
+        EnterCriticalSection( (CRITICAL_SECTION*)handle );
+    }
+
+    PLATFORM_UNLOCK_MUTEX(UnlockMutex)
+    {
+        LeaveCriticalSection( (CRITICAL_SECTION*)handle );
+    }
+
 
     PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillis)
     {
@@ -554,10 +577,16 @@ void InitGlobalPlatform()
     globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
     globalPlatform.CreateThread = Win32::CreateThread;
     globalPlatform.JoinThread = Win32::JoinThread;
+#if 0
     globalPlatform.CreateSemaphore = Win32::CreateSemaphore;
     globalPlatform.DestroySemaphore = Win32::DestroySemaphore;
     globalPlatform.WaitSemaphore = Win32:: WaitSemaphore;
     globalPlatform.SignalSemaphore = Win32::SignalSemaphore;
+    globalPlatform.CreateMutex = Win32::CreateMutex;
+    globalPlatform.DestroyMutex = Win32::DestroyMutex;
+    globalPlatform.LockMutex = Win32::LockMutex;
+    globalPlatform.UnlockMutex = Win32::UnlockMutex;
+#endif
     globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
     globalPlatform.ShellExecute = Win32::ShellExecute;
     globalPlatform.Print = Win32::Print;

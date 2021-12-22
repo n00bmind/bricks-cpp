@@ -16,13 +16,65 @@ namespace Core
 
 
 
-// TODO Take the ideas from https://preshing.com/20150316/semaphores-are-surprisingly-versatile/ to
-// implement the most useful primitives using the same underlying platform semaphore primitive
-// For ref, a lib by Preshing: http://mintomic.github.io/,  https://github.com/preshing/turf
-// TODO Create some synthetic benchmarks for comparison (google benchmark?)
-
 
 /////     SEMAPHORE     /////
+
+// Taken from https://stackoverflow.com/a/19659736/2151254 & https://elweitzel.de/drupal/?q=node/6
+struct Semaphore
+{
+private:
+    std::mutex mutex;
+    std::condition_variable condition;
+    i32 count;
+
+public:
+    Semaphore( i32 count_ = 0 )
+        : count( count_ )
+    {}
+
+    void Signal( i32 count_ = 1 )
+    {
+        std::unique_lock<std::mutex> lock( mutex );
+
+        count += count_;
+        for( int i = 0; i < count_; ++i )
+            condition.notify_one();
+    }
+
+    void Wait()
+    {
+        std::unique_lock<std::mutex> lock( mutex );
+
+        // Handle spurious wake-ups
+        condition.wait( lock, [&]{ return count > 0; } );
+        count--;
+    }
+
+    bool Wait( int millis )
+    {
+        auto timeout = std::chrono::milliseconds( millis );
+
+        std::unique_lock<std::mutex> lock( mutex );
+        if( !condition.wait_for( lock, timeout, [&]{ return count > 0; } ) )
+            return false;
+
+        --count;
+        return true;
+    }
+
+    bool TryWait()
+    {
+        std::unique_lock<std::mutex> lock( mutex );
+
+        if( count > 0 )
+        {
+            --count;
+            return true;
+        }
+        return false;
+    }
+};
+
 
 // TODO See https://github.com/preshing/cpp11-on-multicore/blob/master/common/sema.h for OSX & linux implementations
 struct PlatformSemaphore
@@ -60,7 +112,7 @@ public:
 
 
 // From https://github.com/preshing/cpp11-on-multicore/blob/master/common/sema.h (LightweightSemaphore)
-class Semaphore
+class PreshingSemaphore
 {
 private:
     PlatformSemaphore semaphore;
@@ -88,7 +140,7 @@ private:
     }
 
 public:
-    Semaphore( int initialCount = 0 )
+    PreshingSemaphore( int initialCount = 0 )
         : signalCount( initialCount )
     {
         ASSERT( initialCount >= 0 );
@@ -120,66 +172,22 @@ public:
 };
 
 
-// Taken from https://stackoverflow.com/a/19659736/2151254
-struct StdSemaphore
-{
-private:
-    std::mutex mutex;
-    std::condition_variable condition;
-    i64 count;
-
-public:
-    StdSemaphore( i64 count_ = 0 )
-        : count( count_ )
-    {}
-
-    void Signal()
-    {
-        std::unique_lock<std::mutex> lock( mutex );
-
-        count++;
-        condition.notify_one();
-    }
-
-    void Wait()
-    {
-        std::unique_lock<std::mutex> lock( mutex );
-
-        // Handle spurious wake-ups
-        while( count == 0 )
-            condition.wait( lock );
-        count--;
-    }
-
-    bool TryWait()
-    {
-        std::unique_lock<std::mutex> lock( mutex );
-
-        if( count )
-        {
-            --count;
-            return true;
-        }
-        return false;
-    }
-};
-
 
 /////     MUTEX     /////
 
-struct StdMutex
+struct Mutex
 {
-    // TODO Would be interesting to compare straight use of CriticalSection against this
     std::mutex m;
 
     void Lock()     { m.lock(); }
+    bool TryLock()  { return m.try_lock(); }
     void Unlock()   { m.unlock(); }
 
     struct Scope
     {
-        StdMutex& m;
+        Mutex& m;
 
-        Scope( StdMutex& m_ ) : m( m_ )
+        Scope( Mutex& m_ ) : m( m_ )
         { m.Lock(); }
 
         ~Scope()
@@ -187,36 +195,62 @@ struct StdMutex
     };
 };
 
-struct RecursiveStdMutex
+struct RecursiveMutex
 {
     std::recursive_mutex m;
 
     void Lock()     { m.lock(); }
+    bool TryLock()  { return m.try_lock(); }
     void Unlock()   { m.unlock(); }
 
     struct Scope
     {
-        RecursiveStdMutex& m;
+        RecursiveMutex& m;
 
-        Scope( RecursiveStdMutex& m_ ) : m( m_ )
+        Scope( RecursiveMutex& m_ ) : m( m_ )
         { m.Lock(); }
 
         ~Scope()
         { m.Unlock(); }
     };
+};
+
+
+// NOTE Uses CriticalSection in Win32
+struct PlatformMutex
+{
+    void* mutex;
+
+    PlatformMutex()
+    {
+        mutex = globalPlatform.CreateMutex();
+    }
+    ~PlatformMutex()
+    {
+        globalPlatform.DestroyMutex( mutex );
+    }
+
+    void Lock()
+    {
+        globalPlatform.LockMutex( mutex );
+    }
+    void Unlock()
+    {
+        globalPlatform.UnlockMutex( mutex );
+    }
 };
 
 
 // From https://github.com/preshing/cpp11-on-multicore/blob/master/common/benaphore.h (NonRecursiveBenaphore)
 template <typename SemaphoreType>
-struct NonRecursiveMutex
+struct Benaphore
 {
 private:
     SemaphoreType semaphore;
     atomic_i32 contention;
 
 public:
-    NonRecursiveMutex()
+    Benaphore()
         : contention(0)
     {}
 
@@ -248,10 +282,9 @@ public:
     }
 };
 
-
 // From https://github.com/preshing/cpp11-on-multicore/blob/master/common/benaphore.h (RecursiveBenaphore)
 template <typename SemaphoreType>
-struct Mutex
+struct RecursiveBenaphore
 {
 private:
     SemaphoreType semaphore;
@@ -261,7 +294,7 @@ private:
     int recursion;
 
 public:
-    Mutex()
+    RecursiveBenaphore()
         : owner( std::thread::id() )
         , contention( 0 )
         , recursion( 0 )
@@ -327,4 +360,6 @@ public:
 
 
 // TODO Implement https://github.com/preshing/cpp11-on-multicore/blob/master/common/rwlock.h
+// TODO Implement Event from https://elweitzel.de/drupal/?q=node/6
+// Also check AutoResetEvent in https://preshing.com/20150316/semaphores-are-surprisingly-versatile/
 
