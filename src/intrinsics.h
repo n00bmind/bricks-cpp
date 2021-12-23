@@ -23,14 +23,12 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 template <typename T>
-INLINE bool
-IsPowerOf2( T value )
+INLINE bool IsPowerOf2( T value )
 {
     return value > 0 && (value & (value - 1)) == 0;
 }
 
-INLINE u32
-NextPowerOf2( u32 value )
+INLINE u32 NextPowerOf2( u32 value )
 {
     if( IsPowerOf2( value ) )
         return value;
@@ -54,10 +52,15 @@ NextPowerOf2( u32 value )
     return result;
 }
 
-INLINE i32
-NextPowerOf2( i32 value )
+INLINE i32 NextPowerOf2( i32 value )
 {
     u32 result = NextPowerOf2( U32( value ) );
     return I32( result );
 }
 
+// Windows looves defining macros with common names
+#undef Yield
+INLINE void Yield()
+{
+    _mm_pause();
+}

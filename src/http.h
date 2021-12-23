@@ -31,10 +31,54 @@ namespace Http
 
     typedef void(*Callback)( const Response& response, void* userdata );
 
+#define METHOD(x) \
+    x(Get,  "GET") \
+    x(Post, "POST") \
 
-    bool Init();
-    void Shutdown();
+    ENUM_STRUCT_WITH_NAMES(Method, METHOD)
 
-    bool Get( char const* url, Callback callback, void* userData = nullptr, u32 flags = 0 );
+    struct Request
+    {
+        struct
+        {
+            mbedtls_net_context         fd;
+            mbedtls_ssl_context         context;
+            mbedtls_ssl_config          config;
+            mbedtls_entropy_context     entropy;
+            mbedtls_ctr_drbg_context    ctrDrbg;
+            mbedtls_x509_crt            cacert;
+        } tls;
+
+        Array<Header> headers;
+        Callback callback;
+        String bodyData;
+        void* userData;
+
+        // FIXME Fix String so it actually copies in its copy constructor!
+        String host;
+        String port;
+        String resource;
+        Method method;
+        bool https;
+        bool ready;
+    };
+
+    struct State
+    {
+        SyncQueue<Request> requestQueue;
+        Semaphore requestSemaphore;
+        MemoryArena threadArena;
+        MemoryArena threadTmpArena;
+        Platform::ThreadHandle thread;
+        atomic_bool threadRunning;
+        bool initialized;
+    };
+
+
+    bool Init( State* state );
+    void Shutdown( State* state );
+
+    bool Get( State* state, char const* url, Array<Header> const& headers, Callback callback, void* userData = nullptr, u32 flags = 0 );
+    bool Get( State* state, char const* url, Callback callback, void* userData = nullptr, u32 flags = 0 );
 
 } // namespace Http

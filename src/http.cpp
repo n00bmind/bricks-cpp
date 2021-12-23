@@ -1,132 +1,13 @@
 #include "ca_cert.h"
 
-#define HTTP_PRINT_CONTENTS 1
+#define HTTP_DEBUG_PRINT 1
 
 // SPEC: https://datatracker.ietf.org/doc/html/rfc2616
 
 namespace Http
 {
-#define METHOD(x) \
-    x(Get,  "GET") \
-    x(Post, "POST") \
-
-    ENUM_STRUCT_WITH_NAMES(Method, METHOD)
-
-    struct Request
+    static void InitRequest( char const* url, Request* request )
     {
-        struct
-        {
-            mbedtls_net_context         fd;
-            mbedtls_ssl_context         context;
-            mbedtls_ssl_config          config;
-            mbedtls_entropy_context     entropy;
-            mbedtls_ctr_drbg_context    ctrDrbg;
-            mbedtls_x509_crt            cacert;
-        } tls;
-
-        // FIXME Fix String so it actually copies in its copy constructor!
-        String host;
-        String port;
-        String resource;
-        Method method;
-        bool https;
-    };
-
-    struct State
-    {
-        SyncQueue<Request> requestQueue;
-        Platform::ThreadHandle thread;
-        atomic_bool threadRunning;
-        bool initialized;
-    };
-
-
-    PLATFORM_THREAD_FUNC(ThreadMain)
-    {
-        State* state = (State*)userdata;
-
-        printf( "### HTTP THREAD STARTED ###\n" );
-
-        state->threadRunning.store( true );
-        while( state->threadRunning.load() )
-        {
-
-        }
-        
-        printf( "### HTTP THREAD STOPPED ###\n" );
-        return 0;
-    }
-
-    bool Init( State* state )
-    {
-        if( state->initialized )
-            return true;
-
-        // TODO Move to the platform layer
-#ifdef _WIN32
-        WSADATA wsaData;
-        int ret = WSAStartup(MAKEWORD(2,2), &wsaData);
-        ASSERT( ret == 0 );
-#endif
-
-        INIT( state->requestQueue )( 16 );
-
-        // Create http thread
-        state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );
-        state->initialized = true;
-
-        return true;
-    }
-
-    void Shutdown( State* state )
-    {
-        if( !state->initialized )
-            return;
-
-        state->threadRunning.store( false );
-        Core::JoinThread( state->thread );
-
-        // TODO Move to the platform layer
-#ifdef _WIN32
-        int ret = WSACleanup();
-        ASSERT( ret == 0 );
-#endif
-
-        state->initialized = false;
-    }
-
-    
-    static void Close( Request* request, Response* response, bool error = false )
-    {
-        if( request->https )
-        {
-            mbedtls_ssl_close_notify( &request->tls.context );
-
-            mbedtls_ssl_free( &request->tls.context );
-            mbedtls_ssl_config_free( &request->tls.config );
-            mbedtls_ctr_drbg_free( &request->tls.ctrDrbg );
-            mbedtls_entropy_free( &request->tls.entropy );
-            mbedtls_x509_crt_free( &request->tls.cacert );
-        }
-
-        mbedtls_net_free( &request->tls.fd );
-
-        response->errored = error;
-    }
-
-    static bool Connect( char const* url, Request* request, u32 flags = 0 )
-    {
-#if 0
-        if( !s_initialized )
-        {
-            if( !Init() )
-                return false;
-        }
-#endif
-
-        *request = {};
-
-
         // Parse URL
         bool https = false;
 #define HTTP "http://"
@@ -167,10 +48,7 @@ namespace Http
             request->resource = "/";
 
         request->https = https;
-
-
         // Init mbedtls stuff
-        int ret = 0;
         if( https )
         {
             mbedtls_net_init( &request->tls.fd );
@@ -179,6 +57,29 @@ namespace Http
             mbedtls_ctr_drbg_init( &request->tls.ctrDrbg );
             mbedtls_entropy_init( &request->tls.entropy );
         }
+    }
+
+    static void Close( Request* request, Response* response, bool error = false )
+    {
+        if( request->https )
+        {
+            mbedtls_ssl_close_notify( &request->tls.context );
+
+            mbedtls_ssl_free( &request->tls.context );
+            mbedtls_ssl_config_free( &request->tls.config );
+            mbedtls_ctr_drbg_free( &request->tls.ctrDrbg );
+            mbedtls_entropy_free( &request->tls.entropy );
+            mbedtls_x509_crt_free( &request->tls.cacert );
+        }
+
+        mbedtls_net_free( &request->tls.fd );
+
+        response->errored = error;
+    }
+
+    static bool Connect( Request* request, u32 flags = 0 )
+    {
+        int ret = 0;
 
         // TODO Investigate how to do proper non-blocking connects
         // The old Https code had its own mbedtls_net_connect_timeout, which seems like it heavily borrows from the
@@ -197,7 +98,7 @@ namespace Http
             return false;
         }
 
-        if( https )
+        if( request->https )
         {
             if( (ret = mbedtls_ssl_config_defaults( &request->tls.config,
                                                     MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT ))
@@ -285,20 +186,20 @@ namespace Http
         return true;
     }
 
-    static String BuildRequest( Request const& request, Array<Header> const& headers, String bodyData )
+    static String BuildRequestString( Request const& request )
     {
         // Dump lowercased user headers into a hashtable
         static constexpr int defaultHeadersCount = 6;
-        Hashtable< String, String > tmpHeaders( headers.count + defaultHeadersCount, CTX_TMPALLOC );
+        Hashtable< String, String > tmpHeaders( request.headers.count + defaultHeadersCount, CTX_TMPALLOC );
 
-        for( Header const& h : headers )
+        for( Header const& h : request.headers )
             tmpHeaders.Put( String::Clone( h.name ).ToLowercase(), h.value );
 
         // Add common and 'mandatory' headers to the user provided set
         tmpHeaders.Put( "user-agent"_str, "BricksEngine/1.0"_str );
         tmpHeaders.Put( "host"_str, String::FromFormatTmp( "%s:%s", request.host.CStr(), request.port.CStr() ) );
-        if( bodyData )
-            tmpHeaders.Put( "content-length"_str, String::FromFormatTmp( "%d", bodyData.length ) ); 
+        if( request.bodyData )
+            tmpHeaders.Put( "content-length"_str, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
         tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
         tmpHeaders.PutIfNotFound( "accept"_str, "*/*"_str );
         tmpHeaders.PutIfNotFound( "content-type"_str, "application/json; charset=utf-8"_str );
@@ -343,11 +244,11 @@ namespace Http
             sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
         // TODO Should we skip this when there's no body?
         sb.Append( "\r\n"_str );
-        if( bodyData )
-            sb.AppendFormat( "%s", bodyData.CStr() );
+        if( request.bodyData )
+            sb.AppendFormat( "%s", request.bodyData.CStr() );
 
         String result = sb.ToStringTmp();
-#if HTTP_PRINT_CONTENTS
+#if HTTP_DEBUG_PRINT
         printf("--- REQ:\n%s---\n", result.CStr() );
 #endif
 
@@ -552,7 +453,7 @@ namespace Http
     {
         // Don't count terminator
         String responseString( (char const*)response->rawData.data, response->rawData.count - 1 );
-#if HTTP_PRINT_CONTENTS
+#if HTTP_DEBUG_PRINT
         printf("--- RSP:\n%s---\n", responseString.CStr() );
 #endif
 
@@ -622,40 +523,35 @@ namespace Http
         return true;
     }
 
-    // TODO We're gonna want some way of reusing connections to the same server etc
-    bool Get( char const* url, Array<Header> const& headers, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    static bool ProcessRequest( Request* request )
     {
-        // TODO Enqueue to the http thread and return immediately
-
-        Request request = {};
         Response response = {};
 
-        if( !Connect( url, &request ) )
+        if( !Connect( request ) )
         {
-            Close( &request, &response, true );
+            Close( request, &response, true );
             return false;
         }
 
-        request.method = Method::Get;
-        String reqStr = BuildRequest( request, headers, {} );
+        String reqStr = BuildRequestString( *request );
 
         // TODO This is supposed to be non-blocking now? How is that supposed to work?
-        if( !Write( &request, reqStr.ToBufferU8() ) )
+        if( !Write( request, reqStr.ToBufferU8() ) )
         {
-            Close( &request, &response, true );
+            Close( request, &response, true );
             return false;
         }
 
         // TODO Do this non-blocking too
-        if( !ReadBlocking( &request, &response ) )
+        if( !ReadBlocking( request, &response ) )
         {
-            Close( &request, &response, true );
+            Close( request, &response, true );
             return false;
         }
 
         if( !ParseResponse( &response ) )
         {
-            Close( &request, &response, true );
+            Close( request, &response, true );
 
             ASSERT( false, "Bad response! Check parsing?" );
             return false;
@@ -663,16 +559,119 @@ namespace Http
 
         // TODO How do we reuse connections while ensuring we dont leak anything
         //if( response->close )
-            Close( &request, &response, false );
+            Close( request, &response, false );
 
-        callback( response, userData );
+        request->callback( response, request->userData );
         return true;
     }
 
-    bool Get( char const* url, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+
+    PLATFORM_THREAD_FUNC(ThreadMain)
+    {
+        State* state = (State*)userdata;
+        // TODO We probably want to do this for most threads
+        InitArena( &state->threadArena );
+        // TODO We could conceivably use tmp memory for everything?
+        InitArena( &state->threadTmpArena );
+        // Set up an initial context for the thread
+        Context threadContext =
+        {
+            Allocator::CreateFrom( &state->threadArena ),
+            Allocator::CreateFrom( &state->threadTmpArena ),
+        };
+        // TODO We're gonna need to do this again upon hot reloading for any long-running threads
+        InitContextStack( threadContext );
+
+        state->threadRunning.STORE_RELAXED( true );
+#if HTTP_DEBUG_PRINT
+        printf( "### HTTP THREAD STARTED ###\n" );
+#endif
+
+        while( state->threadRunning.LOAD_RELAXED() )
+        {
+            state->requestSemaphore.Wait();
+            // TODO Move!?
+            Request req;
+            while( state->requestQueue.TryPop( &req ) )
+            {
+                // Return again later if this request is still being put together
+                if( !req.ready )
+                    break;
+
+                ProcessRequest( &req );
+            }
+        }
+        
+#if HTTP_DEBUG_PRINT
+        printf( "### HTTP THREAD STOPPED ###\n" );
+#endif
+        return 0;
+    }
+
+
+    bool Init( State* state )
+    {
+        if( state->initialized )
+            return true;
+
+        // TODO Move to the platform layer
+#ifdef _WIN32
+        WSADATA wsaData;
+        int ret = WSAStartup(MAKEWORD(2,2), &wsaData);
+        ASSERT( ret == 0 );
+#endif
+
+        INIT( state->requestQueue )( 16 );
+
+        // Create http thread
+        state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );
+        state->initialized = true;
+
+        return true;
+    }
+
+    void Shutdown( State* state )
+    {
+        if( !state->initialized )
+            return;
+
+        state->threadRunning.store( false );
+        state->requestSemaphore.Signal();
+        Core::JoinThread( state->thread );
+
+        // TODO Move to the platform layer
+#ifdef _WIN32
+        int ret = WSACleanup();
+        ASSERT( ret == 0 );
+#endif
+
+        state->initialized = false;
+    }
+
+    // TODO We're gonna want some way of reusing connections to the same server etc
+    bool Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
+              void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    {
+        // Enqueue to the http thread and return immediately
+        Request* request = state->requestQueue.PushEmpty();
+
+        InitRequest( url, request );
+        request->method = Method::Get;
+        // TODO Default to moving the headers?
+        request->headers = headers;
+        request->callback = callback;
+        request->userData = userData;
+
+        request->ready = true;
+        state->requestSemaphore.Signal();
+
+        return true;
+    }
+
+    bool Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         Array<Header> headers;
-        return Get( url, headers, callback, userData, flags );
+        return Get( state, url, headers, callback, userData, flags );
     }
 
 } // namespace Http

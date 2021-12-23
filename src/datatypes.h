@@ -1794,7 +1794,7 @@ private:
         }
         else
         {
-            result = (Page*)ALLOC( allocator, sizeof(Page) + pageCapacity * sizeof(T) );
+            result = (Page*)ALLOC( allocator, Sz(sizeof(Page) + pageCapacity * sizeof(T)) );
         }
 
         *result = {};

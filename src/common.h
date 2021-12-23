@@ -163,6 +163,7 @@ typedef std::atomic<i64> atomic_i64;
 
 #define LOAD_RELAXED() load( std::memory_order_relaxed )
 #define LOAD_ACQUIRE() load( std::memory_order_acquire )
+#define STORE_RELAXED(x) store( x, std::memory_order_relaxed )
 #define STORE_RELEASE(x) store( x, std::memory_order_release )
 #define COMPARE_EXCHANGE_ACQREL(exp, des) compare_exchange_weak( exp, des, std::memory_order_acq_rel )
 

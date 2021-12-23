@@ -28,16 +28,26 @@
 #include "intrinsics.h"
 #include "maths.h"
 #include "platform.h"
+#include "clock.h"
 #include "memory.h"
 #include "threading.h"
 #include "datatypes.h"
 #include "strings.h"
+#include "http.h"
 
 #include "platform.cpp"
 #include "win32_platform.cpp"
+#include "http.cpp"
 
 
 PlatformAPI globalPlatform;
+
+struct
+{
+    Http::State http;
+    Core::Time clock;
+
+} globalState = {};
 
 #undef internal
 
@@ -1317,8 +1327,6 @@ TEST( Threading, MutexTest )
     MutexTester<RecursiveBenaphore<Semaphore>>( 4, 100000 ).Test();
 }
 
-#include "http.h"
-#include "http.cpp"
 
 class HttpTest : public testing::Test
 {
@@ -1355,14 +1363,16 @@ TEST_F( HttpTest, Get )
         ASSERT_EQ( response.statusCode, 200 );
     };
 
-    bool ret = Http::Get( "https://httpbin.org/get?message=https_client", callback, &done );
+    bool ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client",
+                          callback, &done );
     ASSERT_TRUE( ret );
 
-#if 0
-    f32 start = Clock::AppTime();
-    while( !done && Clock::AppTime() - start < 10.f )
-        ; // Wait
-#endif
+    // FIXME Do callbacks on the main thread
+    f32 start = Core::AppTimeSeconds( &globalState.clock );
+    while( !done && Core::AppTimeSeconds( &globalState.clock ) - start < 10.f )
+        Yield();
+
+    ASSERT_TRUE( done );
 }
 
 // Older Https class
@@ -1482,12 +1492,7 @@ GTEST_API_ int main(int argc, char **argv)
 
     InitGlobalPlatform();
 
-    struct
-    {
-        Http::State http;
-
-    } globalState = {};
-
+    Core::InitTime( &globalState.clock );
 
     bool result = Http::Init( &globalState.http );
     ASSERT_EQ( result, true ) << "Http::Init failed";
