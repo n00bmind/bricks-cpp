@@ -132,6 +132,7 @@ static void TestMutex( benchmark::State& state )
 TEST_MUTEX(Mutex);
 TEST_MUTEX(RecursiveMutex);
 TEST_MUTEX(PlatformMutex);
+
 //TEST_MUTEX(Benaphore<PlatformSemaphore>);
 TEST_MUTEX(Benaphore<PreshingSemaphore>);
 TEST_MUTEX(Benaphore<Semaphore>);

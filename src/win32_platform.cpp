@@ -577,7 +577,6 @@ void InitGlobalPlatform()
     globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
     globalPlatform.CreateThread = Win32::CreateThread;
     globalPlatform.JoinThread = Win32::JoinThread;
-#if 0
     globalPlatform.CreateSemaphore = Win32::CreateSemaphore;
     globalPlatform.DestroySemaphore = Win32::DestroySemaphore;
     globalPlatform.WaitSemaphore = Win32:: WaitSemaphore;
@@ -586,7 +585,6 @@ void InitGlobalPlatform()
     globalPlatform.DestroyMutex = Win32::DestroyMutex;
     globalPlatform.LockMutex = Win32::LockMutex;
     globalPlatform.UnlockMutex = Win32::UnlockMutex;
-#endif
     globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
     globalPlatform.ShellExecute = Win32::ShellExecute;
     globalPlatform.Print = Win32::Print;

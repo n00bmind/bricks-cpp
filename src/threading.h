@@ -16,6 +16,7 @@ namespace Core
 
 
 
+// TODO These should all delete the copy constructor and assignment?
 
 /////     SEMAPHORE     /////
 
