@@ -12,6 +12,16 @@ namespace Core
     {
         return globalPlatform.JoinThread( handle );
     }
+
+    inline u32 GetThreadId()
+    {
+        return globalPlatform.GetThreadId();
+    }
+
+    inline bool IsMainThread()
+    {
+        return globalPlatform.IsMainThread();
+    }
 } // namespace Core
 
 

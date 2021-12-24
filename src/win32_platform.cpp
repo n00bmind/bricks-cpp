@@ -240,6 +240,22 @@ namespace Win32
 
         return (int)exitCode;
     }
+    
+    PLATFORM_GET_THREAD_ID(GetThreadId)
+    {
+        return GetCurrentThreadId();
+    }
+
+    // NOTE This file should be compiled only in the platform layer,
+    // so this id will by definition be stable across hot reloads
+    static u32 globalMainThreadId = GetThreadId();
+    // TODO Test what happens if we decide to restart any threads during hot reloading
+    // (I assume the newly started threads will call this all over again and we should be fine?)
+    static thread_local u32 globalThreadId = GetThreadId();
+    PLATFORM_IS_MAIN_THREAD(IsMainThread)
+    {
+        return globalThreadId == globalMainThreadId;
+    }
 
     PLATFORM_CREATE_SEMAPHORE(CreateSemaphore)
     {
@@ -577,6 +593,8 @@ void InitGlobalPlatform()
     globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
     globalPlatform.CreateThread = Win32::CreateThread;
     globalPlatform.JoinThread = Win32::JoinThread;
+    globalPlatform.GetThreadId = Win32::GetThreadId;
+    globalPlatform.IsMainThread = Win32::IsMainThread;
     globalPlatform.CreateSemaphore = Win32::CreateSemaphore;
     globalPlatform.DestroySemaphore = Win32::DestroySemaphore;
     globalPlatform.WaitSemaphore = Win32:: WaitSemaphore;

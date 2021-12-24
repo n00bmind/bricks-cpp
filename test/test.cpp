@@ -1328,6 +1328,7 @@ TEST( Threading, MutexTest )
 }
 
 
+// TODO Only do http tests if we detect we're connected. Otherwise show a warning
 class HttpTest : public testing::Test
 {
 protected:
@@ -1367,10 +1368,9 @@ TEST_F( HttpTest, Get )
                           callback, &done );
     ASSERT_TRUE( ret );
 
-    // FIXME Do callbacks on the main thread
     f32 start = Core::AppTimeSeconds( &globalState.clock );
     while( !done && Core::AppTimeSeconds( &globalState.clock ) - start < 10.f )
-        Yield();
+        Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
 }

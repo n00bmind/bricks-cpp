@@ -15,6 +15,8 @@ namespace Http
         String value;
     };
 
+    typedef void(*Callback)( const struct Response& response, void* userdata );
+
     struct Response
     {
         String url;
@@ -22,14 +24,14 @@ namespace Http
         String headers;
         Buffer<u8> body;
         char const* reason;
+        Callback callback;
+        void* callbackData;
         i32 statusCode;
         // TODO If this is not found in the response data.. what should the default be?
         bool close = true;
         // TODO Turn this into an enum/string probably?
         bool errored;
     };
-
-    typedef void(*Callback)( const Response& response, void* userdata );
 
 #define METHOD(x) \
     x(Get,  "GET") \
@@ -50,22 +52,23 @@ namespace Http
         } tls;
 
         Array<Header> headers;
-        Callback callback;
         String bodyData;
-        void* userData;
+        Callback callback;
+        void* callbackData;
 
-        // FIXME Fix String so it actually copies in its copy constructor!
+        // FIXME Ensure we copy when appropriate for these
+        String url;
         String host;
         String port;
         String resource;
         Method method;
         bool https;
-        bool ready;
     };
 
     struct State
     {
         SyncQueue<Request> requestQueue;
+        SyncQueue<Response> responseQueue;
         Semaphore requestSemaphore;
         MemoryArena threadArena;
         MemoryArena threadTmpArena;
@@ -80,5 +83,7 @@ namespace Http
 
     bool Get( State* state, char const* url, Array<Header> const& headers, Callback callback, void* userData = nullptr, u32 flags = 0 );
     bool Get( State* state, char const* url, Callback callback, void* userData = nullptr, u32 flags = 0 );
+
+    void ProcessResponses( State* state );
 
 } // namespace Http

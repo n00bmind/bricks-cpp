@@ -105,6 +105,10 @@ typedef PLATFORM_CREATE_THREAD(CreateThreadFunc);
 // Returns the thread's exit code
 #define PLATFORM_JOIN_THREAD(x)         int x( Platform::ThreadHandle handle )
 typedef PLATFORM_JOIN_THREAD(JoinThreadFunc);
+#define PLATFORM_GET_THREAD_ID(x)       u32 x()
+typedef PLATFORM_GET_THREAD_ID(GetThreadIdFunc);
+#define PLATFORM_IS_MAIN_THREAD(x)      bool x()
+typedef PLATFORM_IS_MAIN_THREAD(IsMainThreadFunc);
 
 #define PLATFORM_CREATE_SEMAPHORE(x)    void* x( int initialCount )
 typedef PLATFORM_CREATE_SEMAPHORE(CreateSemaphoreFunc);
@@ -115,13 +119,13 @@ typedef PLATFORM_WAIT_SEMAPHORE(WaitSemaphoreFunc);
 #define PLATFORM_SIGNAL_SEMAPHORE(x)    void x( void* handle, int count )
 typedef PLATFORM_SIGNAL_SEMAPHORE(SignalSemaphoreFunc);
 
-#define PLATFORM_CREATE_MUTEX(x)    void* x()
+#define PLATFORM_CREATE_MUTEX(x)        void* x()
 typedef PLATFORM_CREATE_MUTEX(CreateMutexFunc);
-#define PLATFORM_DESTROY_MUTEX(x)   void x( void* handle )
+#define PLATFORM_DESTROY_MUTEX(x)       void x( void* handle )
 typedef PLATFORM_DESTROY_MUTEX(DestroyMutexFunc);
-#define PLATFORM_LOCK_MUTEX(x)      void x( void* handle )
+#define PLATFORM_LOCK_MUTEX(x)          void x( void* handle )
 typedef PLATFORM_LOCK_MUTEX(LockMutexFunc);
-#define PLATFORM_UNLOCK_MUTEX(x)    void x( void* handle )
+#define PLATFORM_UNLOCK_MUTEX(x)        void x( void* handle )
 typedef PLATFORM_UNLOCK_MUTEX(UnlockMutexFunc);
 
 
@@ -161,6 +165,9 @@ struct PlatformAPI
     // Threading
     Platform::CreateThreadFunc*                 CreateThread;
     Platform::JoinThreadFunc*                   JoinThread;
+    Platform::GetThreadIdFunc*                  GetThreadId;
+    Platform::IsMainThreadFunc*                 IsMainThread;
+
     Platform::CreateSemaphoreFunc*              CreateSemaphore;
     Platform::DestroySemaphoreFunc*             DestroySemaphore;
     Platform::WaitSemaphoreFunc*                WaitSemaphore;

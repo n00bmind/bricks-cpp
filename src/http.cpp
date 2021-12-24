@@ -8,6 +8,8 @@ namespace Http
 {
     static void InitRequest( char const* url, Request* request )
     {
+        request->url = url;
+
         // Parse URL
         bool https = false;
 #define HTTP "http://"
@@ -523,13 +525,15 @@ namespace Http
         return true;
     }
 
-    static bool ProcessRequest( Request* request )
+    static bool ProcessRequest( Request* request, Response* response )
     {
-        Response response = {};
+        response->url = request->url;
+        response->callback = request->callback;
+        response->callbackData = request->callbackData;
 
         if( !Connect( request ) )
         {
-            Close( request, &response, true );
+            Close( request, response, true );
             return false;
         }
 
@@ -538,20 +542,20 @@ namespace Http
         // TODO This is supposed to be non-blocking now? How is that supposed to work?
         if( !Write( request, reqStr.ToBufferU8() ) )
         {
-            Close( request, &response, true );
+            Close( request, response, true );
             return false;
         }
 
         // TODO Do this non-blocking too
-        if( !ReadBlocking( request, &response ) )
+        if( !ReadBlocking( request, response ) )
         {
-            Close( request, &response, true );
+            Close( request, response, true );
             return false;
         }
 
-        if( !ParseResponse( &response ) )
+        if( !ParseResponse( response ) )
         {
-            Close( request, &response, true );
+            Close( request, response, true );
 
             ASSERT( false, "Bad response! Check parsing?" );
             return false;
@@ -559,9 +563,8 @@ namespace Http
 
         // TODO How do we reuse connections while ensuring we dont leak anything
         //if( response->close )
-            Close( request, &response, false );
+            Close( request, response, false );
 
-        request->callback( response, request->userData );
         return true;
     }
 
@@ -594,11 +597,11 @@ namespace Http
             Request req;
             while( state->requestQueue.TryPop( &req ) )
             {
-                // Return again later if this request is still being put together
-                if( !req.ready )
-                    break;
+                Response response = {};
+                ProcessRequest( &req, &response );
 
-                ProcessRequest( &req );
+                // TODO Move!?
+                state->responseQueue.Push( std::move(response) );
             }
         }
         
@@ -622,6 +625,7 @@ namespace Http
 #endif
 
         INIT( state->requestQueue )( 16 );
+        INIT( state->responseQueue )( 16 );
 
         // Create http thread
         state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );
@@ -653,16 +657,17 @@ namespace Http
               void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         // Enqueue to the http thread and return immediately
-        Request* request = state->requestQueue.PushEmpty();
+        Request request = {};
 
-        InitRequest( url, request );
-        request->method = Method::Get;
+        InitRequest( url, &request );
+        request.method = Method::Get;
         // TODO Default to moving the headers?
-        request->headers = headers;
-        request->callback = callback;
-        request->userData = userData;
+        request.headers = headers;
+        request.callback = callback;
+        request.callbackData = userData;
 
-        request->ready = true;
+        // TODO Move!?
+        state->requestQueue.Push( std::move(request) );
         state->requestSemaphore.Signal();
 
         return true;
@@ -674,4 +679,16 @@ namespace Http
         return Get( state, url, headers, callback, userData, flags );
     }
 
+
+    void ProcessResponses( State* state )
+    {
+        ASSERT( Core::IsMainThread() );
+
+        // TODO Move!?
+        Response response;
+        while( state->responseQueue.TryPop( &response ) )
+        {
+            response.callback( response, response.callbackData );
+        }
+    }
 } // namespace Http
