@@ -579,8 +579,11 @@ public:
         ASSERT( Valid() );
     }
 
-    // NOTE All 'Consume' methods mutate the current String by inserting NLs at the consumed boundaries
+    char* InPlaceModify() { return (char*)data; }
+
+    // NOTE All 'Consume' methods mutate the current String by inserting terminators at the consumed boundaries
     // (ideally we'd like to be able to return non-null terminated Strings to avoid modifying the input)
+    // TODO Use InPlaceModify()
     String ConsumeLine()
     {
         // TODO ???

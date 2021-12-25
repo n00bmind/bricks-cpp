@@ -92,9 +92,16 @@ namespace Http
             return false;
         }
 
+        // TODO What's the implications of doing this?
+        // TODO How does KoM do this?
+#define NON_BLOCKING 0
+
+#if NON_BLOCKING
         // Make socket ops non blocking
-        // TODO Review what the implications are
         if( (ret = mbedtls_net_set_nonblock( &request->tls.fd )) != 0 )
+#else
+        if( (ret = mbedtls_net_set_block( &request->tls.fd )) != 0 )
+#endif
         {
             //LogError( Net, "mbedtls_net_set_nonblock returned %d", ret );
             return false;
@@ -166,7 +173,11 @@ namespace Http
                 //LogError( Net, "mbedtls_ssl_set_hostname returned %d\n\n", ret );
                 return false;
             }
+#if NON_BLOCKING
             mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, mbedtls_net_recv, nullptr );
+#else
+            mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, nullptr, mbedtls_net_recv_timeout );
+#endif
 
             // Do the dance
             while( (ret = mbedtls_ssl_handshake( &request->tls.context )) != 0 )
@@ -242,6 +253,7 @@ namespace Http
 
         StringBuilder sb;
         sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, request.resource.CStr() );
+        // FIXME Uppercase first letter!
         for( auto it = tmpHeaders.Items(); it; ++it )
             sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
         // TODO Should we skip this when there's no body?
@@ -459,9 +471,10 @@ namespace Http
         printf("--- RSP:\n%s---\n", responseString.CStr() );
 #endif
 
-        while( String line = responseString.ConsumeLine() )
+        while( true )
         {
-            if( line.StartsWith( "\r\n" ) )
+            String line = responseString.ConsumeLine();
+            if( line.Empty() )
             {
                 // Header is over. Save the remainder as the body
                 // TODO Terminator?
@@ -509,15 +522,17 @@ namespace Http
                         LOGW( /*Net,*/ "Malformed response header: '%s'", line.CStr() );
                         continue;
                     }
-                    char const* name = word.data;
+                    // Remove final ':'
+                    word.InPlaceModify()[ word.length - 1 ] = 0;
+                    String name( word.data, word.length - 1 );
 
-                    if( !(word = line.ConsumeWord()) )
+                    if( !line )
                     {
-                        LOGW( /*Net,*/ "Empty response header: '%s'", name );
+                        LOGW( /*Net,*/ "Empty response header: '%s'", name.CStr() );
                         continue;
                     }
 
-                    Header h = { name, std::move( word ) };
+                    Header h = { name, line };
                 }
             }
         }
@@ -539,7 +554,7 @@ namespace Http
 
         String reqStr = BuildRequestString( *request );
 
-        // TODO This is supposed to be non-blocking now? How is that supposed to work?
+        // TODO Investigate how to do non-blocking reads & writes
         if( !Write( request, reqStr.ToBufferU8() ) )
         {
             Close( request, response, true );
@@ -673,10 +688,39 @@ namespace Http
         return true;
     }
 
-    bool Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    bool Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/,
+              u32 flags /*= 0*/ )
     {
         Array<Header> headers;
         return Get( state, url, headers, callback, userData, flags );
+    }
+
+    bool Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
+               Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    {
+        // Enqueue to the http thread and return immediately
+        Request request = {};
+
+        InitRequest( url, &request );
+        request.method = Method::Post;
+        // TODO Default to moving the headers?
+        request.headers = headers;
+        request.bodyData = bodyData;
+        request.callback = callback;
+        request.callbackData = userData;
+
+        // TODO Move!?
+        state->requestQueue.Push( std::move(request) );
+        state->requestSemaphore.Signal();
+
+        return true;
+    }
+
+    bool Post( State* state, char const* url, char const* bodyData, Callback callback, 
+               void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    {
+        Array<Header> headers;
+        return Post( state, url, headers, bodyData, callback, userData, flags );
     }
 
 

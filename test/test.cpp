@@ -1362,6 +1362,8 @@ TEST_F( HttpTest, Get )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
+        // FIXME 
+        ASSERT_TRUE( response.body );
     };
 
     bool ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client",
@@ -1374,6 +1376,36 @@ TEST_F( HttpTest, Get )
 
     ASSERT_TRUE( done );
 }
+
+TEST_F( HttpTest, Post )
+{
+    // TODO Probably abstract/formalize all this
+    bool done = false;
+    auto callback = []( const Http::Response& response, void* userdata  )
+    {
+        bool* done = (bool*)userdata;
+        *done = true;
+
+        ASSERT_EQ( response.statusCode, 200 );
+        // FIXME 
+        ASSERT_TRUE( response.body );
+    };
+
+    bool ret = Http::Post( &globalState.http, "https://httpbin.org/post",
+                           "{\"message\":\"Hello, https_client!\"}",
+                           callback, &done );
+    ASSERT_TRUE( ret );
+
+    f32 start = Core::AppTimeSeconds( &globalState.clock );
+    while( !done && Core::AppTimeSeconds( &globalState.clock ) - start < 10.f )
+        Http::ProcessResponses( &globalState.http );
+
+    ASSERT_TRUE( done );
+}
+
+// TODO Test plain http
+
+
 
 // Older Https class
 
