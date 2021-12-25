@@ -1362,7 +1362,6 @@ TEST_F( HttpTest, Get )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        // FIXME 
         ASSERT_TRUE( response.body );
     };
 
@@ -1370,8 +1369,9 @@ TEST_F( HttpTest, Get )
                           callback, &done );
     ASSERT_TRUE( ret );
 
+    // TODO We now get two responses per request???
     f32 start = Core::AppTimeSeconds( &globalState.clock );
-    while( !done && Core::AppTimeSeconds( &globalState.clock ) - start < 10.f )
+    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds( &globalState.clock ) - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -1387,7 +1387,6 @@ TEST_F( HttpTest, Post )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        // FIXME 
         ASSERT_TRUE( response.body );
     };
 
@@ -1397,7 +1396,7 @@ TEST_F( HttpTest, Post )
     ASSERT_TRUE( ret );
 
     f32 start = Core::AppTimeSeconds( &globalState.clock );
-    while( !done && Core::AppTimeSeconds( &globalState.clock ) - start < 10.f )
+    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds( &globalState.clock ) - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );

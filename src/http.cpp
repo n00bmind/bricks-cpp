@@ -379,6 +379,8 @@ namespace Http
     // Return true if there's more data to read
     static bool Read( Request* request, BucketArray<Array<u8>>* readChunks, Response* response )
     {
+        bool keep_trying = true;
+
         static constexpr int chunkSize = 4096;
         // Get a new chunk or reuse the last one
         Array<u8>* chunk = nullptr;
@@ -398,13 +400,14 @@ namespace Http
             ret = mbedtls_net_recv_timeout( &request->tls.fd, (u_char *)chunk->end(), (size_t)chunk->Available(), 5000 );
 
         if( ret == MBEDTLS_ERR_SSL_WANT_READ )
-            return true;
+            // Data not yet ready
+            keep_trying = true;
         else if( ret <= 0 )
         {
             if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
             {
                 // Connection closed gracefully
-                // NOTE Fallthrough and try to parse what we read so far
+                // Stop reading and move on to parsing
             }
             else
             {
@@ -418,9 +421,9 @@ namespace Http
                     mbedtls_strerror( error, errorBuf, sizeof(errorBuf) );
                     LOGE( /*Net,*/ "Read error (%d): %s", error, errorBuf );
                 }
-
-                return false;
             }
+
+            keep_trying = false;
         }
 
         if( ret > 0 )
@@ -428,9 +431,7 @@ namespace Http
 
         // TODO Technically, we should parse the http contents to ensure we've finished receiving all data
         // (see https://github.com/ARMmbed/mbedtls/blob/146247de712f00220226829dcf13e99f62133ad6/programs/ssl/ssl_client2.c#L2627)
-        // For now, just try again if we last read a full chunk
-        bool completed = ret < chunkSize;
-        if( completed )
+        if( !keep_trying )
         {
             // Compact down and null terminate the buffer
             ASSERT( response->rawData.capacity == 0 );
@@ -447,7 +448,7 @@ namespace Http
             response->rawData.Push( 0 );
         }
 
-        return true;
+        return keep_trying;
     }
 
     static int ReadBlocking( Request* request, Response* response )
