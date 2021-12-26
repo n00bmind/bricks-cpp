@@ -14,6 +14,9 @@
 #include "mbedtls/entropy.h"
 #include "mbedtls/ctr_drbg.h"
 #include "mbedtls/error.h"
+#if CONFIG_DEBUG
+#include "mbedtls/debug.h"
+#endif
 //#include "mbedtls/../../tests/include/test/certs.h"
 
 #pragma warning( push )

@@ -79,6 +79,34 @@ namespace Http
         response->errored = error;
     }
 
+    // 0 (nothing) to 4 (everything)
+#define MBEDTLS_DEBUG_LEVEL 1
+    static void DebugCallback( void *ctx, int level, const char *file, int line, const char *str )
+    {
+        ((void) level);
+
+        fprintf( (FILE *) ctx, "MbedTLS :: %s:%04d: %s", file, line, str );
+        fflush(  (FILE *) ctx  );
+    }
+
+    // TODO Check what mbedtls is doing internally? Where the royal F is the second response coming from?
+    // See https://github.com/ARMmbed/mbedtls/blob/master/library/net_sockets.c
+#if 0
+    static int TLSRecv( void *ctx, unsigned char *buf, size_t len )
+    {
+        int recv = -1;
+        TCPSocket *socket = static_cast<TCPSocket *>(ctx);
+        recv = socket->recv( buf, len );
+
+        if( NSAPI_ERROR_WOULD_BLOCK == recv )
+            return MBEDTLS_ERR_SSL_WANT_READ;
+        else if( recv < 0 )
+            return -1;
+        else
+            return recv;
+    }
+#endif
+
     static bool Connect( Request* request, u32 flags = 0 )
     {
         int ret = 0;
@@ -94,7 +122,7 @@ namespace Http
 
         // TODO What's the implications of doing this?
         // TODO How does KoM do this?
-#define NON_BLOCKING 0
+#define NON_BLOCKING 1
 
 #if NON_BLOCKING
         // Make socket ops non blocking
@@ -159,7 +187,8 @@ namespace Http
             }
             mbedtls_ssl_conf_rng( &request->tls.config, mbedtls_ctr_drbg_random, &request->tls.ctrDrbg ); 
 #if CONFIG_DEBUG
-            mbedtls_ssl_conf_dbg( &request->tls.config, nullptr, stdout );
+            mbedtls_ssl_conf_dbg( &request->tls.config, DebugCallback, stdout );
+            mbedtls_debug_set_threshold( MBEDTLS_DEBUG_LEVEL );
 #endif
 
             if( (ret = mbedtls_ssl_setup( &request->tls.context, &request->tls.config )) != 0 )
@@ -175,6 +204,7 @@ namespace Http
             }
 #if NON_BLOCKING
             mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, mbedtls_net_recv, nullptr );
+            //mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, TLSRecv, nullptr );
 #else
             mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, nullptr, mbedtls_net_recv_timeout );
 #endif
@@ -213,7 +243,8 @@ namespace Http
         tmpHeaders.Put( "host"_str, String::FromFormatTmp( "%s:%s", request.host.CStr(), request.port.CStr() ) );
         if( request.bodyData )
             tmpHeaders.Put( "content-length"_str, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
-        tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
+        // TODO 
+        //tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
         tmpHeaders.PutIfNotFound( "accept"_str, "*/*"_str );
         tmpHeaders.PutIfNotFound( "content-type"_str, "application/json; charset=utf-8"_str );
 
@@ -377,6 +408,7 @@ namespace Http
 #endif
 
     // Return true if there's more data to read
+    // TODO Test small chunks / big files
     static bool Read( Request* request, BucketArray<Array<u8>>* readChunks, Response* response )
     {
         bool keep_trying = true;
@@ -399,6 +431,9 @@ namespace Http
         else
             ret = mbedtls_net_recv_timeout( &request->tls.fd, (u_char *)chunk->end(), (size_t)chunk->Available(), 5000 );
 
+        if( ret > 0 )
+            chunk->count += ret;
+
         if( ret == MBEDTLS_ERR_SSL_WANT_READ )
             // Data not yet ready
             keep_trying = true;
@@ -413,6 +448,7 @@ namespace Http
             {
                 error = ret;
 
+                // TODO Should probably retry connection
                 if( ret == 0 || ret == MBEDTLS_ERR_NET_CONN_RESET )
                     LOGE( /*Net,*/ "Connection closed by peer" );
                 else
@@ -425,9 +461,6 @@ namespace Http
 
             keep_trying = false;
         }
-
-        if( ret > 0 )
-            chunk->count += ret;
 
         // TODO Technically, we should parse the http contents to ensure we've finished receiving all data
         // (see https://github.com/ARMmbed/mbedtls/blob/146247de712f00220226829dcf13e99f62133ad6/programs/ssl/ssl_client2.c#L2627)
