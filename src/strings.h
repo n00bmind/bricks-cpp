@@ -96,6 +96,7 @@ INLINE void StringCopy( char const* src, char* dst, sz dstSize )
 }
 
 INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
+INLINE char const* StringFind( char const* str, char const* find ) { return strstr( str, find ); }
 inline char const* StringFindSuffix( const char* str, const char* find )
 {
     if ( !str || !find )
@@ -136,6 +137,58 @@ inline char* StringToLowercase( char* str, int len = 0 )
 
     return str;
 }
+
+inline bool StringToI32( char const* str, i32* output )
+{
+    bool result = false;
+
+    char* end = nullptr;
+    *output = strtol( str, &end, 0 );
+
+    if( *output == 0 )
+        result = (end != nullptr);
+    else if( *output == LONG_MAX || *output == LONG_MIN )
+        result = (errno != ERANGE);
+    else
+        result = true;
+
+    return result;
+}
+
+inline bool StringToU32( char const* str, u32* output )
+{
+    bool result = false;
+
+    char* end = nullptr;
+    *output = strtoul( str, &end, 0 );
+
+    if( *output == 0 )
+        result = (end != nullptr);
+    else if( *output == ULONG_MAX )
+        result = (errno != ERANGE);
+    else
+        result = true;
+
+    return result;
+}
+
+inline bool StringToBool( char const* str, bool* output )
+{
+    bool result = false;
+    if( StringsEqual( str, "true", false ) || StringsEqual( str, "y", false ) || StringsEqual( str, "yes", false ) || StringsEqual( str, "1" ) )
+    {
+        result = true;
+        *output = true;
+    }
+    else if( StringsEqual( str, "false", false ) || StringsEqual( str, "n", false ) || StringsEqual( str, "no", false ) || StringsEqual( str, "0" ) )
+    {
+        result = true;
+        *output = false;
+    }
+
+    return result;
+}
+
 
 // Specialised hash & equality implementations for char* strings
 template <>
@@ -500,6 +553,7 @@ public:
         return StringEndsWith( data, cString );
     }
 
+    // FIXME Use faster string functions
     const char* FindString( const char* cString ) const
     {
         ASSERT( *cString );
@@ -741,53 +795,17 @@ public:
 
     bool ToI32( i32* output ) const
     {
-        bool result = false;
-
-        char* end = nullptr;
-        *output = strtol( data, &end, 0 );
-
-        if( *output == 0 )
-            result = (end != nullptr);
-        else if( *output == LONG_MAX || *output == LONG_MIN )
-            result = (errno != ERANGE);
-        else
-            result = true;
-
-        return result;
+        return StringToI32( data, output );
     }
 
     bool ToU32( u32* output ) const
     {
-        bool result = false;
-
-        char* end = nullptr;
-        *output = strtoul( data, &end, 0 );
-
-        if( *output == 0 )
-            result = (end != nullptr);
-        else if( *output == ULONG_MAX )
-            result = (errno != ERANGE);
-        else
-            result = true;
-
-        return result;
+        return StringToU32( data, output );
     }
 
     bool ToBool( bool* output ) const
     {
-        bool result = false;
-        if( IsEqual( "true", false ) || IsEqual( "y", false ) || IsEqual( "yes", false ) || IsEqual( "1" ) )
-        {
-            result = true;
-            *output = true;
-        }
-        else if( IsEqual( "false", false ) || IsEqual( "n", false ) || IsEqual( "no", false ) || IsEqual( "0" ) )
-        {
-            result = true;
-            *output = false;
-        }
-
-        return result;
+        return StringToBool( data, output );
     }
 
     // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found

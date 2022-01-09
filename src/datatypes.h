@@ -150,7 +150,7 @@ struct Array
     // https://en.cppreference.com/w/cpp/named_req/TrivialType
     // https://en.cppreference.com/w/cpp/named_req/TriviallyCopyable
     // https://en.cppreference.com/w/cpp/named_req/StandardLayoutType
-    T* PushEmpty( bool clear = false )
+    T* PushEmpty( bool clear = true )
     {
         ASSERT( count < capacity );
         T* result = data + count++;
@@ -249,8 +249,8 @@ struct Array
     {
         ASSERT( Available() >= bufferLen );
 
-        for( int i = 0; i < bufferLen; ++i )
-            Push( buffer[i] );
+        COPYP( buffer, data + count, bufferLen * SIZEOF(T) );
+        count += bufferLen;
     }
 
     template <typename AllocType2 = Allocator>
@@ -265,7 +265,7 @@ struct Array
     {
         Array<T, AllocType2> result( count, allocator ? allocator : CTX_ALLOC );
         result.ResizeToCapacity();
-        PCOPY( data, result.data, count * SIZEOF(T) );
+        COPYP( data, result.data, count * SIZEOF(T) );
         return result;
     }
 
@@ -274,7 +274,7 @@ struct Array
     {
         Array<T, AllocType2> result( I32( buffer.length ), allocator ? allocator : CTX_ALLOC );
         result.ResizeToCapacity();
-        PCOPY( buffer.data, result.data, buffer.length * SIZEOF(T) );
+        COPYP( buffer.data, result.data, buffer.length * SIZEOF(T) );
         return result;
     }
 
@@ -282,19 +282,13 @@ struct Array
     void CopyTo( Array<T, AllocType2>* out ) const
     {
         ASSERT( out->capacity >= count );
-        PCOPY( data, out->data, count * SIZEOF(T) );
+        COPYP( data, out->data, count * SIZEOF(T) );
         out->count = count;
     }
 
     void CopyTo( T* buffer ) const
     {
-        PCOPY( data, buffer, count * SIZEOF(T) );
-    }
-
-    void CopyFrom( const T* buffer, int count_ )
-    {
-        ASSERT( count_ > 0 && capacity >= count_ );
-        PCOPY( buffer, data, count_ * SIZEOF(T) );
+        COPYP( data, buffer, count * SIZEOF(T) );
     }
 };
 

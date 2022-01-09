@@ -89,24 +89,6 @@ namespace Http
         fflush(  (FILE *) ctx  );
     }
 
-    // TODO Check what mbedtls is doing internally? Where the royal F is the second response coming from?
-    // See https://github.com/ARMmbed/mbedtls/blob/master/library/net_sockets.c
-#if 0
-    static int TLSRecv( void *ctx, unsigned char *buf, size_t len )
-    {
-        int recv = -1;
-        TCPSocket *socket = static_cast<TCPSocket *>(ctx);
-        recv = socket->recv( buf, len );
-
-        if( NSAPI_ERROR_WOULD_BLOCK == recv )
-            return MBEDTLS_ERR_SSL_WANT_READ;
-        else if( recv < 0 )
-            return -1;
-        else
-            return recv;
-    }
-#endif
-
     static bool Connect( Request* request, u32 flags = 0 )
     {
         int ret = 0;
@@ -204,7 +186,6 @@ namespace Http
             }
 #if NON_BLOCKING
             mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, mbedtls_net_recv, nullptr );
-            //mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, TLSRecv, nullptr );
 #else
             mbedtls_ssl_set_bio( &request->tls.context, &request->tls.fd, mbedtls_net_send, nullptr, mbedtls_net_recv_timeout );
 #endif
@@ -411,8 +392,6 @@ namespace Http
     // TODO Test small chunks / big files
     static bool Read( Request* request, BucketArray<Array<u8>>* readChunks, Response* response )
     {
-        bool keep_trying = true;
-
         static constexpr int chunkSize = 4096;
         // Get a new chunk or reuse the last one
         Array<u8>* chunk = nullptr;
@@ -434,6 +413,7 @@ namespace Http
         if( ret > 0 )
             chunk->count += ret;
 
+        bool keep_trying = false;
         if( ret == MBEDTLS_ERR_SSL_WANT_READ )
             // Data not yet ready
             keep_trying = true;
@@ -462,23 +442,51 @@ namespace Http
             keep_trying = false;
         }
 
-        // TODO Technically, we should parse the http contents to ensure we've finished receiving all data
-        // (see https://github.com/ARMmbed/mbedtls/blob/146247de712f00220226829dcf13e99f62133ad6/programs/ssl/ssl_client2.c#L2627)
+        // Parse contents to see if we're done
+        // NOTE Most examples either break the read loop once they get a single positive return value, or keep reading until they get a 0.
+        // Amazingly, doing the first option means we get incomplete responses, while doing the second one causes an extra 400 response to arrive from the ether (!?)
+        // TODO Is this really the best we can do? Does http(s) really suck so bad??
         if( !keep_trying )
         {
-            // Compact down and null terminate the buffer
-            ASSERT( response->rawData.capacity == 0 );
-
             int totalSize = 0;
             for( Array<u8> const& c : *readChunks )
                 totalSize += c.count;
-            INIT( response->rawData )( totalSize + 1 );
 
+            int off = 0;
+            // Compact down and null terminate the current contents
+            u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
             for( Array<u8> const& c : *readChunks )
-                response->rawData.Append( c );
-            // NOTE In case we get a 'graceful close' above and we didn't read anything at all we'll at the very least always push a 0
-            // so we'll detect we're done in ReadBlocking
-            response->rawData.Push( 0 );
+            {
+                c.CopyTo( rawData + off );
+                off += c.count;
+            }
+            *(rawData + off) = 0;
+
+            // FIXME Case insensitive search
+            if( char const* str = StringFind( (char const*)rawData, "Content-Length") )
+            {
+                // Skip colon
+                str += sizeof("Content-Length") + 1;
+
+                int contentLength = 0;
+                bool parsed = StringToI32( str, &contentLength );
+                ASSERT( parsed );
+
+                if( totalSize >= contentLength )
+                {
+                    ASSERT( response->rawData.capacity == 0 );
+
+                    INIT( response->rawData )( totalSize + 1 );
+                    response->rawData.Append( rawData, totalSize + 1 );
+                    // NOTE In case we get a 'graceful close' above and we didn't
+                    // read anything at all we'll at the very least always push a 0
+                    // so we'll detect we're done in ReadBlocking
+                }
+                else
+                    keep_trying = true;
+            }
+            else
+                keep_trying = true;
         }
 
         return keep_trying;

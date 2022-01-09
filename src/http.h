@@ -27,6 +27,7 @@ namespace Http
         Callback callback;
         void* callbackData;
         i32 statusCode;
+        i32 bodyOffset;
         // TODO If this is not found in the response data.. what should the default be?
         bool close = true;
         // TODO Turn this into an enum/string probably?
