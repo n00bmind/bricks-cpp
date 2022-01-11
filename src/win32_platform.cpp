@@ -585,10 +585,8 @@ void InitGlobalPlatform()
     globalPlatform = {};
     globalPlatform.Alloc = Win32::Alloc;
     globalPlatform.Free = Win32::Free;
-#if 0
     globalPlatform.PushContext = PushContext;
     globalPlatform.PopContext = PopContext;
-#endif
     globalPlatform.ReadEntireFile = Win32::ReadEntireFile;
     globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
     globalPlatform.CreateThread = Win32::CreateThread;

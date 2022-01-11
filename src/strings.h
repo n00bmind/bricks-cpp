@@ -217,65 +217,49 @@ struct String
     i32 length;             // Not including null terminator
     u32 flags;
 
-    constexpr String()
+    constexpr String( u32 flags_ = 0 )
         : data( "" )
         , length( 0 )
-        , flags( 0 )
+        , flags( flags_ )
     {}
 
-    String( char const* cString )
-        : data( cString )
-        , length( StringLength( cString ) )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    String( char const* cString, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    { InternalClone( cString ); }
 
-    explicit String( char const* cString, int len )
-        : data( cString )
-        , length( len )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    explicit String( char const* cString, int len, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    { InternalClone( cString, len ); }
 
-    explicit String( char const* cString, char const* cStringEnd )
-        : data( cString )
-        , length( cStringEnd ? I32( cStringEnd - cString ) : StringLength( cString ) )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    explicit String( char const* cString, char const* cStringEnd, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    { InternalClone( cString, cStringEnd ? I32( cStringEnd - cString ) : StringLength( cString ) ); }
 
-    explicit String( StringBuffer const& buffer )
-        : data( buffer.data )
-        // Don't count null terminator
-        , length( I32( buffer.length - 1 ) )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    explicit String( StringBuffer const& buffer, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    // Don't count null terminator
+    { InternalClone( buffer.data, I32(buffer.length - 1) ); }
 
-    explicit String( Buffer<char> const& buffer )
-        : data( buffer.data )
-        // Don't count null terminator
-        , length( I32( buffer.length - 1 ) )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    explicit String( Buffer<char> const& buffer, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    // Don't count null terminator
+    { InternalClone( buffer.data, I32(buffer.length - 1) ); }
 
-    explicit String( Buffer<> const& buffer )
-        : data( (char*)buffer.data )
-        // Don't count null terminator
-        , length( I32( buffer.length - 1 ) )
-        , flags( 0 )
-    { ASSERT( Valid() ); }
+    explicit String( Buffer<> const& buffer, u32 flags_ = 0 )
+        : flags( flags_ & ~Owned )
+    // Don't count null terminator
+    { InternalClone( (char const*)buffer.data, I32(buffer.length - 1) ); }
+
 
     String( String const& other )
-        : flags( other.flags )
+        : flags( 0 )
     {
-        flags &= ~Owned;
         *this = other;
     }
 
     String( String&& other )
-        : flags( other.flags )
+        : flags( 0 )
     {
-        flags &= ~Owned;
-        // TODO Check if this is actually not needed (move is supposedly only necessary to convert lvalue refs to rvalue refs)
-        // However according to the very last point in https://stackoverflow.com/questions/5481539/what-does-t-double-ampersand-mean-in-c11
-        // argument 'other' here is named so it's an lvalue, so we do need move? Are we literally out of our minds?
         *this = std::move( other );
     }
 
@@ -299,9 +283,7 @@ struct String
     {
         Clear();
 
-        data = cString;
-        length = StringLength( cString );
-        ASSERT( Valid() );
+        InternalClone( cString );
         return *this;
     }
 
@@ -310,12 +292,13 @@ struct String
         Clear();
 
         flags = other.flags;
-        // FIXME 
-        // We always create just a reference unless explicitly Clone()ing
-        flags &= ~Owned;
-
-        data = other.data;
-        length = other.length;
+        if( flags & Owned )
+            InternalClone( other.data, other.length );
+        else
+        {
+            data = other.data;
+            length = other.length;
+        }
 
         return *this;
     }
@@ -335,7 +318,7 @@ struct String
         {
             data = other.data;
             length = other.length;
-            // If we have forced a copy we still need to delete rhs
+            // If we haven't forced a copy, don't delete any memory owned by the source
             other.flags &= ~Owned;
         }
 
@@ -374,11 +357,13 @@ private:
             length = new_len;
             flags |= Owned;
         }
+
+        ASSERT( Valid() );
     }
 
 public:
 
-    bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
+    bool operator ==( String const& other ) const { return length == other.length && IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
     explicit operator bool() const { return !Empty(); }
     operator char const*() const { return CStr(); }
@@ -421,39 +406,40 @@ public:
 
     static String Ref( char const* src, int len = 0 )
     {
-        String result( src, len );
+        String result;
+        result.data = src;
+        result.length = len;
         return result;
     }
     static String Ref( String const& other )
     {
         return Ref( other.data, other.length );
     }
+    static String Ref( Buffer<> const& buffer )
+    {
+        // Don't count terminator
+        return Ref( (char const*)buffer.data, I32(buffer.length - 1) );
+    }
 
     static String Clone( char const* src, int len = 0 )
     {
-        String result;
-        result.InternalClone( src, len );
+        String result( src, len );
         return result;
     }
     static String CloneTmp( char const* src, int len = 0 )
     {
-        String result;
-        result.flags |= Temporary;
-        result.InternalClone( src, len );
+        String result( src, len, Temporary );
         return result;
     }
 
     static String Clone( char const* src, char const* end )
     {
-        String result;
-        result.InternalClone( src, end ? I32( end - src ) : 0 );
+        String result( src, end ? I32( end - src ) : 0 );
         return result;
     }
     static String CloneTmp( char const* src, char const* end )
     {
-        String result;
-        result.flags |= Temporary;
-        result.InternalClone( src, end ? I32( end - src ) : 0 );
+        String result( src, end ? I32( end - src ) : 0, Temporary );
         return result;
     }
 
@@ -609,7 +595,7 @@ public:
             {
                 if( nextLength )
                 {
-                    String str =  String( nextData, nextLength );
+                    String str =  String::Ref( nextData, nextLength );
                     str.CStr();
 
                     result->Push( str );
@@ -624,7 +610,7 @@ public:
         // Last piece
         if( nextLength )
         {
-            String str =  String( nextData, nextLength );
+            String str =  String::Ref( nextData, nextLength );
             str.CStr();
 
             result->Push( str );
@@ -637,15 +623,11 @@ public:
 
     // NOTE All 'Consume' methods mutate the current String by inserting terminators at the consumed boundaries
     // (ideally we'd like to be able to return non-null terminated Strings to avoid modifying the input)
-    // TODO Use InPlaceModify()
     String ConsumeLine()
     {
-        // TODO ???
-        ASSERT( !(flags & Owned) );
-
         int lineLen = length;
-        const char* atNL = data + length;
-        const char* onePastNL = FindString( "\n" );
+        char* atNL = &InPlaceModify()[length];
+        char* onePastNL = (char*)FindString( "\n" );
 
         if( onePastNL )
         {
@@ -661,8 +643,8 @@ public:
         }
         ASSERT( lineLen <= length );
 
-        *(char*)atNL = '\0';
-        String line( data, I32( atNL - data ) );
+        *atNL = '\0';
+        String line = String::Ref( data, I32( atNL - data ) );
 
         data = onePastNL;
         length -= lineLen;
@@ -674,8 +656,6 @@ public:
     // Consume next word trimming whatever whitespace is there at the beginning
     String ConsumeWord()
     {
-        ASSERT( !(flags & Owned) );
-
         ConsumeWhitespace();
 
         int wordLen = 0;
@@ -689,8 +669,8 @@ public:
         }
 
         ASSERT( wordLen <= length );
-        *(char*)(data + wordLen) = '\0';
-        String result( data, wordLen );
+        InPlaceModify()[wordLen] = '\0';
+        String result = String::Ref( data, wordLen );
 
         // Consume stripped part
         wordLen++;
@@ -703,8 +683,6 @@ public:
 
     int ConsumeWhitespace()
     {
-        ASSERT( !(flags & Owned) );
-
         const char *start = data;
         int remaining = length;
 
@@ -725,8 +703,6 @@ public:
 
     String Consume( int charCount )
     {
-        ASSERT( !(flags & Owned) );
-
         const char *next = data;
         int remaining = Min( charCount, length );
 
@@ -738,7 +714,7 @@ public:
 
         int len = I32( next - data );
         ASSERT( len <= length );
-        String result( data, len );
+        String result = String::Ref( data, len );
 
         data = next;
         length -= len;
@@ -747,19 +723,12 @@ public:
         return result;
     }
 
-    // FIXME Make a copy in the stack/temp memory or something
-    // (REVIEW! This should actually be totally unnecessary given that now we guarantee null termination!)
     int Scan( const char *format, ... )
     {
         va_list args;
         va_start( args, format );
 
-        // HACK Not pretty, but it's what we have until C gets a portable bounded vscanf
-        char* end = (char*)data + length;
-        char endChar = *end;
-        *end = '\0';
         int result = vsscanf( data, format, args );
-        *end = endChar;
 
         va_end( args );
         return result;
@@ -834,23 +803,12 @@ public:
 // TODO constexpr
 INLINE String operator"" _str( const char *s, size_t len )
 {
-    return String( s, I32(len) );
+    return String::Ref( s, I32(len) );
 }
 
 // Correctly hash Strings
 template <>
 INLINE u64  DefaultHashFunc< String >( String const& key )  { return key.Hash(); }
-
-
-INLINE bool StringsEqual( String const& a, String const& b )
-{
-    return a.length == b.length && strncmp( a.data, b.data, Size( a.length ) ) == 0;
-}
-
-INLINE bool StringsEqual( String const& a, char const* b )
-{
-    return strncmp( a.data, b, Size( a.length ) ) == 0 && b[ a.length ] == 0;
-}
 
 
 

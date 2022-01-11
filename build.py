@@ -115,7 +115,6 @@ default_platform = platform_win
 
 include_dirs = [
     'src',
-    '3rdparty/openssl/include',
     '3rdparty/mbedtls/include'
 ]
 
@@ -126,9 +125,6 @@ lib_dirs = [
 # FIXME Remove this variable and just add the mbedtls dir to the list above plus use a separate pragma lib per config like the benchmark lib above
 # TODO Can we use the release libs in Develop?
 user_libs = [
-    # '3rdparty/openssl/libcrypto-1_1-x64.lib',
-    # '3rdparty/openssl/libssl-1_1-x64.lib',
-
     '3rdparty/mbedtls/lib/Debug/mbedTLS.lib',
     # '3rdparty/mbedtls/lib/Release/mbedTLS.lib',
 ]

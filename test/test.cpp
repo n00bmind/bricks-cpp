@@ -1,6 +1,6 @@
 
-#include <winsock2.h>
 #include "win32.h"
+#include <winsock2.h>
 #include <DbgHelp.h>
 
 #include <stdlib.h>
@@ -24,6 +24,8 @@
 #pragma warning( disable : 4388 )
 
 #include "gtest/gtest.h"
+
+#pragma warning( pop )
 
 
 #include "magic.h"
@@ -55,6 +57,7 @@ struct
 
 #undef internal
 
+#pragma warning( push )
 #pragma warning( disable : 4355 )
 #pragma warning( disable : 4365 )
 #pragma warning( disable : 4548 )

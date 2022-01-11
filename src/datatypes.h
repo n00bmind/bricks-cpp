@@ -23,6 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 
+// TODO Write copy/move constructors & assignments
 
 /////     DYNAMIC ARRAY    /////
 
@@ -87,6 +88,10 @@ struct Array
     {
         return Buffer<T>( data, count );
     }
+    operator Buffer<>()
+    {
+        return Buffer<>( data, count );
+    }
 
 
     T*          begin()         { return data; }
@@ -104,7 +109,7 @@ struct Array
     template <typename AllocType2 = Allocator>
     bool operator ==( Array<T, AllocType2> const& other ) const
     {
-        return count == other.count && PEQUAL( data, other.data, count * SIZEOF(T) );
+        return count == other.count && EQUALP( data, other.data, count * SIZEOF(T) );
     }
 
     explicit operator bool() const

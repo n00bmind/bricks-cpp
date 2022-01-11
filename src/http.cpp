@@ -404,7 +404,7 @@ namespace Http
             chunk = &(*readChunks->Last());
 
         // Read into the new chunk
-        int ret = 0, error = 0;
+        int ret = 0;
         if( request->https )
             ret = mbedtls_ssl_read( &request->tls.context, (u_char *)chunk->end(), (size_t)chunk->Available() );
         else
@@ -413,10 +413,10 @@ namespace Http
         if( ret > 0 )
             chunk->count += ret;
 
-        bool keep_trying = false;
+        bool keepReading = false;
         if( ret == MBEDTLS_ERR_SSL_WANT_READ )
             // Data not yet ready
-            keep_trying = true;
+            keepReading = true;
         else if( ret <= 0 )
         {
             if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
@@ -426,7 +426,7 @@ namespace Http
             }
             else
             {
-                error = ret;
+                response->error = ret;
 
                 // TODO Should probably retry connection
                 if( ret == 0 || ret == MBEDTLS_ERR_NET_CONN_RESET )
@@ -434,81 +434,91 @@ namespace Http
                 else
                 {
                     char errorBuf[128];
-                    mbedtls_strerror( error, errorBuf, sizeof(errorBuf) );
-                    LOGE( /*Net,*/ "Read error (%d): %s", error, errorBuf );
+                    mbedtls_strerror( response->error, errorBuf, sizeof(errorBuf) );
+                    LOGE( /*Net,*/ "Read error (%d): %s", response->error, errorBuf );
                 }
             }
 
-            keep_trying = false;
+            keepReading = false;
         }
 
         // Parse contents to see if we're done
         // NOTE Most examples either break the read loop once they get a single positive return value, or keep reading until they get a 0.
         // Amazingly, doing the first option means we get incomplete responses, while doing the second one causes an extra 400 response to arrive from the ether (!?)
         // TODO Is this really the best we can do? Does http(s) really suck so bad??
-        if( !keep_trying )
+        if( !keepReading )
         {
             int totalSize = 0;
             for( Array<u8> const& c : *readChunks )
                 totalSize += c.count;
 
-            int off = 0;
-            // Compact down and null terminate the current contents
-            u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
-            for( Array<u8> const& c : *readChunks )
+            if( totalSize )
             {
-                c.CopyTo( rawData + off );
-                off += c.count;
-            }
-            *(rawData + off) = 0;
+                ASSERT( response->rawData.capacity == 0 );
 
-            // FIXME Case insensitive search
-            if( char const* str = StringFind( (char const*)rawData, "Content-Length") )
-            {
-                // Skip colon
-                str += sizeof("Content-Length") + 1;
-
-                int contentLength = 0;
-                bool parsed = StringToI32( str, &contentLength );
-                ASSERT( parsed );
-
-                if( totalSize >= contentLength )
+                int off = 0;
+                // Compact down and null terminate the current contents
+                u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
+                for( Array<u8> const& c : *readChunks )
                 {
-                    ASSERT( response->rawData.capacity == 0 );
+                    c.CopyTo( rawData + off );
+                    off += c.count;
+                }
+                *(rawData + off) = 0;
 
-                    INIT( response->rawData )( totalSize + 1 );
-                    response->rawData.Append( rawData, totalSize + 1 );
-                    // NOTE In case we get a 'graceful close' above and we didn't
-                    // read anything at all we'll at the very least always push a 0
-                    // so we'll detect we're done in ReadBlocking
+                if( response->error == 0 )
+                {
+                    bool done = false;
+                    // FIXME Case insensitive search
+                    if( char const* str = StringFind( (char const*)rawData, "Content-Length") )
+                    {
+                        // Skip colon
+                        str += sizeof("Content-Length") + 1;
+
+                        int contentLength = 0;
+                        bool parsed = StringToI32( str, &contentLength );
+                        ASSERT( parsed );
+
+                        if( totalSize >= contentLength )
+                        {
+                            INIT( response->rawData )( totalSize + 1 );
+                            response->rawData.Append( rawData, totalSize + 1 );
+
+                            done = true;
+                        }
+                    }
+
+                    if( !done )
+                        keepReading = true;
                 }
                 else
-                    keep_trying = true;
+                {
+                    // Copy over whatever is there so far
+                    INIT( response->rawData )( totalSize + 1 );
+                    response->rawData.Append( rawData, totalSize + 1 );
+                }
             }
-            else
-                keep_trying = true;
         }
 
-        return keep_trying;
+        return keepReading;
     }
 
-    static int ReadBlocking( Request* request, Response* response )
+    static bool ReadBlocking( Request* request, Response* response )
     {
         BucketArray<Array<u8>> readChunks( 8, CTX_TMPALLOC );
 
-        while( response->rawData.Empty() )
+        while( response->rawData.Empty() && !response->error )
         {
             if( !Read( request, &readChunks, response ) )
                 break;
         }
 
-        return !response->rawData.Empty();
+        return !response->rawData.Empty() && !response->error;
     }
 
     static bool ParseResponse( Response* response )
     {
-        // Don't count terminator
-        String responseString( (char const*)response->rawData.data, response->rawData.count - 1 );
+        String responseString = String::Ref( response->rawData );
 #if HTTP_DEBUG_PRINT
         printf("--- RSP:\n%s---\n", responseString.CStr() );
 #endif
@@ -566,7 +576,7 @@ namespace Http
                     }
                     // Remove final ':'
                     word.InPlaceModify()[ word.length - 1 ] = 0;
-                    String name( word.data, word.length - 1 );
+                    String name = String::Ref( word.data, word.length - 1 );
 
                     if( !line )
                     {
@@ -643,7 +653,7 @@ namespace Http
         InitContextStack( threadContext );
 
         state->threadRunning.STORE_RELAXED( true );
-#if HTTP_DEBUG_PRINT
+#if 0
         printf( "### HTTP THREAD STARTED ###\n" );
 #endif
 
@@ -662,7 +672,7 @@ namespace Http
             }
         }
         
-#if HTTP_DEBUG_PRINT
+#if 0
         printf( "### HTTP THREAD STOPPED ###\n" );
 #endif
         return 0;
@@ -683,6 +693,7 @@ namespace Http
 
         INIT( state->requestQueue )( 16 );
         INIT( state->responseQueue )( 16 );
+        INIT( state->requestSemaphore );
 
         // Create http thread
         state->thread = Core::CreateThread( "HttpThread", ThreadMain, state );

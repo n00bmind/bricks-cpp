@@ -27,11 +27,12 @@ namespace Http
         Callback callback;
         void* callbackData;
         i32 statusCode;
-        i32 bodyOffset;
+        // TODO Turn this into an enum/string probably?
+        i32 error;
         // TODO If this is not found in the response data.. what should the default be?
         bool close = true;
-        // TODO Turn this into an enum/string probably?
-        bool errored;
+        // FIXME Unify with error code
+        bool errored = false;
     };
 
 #define METHOD(x) \
@@ -57,7 +58,6 @@ namespace Http
         Callback callback;
         void* callbackData;
 
-        // FIXME Ensure we copy when appropriate for these
         String url;
         String host;
         String port;
