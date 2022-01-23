@@ -2,24 +2,12 @@
 
 namespace Core
 {
-    struct Time
+    INLINE f32 AppTimeMillis()
     {
-        f64 appStartTimeMillis;
-    };
-
-
-    void InitTime( Time* time )
-    {
-        *time = {};
-        time->appStartTimeMillis = globalPlatform.CurrentTimeMillis();
+        return (f32)globalPlatform.ElapsedTimeMillis();
     }
-
-    INLINE f32 AppTimeMillis( Time* time )
+    INLINE f32 AppTimeSeconds()
     {
-        return (f32)(globalPlatform.CurrentTimeMillis() - time->appStartTimeMillis);
-    }
-    INLINE f32 AppTimeSeconds( Time* time )
-    {
-        return (f32)((globalPlatform.CurrentTimeMillis() - time->appStartTimeMillis) * 0.001);
+        return (f32)(globalPlatform.ElapsedTimeMillis() * 0.001);
     }
 }

@@ -22,6 +22,9 @@ namespace Core
     {
         return globalPlatform.IsMainThread();
     }
+
+    // TODO We're gonna need to do this again upon hot reloading for any long-running threads
+    void SetUpThreadContext( MemoryArena* mainArena, MemoryArena* tmpArena, Logging::State* logState );
 } // namespace Core
 
 

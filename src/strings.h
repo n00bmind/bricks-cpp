@@ -68,26 +68,32 @@ INLINE bool IsWord( char c )
     return c > 32 && c < 127;
 }
 
-INLINE bool StringsEqual( char const* a, char const* b, bool caseSensitive = true )
+INLINE int StringLength( char const* s )
 {
+    return I32( strlen( s ) );
+}
+
+INLINE bool StringsEqual( char const* a, char const* b, sz len = 0, bool caseSensitive = true )
+{
+    if( !len )
+        len = a ? StringLength( a ) : 0;
+
     if( caseSensitive )
-        return strcmp( a, b ) == 0;
+    {
+        if( a && b )
+            return (strncmp( a, b, (size_t)len ) == 0 && b[len] == '\0');
+        return (!a && !b);
+    }
     else
     {
-        size_t len = strlen( a );
-        if( len != strlen( b ) )
+        if( len != StringLength( b ) )
             return false;
 
-        for( size_t i = 0; i < len; ++i )
+        for( sz i = 0; i < len; ++i )
             if( tolower( a[i] ) != tolower( b[i] ) )
                 return false;
         return true;
     }
-}
-
-INLINE int StringLength( char const* s )
-{
-    return I32( strlen( s ) );
 }
 
 INLINE void StringCopy( char const* src, char* dst, sz dstSize )
@@ -363,7 +369,7 @@ private:
 
 public:
 
-    bool operator ==( String const& other ) const { return length == other.length && IsEqual( other.data, other.length ); }
+    bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
     explicit operator bool() const { return !Empty(); }
     operator char const*() const { return CStr(); }
@@ -379,24 +385,7 @@ public:
     {
         if( !len )
             len = cString ? StringLength( cString ) : 0;
-        if( length != len )
-            return false;
-
-        bool result = false;
-
-        if( caseSensitive )
-        {
-            result = len == 0 || (strncmp( data, cString, (size_t)length ) == 0 && cString[length] == '\0');
-        }
-        else
-        {
-            for( int i = 0; i < length; ++i )
-                if( tolower( data[i] ) != tolower( cString[i] ) )
-                    return false;
-            return true;
-        }
-
-        return result;
+        return length == len && StringsEqual( data, cString, length, caseSensitive );
     }
     bool IsEqualIgnoreCase( const char* cString, sz len = 0 ) const
     {

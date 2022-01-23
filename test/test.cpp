@@ -35,22 +35,22 @@
 #include "platform.h"
 #include "clock.h"
 #include "memory.h"
+#include "context.h"
 #include "threading.h"
 #include "datatypes.h"
+#include "logging.h"
 #include "strings.h"
 #include "http.h"
 
 #include "platform.cpp"
+#include "logging.cpp"
 #include "win32_platform.cpp"
 #include "http.cpp"
 
 
-PlatformAPI globalPlatform;
-
 struct
 {
     Http::State http;
-    Core::Time clock;
 
 } globalState = {};
 
@@ -264,8 +264,8 @@ TEST_F( HttpTest, Get )
                           callback, &done );
     ASSERT_TRUE( ret );
 
-    f32 start = Core::AppTimeSeconds( &globalState.clock );
-    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds( &globalState.clock ) - start < 10.f) )
+    f32 start = Core::AppTimeSeconds();
+    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -289,8 +289,8 @@ TEST_F( HttpTest, Post )
                            callback, &done );
     ASSERT_TRUE( ret );
 
-    f32 start = Core::AppTimeSeconds( &globalState.clock );
-    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds( &globalState.clock ) - start < 10.f) )
+    f32 start = Core::AppTimeSeconds();
+    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -611,9 +611,12 @@ GTEST_API_ int main(int argc, char **argv)
     SetUnhandledExceptionFilter( Win32::ExceptionHandler );
 #endif
 
-    InitGlobalPlatform();
-
-    Core::InitTime( &globalState.clock );
+    Logging::ChannelDecl channels[] =
+    {
+        { "Platform" },
+        { "Net" },
+    };
+    InitGlobalPlatform( channels );
 
     bool result = Http::Init( &globalState.http );
     ASSERT_EQ( result, true ) << "Http::Init failed";

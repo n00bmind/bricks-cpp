@@ -309,7 +309,7 @@ namespace Http
         {
             char errorBuf[128];
             mbedtls_strerror( error, errorBuf, sizeof(errorBuf) );
-            LOGE( /*Net,*/ "Write error (%d): %s", error, errorBuf );
+            LOGE( "Net", "Write error (%d): %s", error, errorBuf );
         }
 
         return error == 0;
@@ -430,12 +430,12 @@ namespace Http
 
                 // TODO Should probably retry connection
                 if( ret == 0 || ret == MBEDTLS_ERR_NET_CONN_RESET )
-                    LOGE( /*Net,*/ "Connection closed by peer" );
+                    LOGE( "Net", "Connection closed by peer" );
                 else
                 {
                     char errorBuf[128];
                     mbedtls_strerror( response->error, errorBuf, sizeof(errorBuf) );
-                    LOGE( /*Net,*/ "Read error (%d): %s", response->error, errorBuf );
+                    LOGE( "Net", "Read error (%d): %s", response->error, errorBuf );
                 }
             }
 
@@ -541,20 +541,20 @@ namespace Http
                     String word = line.ConsumeWord();
                     if( !word || !word.StartsWith( "HTTP/" ) )
                     {
-                        LOGE( /*Net,*/ "Bad protocol" );
+                        LOGE( "Net", "Bad protocol" );
                         return false;
                     }
 
                     if( !(word = line.ConsumeWord()) )
                     {
-                        LOGE( /*Net,*/ "Bad protocol" );
+                        LOGE( "Net", "Bad protocol" );
                         return false;
                     }
                     word.ToI32( &response->statusCode );
 
                     if( !(word = line.ConsumeWord()) )
                     {
-                        LOGE( /*Net,*/ "Bad protocol" );
+                        LOGE( "Net", "Bad protocol" );
                         return false;
                     }
                     response->reason = word.data;
@@ -639,22 +639,14 @@ namespace Http
     PLATFORM_THREAD_FUNC(ThreadMain)
     {
         State* state = (State*)userdata;
-        // TODO We probably want to do this for most threads
-        InitArena( &state->threadArena );
-        // TODO We could conceivably use tmp memory for everything?
-        InitArena( &state->threadTmpArena );
         // Set up an initial context for the thread
-        Context threadContext =
-        {
-            Allocator::CreateFrom( &state->threadArena ),
-            Allocator::CreateFrom( &state->threadTmpArena ),
-        };
-        // TODO We're gonna need to do this again upon hot reloading for any long-running threads
-        InitContextStack( threadContext );
+        Core::SetUpThreadContext( &state->threadArena,
+                                  &state->threadTmpArena,
+                                  GetGlobalLoggingState() );
 
         state->threadRunning.STORE_RELAXED( true );
 #if 0
-        printf( "### HTTP THREAD STARTED ###\n" );
+        LOGD( "Net", "### HTTP THREAD STARTED ###" );
 #endif
 
         while( state->threadRunning.LOAD_RELAXED() )
@@ -673,7 +665,7 @@ namespace Http
         }
         
 #if 0
-        printf( "### HTTP THREAD STOPPED ###\n" );
+        LOGD( "Net", "### HTTP THREAD STOPPED ###" );
 #endif
         return 0;
     }

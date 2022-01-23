@@ -69,7 +69,7 @@ AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
 #define DEBUGBREAK(expr) ((void)(expr && IsDebuggerPresent() && (__debugbreak(), 1)))
 #endif
 
-#define SIZEOF(s) Sz( sizeof(s) )
+#define SIZEOF(s) ((sz)sizeof(s))
 #define OFFSETOF(type, member) Sz( (uintptr_t)&(((type *)0)->member) )
 #define ARRAYCOUNT(array) Sz( sizeof(array) / sizeof((array)[0]) )
 
@@ -160,6 +160,7 @@ typedef double   f64;
 typedef std::atomic<bool> atomic_bool;
 typedef std::atomic<i32> atomic_i32;
 typedef std::atomic<i64> atomic_i64;
+typedef std::atomic<u64> atomic_u64;
 
 #define LOAD_RELAXED() load( std::memory_order_relaxed )
 #define LOAD_ACQUIRE() load( std::memory_order_acquire )
@@ -298,7 +299,7 @@ template <typename T = void>
 struct Buffer
 {
     T* data;
-    i64 length;
+    sz length;
 
 public:
     Buffer()
@@ -311,16 +312,29 @@ public:
         , length( length_ )
     {}
 
+    // Convert from any static array of a compatible type
+    template <typename SrcT, size_t N>
+    Buffer( SrcT (&data_)[N] )
+        : data( data_ )
+        , length( (sz)N )
+    {}
+
+
     operator T const*() const { return data; }
     operator T*() { return data; }
 
     operator bool() const { return data && length; }
+
+    T*          begin()         { return data; }
+    const T*    begin() const   { return data; }
+    T*          end()           { return data + length; }
+    const T*    end() const     { return data + length; }
 };
 
 using StringBuffer = Buffer<char const>;
 
 // This is the least horrible thing I could come up with ¬¬
-#define BUFFER(T, ...)                                        \
+#define INLINE_BUFFER(T, ...)                                 \
 []()                                                          \
 {                                                             \
     static constexpr T literal[] = { __VA_ARGS__ };           \
@@ -399,8 +413,14 @@ struct enumName : public EnumBase                                               
         ASSERT( index >= 0 && index < itemCount, #enumName" index out of range" ); \
     }                                                                              \
                                                                                    \
-    constexpr char const* Name()  const { return names[index]; }                   \
-    constexpr valueType const& Value() const { return values[index]; }             \
+    INLINE constexpr operator int() { return index; }                              \
+    INLINE constexpr bool operator ==( enumName const& other ) const               \
+    { return index == other.index; }                                               \
+    INLINE constexpr bool operator <( enumName const& other ) const                \
+    { return index < other.index; }                                                \
+                                                                                   \
+    INLINE constexpr char const* Name()  const { return names[index]; }            \
+    INLINE constexpr valueType const& Value() const { return values[index]; }      \
                                                                                    \
                                                                                    \
     using EnumTypeName = enumName;                                                 \
@@ -461,6 +481,12 @@ struct UNIQUE(Deferred)                                             \
 	decltype(UNIQUE(_deferred_func_)) f;                            \
 };                                                                  \
 UNIQUE(Deferred) UNIQUE(_deferred_) { UNIQUE(_deferred_func_) };
+
+
+
+
+
+
 
 
 /////     CALLABLE    /////

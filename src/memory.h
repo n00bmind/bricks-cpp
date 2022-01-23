@@ -175,36 +175,6 @@ INLINE FREE_FUNC( Allocator )
 #define DELETE(allocator, p, T, ...)                { if( p ) { p->~T(); FREE( allocator, p, ##__VA_ARGS__ ); p = nullptr; } }
 
 
-// Global context to use across the entire application
-// NOTE We wanna make sure everything inside here is not generally synchronized across threads to keep it fast!
-// i.e. allocator, temp allocator, assert handler, logger (how do we collate and flush all logs?)
-struct Context
-{
-    Allocator allocator;
-    Allocator tmpAllocator;
-    // ...
-    // TODO Application-defined custom data
-};
-
-// NOTE TODO This is pretty weird to use in a non-unity build, as this pointer would get defined in each
-// translation unit that includes this, but I have no idea how to forward-declare a thread_local variable!?
-thread_local Context** globalContext;
-#define CTX (**globalContext)
-#define CTX_ALLOC &CTX.allocator
-#define CTX_TMPALLOC &CTX.tmpAllocator
-
-struct ScopedContext
-{
-    ScopedContext( Context const& newContext )
-    { globalPlatform.PushContext( newContext ); }
-    ~ScopedContext()
-    { globalPlatform.PopContext(); }
-};
-#define WITH_CONTEXT(context) \
-    ScopedContext ctx_##__FUNC__##__LINE__(context)
-
-
-
 struct LazyAllocator
 {
 };
@@ -225,6 +195,7 @@ FREE_FUNC( LazyAllocator )
 {
     free( memoryBlock );
 }
+
 
 ///// MEMORY ARENA
 // Linear memory arena that can grow in pages of a certain size

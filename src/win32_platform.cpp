@@ -49,8 +49,14 @@ namespace Win32
     struct State
     {
         ARRAY(ThreadInfo, 16, liveThreads );
+        f64 appStartTimeMillis;
     };
-    static State platform = {};
+    internal State platformState = {};
+
+    static void InitState( State* state )
+    {
+        state->appStartTimeMillis = globalPlatform.ElapsedTimeMillis();
+    }
 
 
 
@@ -211,7 +217,7 @@ namespace Win32
 
     PLATFORM_CREATE_THREAD(CreateThread)
     {
-        ThreadInfo* info = platform.liveThreads.PushEmpty();
+        ThreadInfo* info = platformState.liveThreads.PushEmpty();
         info->name = name;
         info->func = threadFunc;
         info->userData = userdata;
@@ -226,11 +232,11 @@ namespace Win32
 
     PLATFORM_JOIN_THREAD(JoinThread)
     {
-        ThreadInfo* info = platform.liveThreads.Find( [handle]( ThreadInfo const& i ) { return i.handle == handle; } );
+        ThreadInfo* info = platformState.liveThreads.Find( [handle]( ThreadInfo const& i ) { return i.handle == handle; } );
         if( info )
-            platform.liveThreads.Remove( info );
+            platformState.liveThreads.Remove( info );
         else
-            LOGW( /*Core,*/ "Thread with handle 0x%x not found!", handle );
+            LOGE( "Platform", "Thread with handle 0x%x not found!", handle );
 
         WaitForSingleObject( handle, INFINITE );
 
@@ -302,7 +308,7 @@ namespace Win32
     }
 
 
-    PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillis)
+    PLATFORM_ELAPSED_TIME_MILLIS(ElapsedTimeMillis)
     {
         persistent f64 perfCounterFrequency = 0;
         if( !perfCounterFrequency )
@@ -314,7 +320,9 @@ namespace Win32
 
         LARGE_INTEGER counter;
         QueryPerformanceCounter( &counter );
-        f64 result = (f64)counter.QuadPart / perfCounterFrequency * 1000;
+        f64 result = (f64)counter.QuadPart / perfCounterFrequency * 1000
+            - platformState.appStartTimeMillis;
+        
         return result;
     }
 
@@ -577,44 +585,39 @@ ASSERT_HANDLER(DefaultAssertHandler)
 }
 
 
-MemoryArena globalPlatformArena;
-MemoryArena globalTmpArena;
 
-void InitGlobalPlatform()
+
+void InitGlobalPlatform( Buffer<Logging::ChannelDecl> logChannels )
 {
-    globalPlatform = {};
-    globalPlatform.Alloc = Win32::Alloc;
-    globalPlatform.Free = Win32::Free;
-    globalPlatform.PushContext = PushContext;
-    globalPlatform.PopContext = PopContext;
-    globalPlatform.ReadEntireFile = Win32::ReadEntireFile;
-    globalPlatform.WriteEntireFile = Win32::WriteEntireFile;
-    globalPlatform.CreateThread = Win32::CreateThread;
-    globalPlatform.JoinThread = Win32::JoinThread;
-    globalPlatform.GetThreadId = Win32::GetThreadId;
-    globalPlatform.IsMainThread = Win32::IsMainThread;
-    globalPlatform.CreateSemaphore = Win32::CreateSemaphore;
-    globalPlatform.DestroySemaphore = Win32::DestroySemaphore;
-    globalPlatform.WaitSemaphore = Win32:: WaitSemaphore;
-    globalPlatform.SignalSemaphore = Win32::SignalSemaphore;
-    globalPlatform.CreateMutex = Win32::CreateMutex;
-    globalPlatform.DestroyMutex = Win32::DestroyMutex;
-    globalPlatform.LockMutex = Win32::LockMutex;
-    globalPlatform.UnlockMutex = Win32::UnlockMutex;
-    globalPlatform.CurrentTimeMillis = Win32::CurrentTimeMillis;
-    globalPlatform.ShellExecute = Win32::ShellExecute;
-    globalPlatform.Print = Win32::Print;
-    globalPlatform.Error = Win32::Error;
-    globalPlatform.PrintVA = Win32::PrintVA;
-    globalPlatform.ErrorVA = Win32::ErrorVA;
+    PlatformAPI win32API = {};
+    win32API.Alloc = Win32::Alloc;
+    win32API.Free = Win32::Free;
+    win32API.PushContext = PushContext;
+    win32API.PopContext = PopContext;
+    win32API.ReadEntireFile = Win32::ReadEntireFile;
+    win32API.WriteEntireFile = Win32::WriteEntireFile;
+    win32API.CreateThread = Win32::CreateThread;
+    win32API.JoinThread = Win32::JoinThread;
+    win32API.GetThreadId = Win32::GetThreadId;
+    win32API.IsMainThread = Win32::IsMainThread;
+    win32API.CreateSemaphore = Win32::CreateSemaphore;
+    win32API.DestroySemaphore = Win32::DestroySemaphore;
+    win32API.WaitSemaphore = Win32:: WaitSemaphore;
+    win32API.SignalSemaphore = Win32::SignalSemaphore;
+    win32API.CreateMutex = Win32::CreateMutex;
+    win32API.DestroyMutex = Win32::DestroyMutex;
+    win32API.LockMutex = Win32::LockMutex;
+    win32API.UnlockMutex = Win32::UnlockMutex;
+    win32API.ElapsedTimeMillis = Win32::ElapsedTimeMillis;
+    win32API.ShellExecute = Win32::ShellExecute;
+    win32API.Print = Win32::Print;
+    win32API.Error = Win32::Error;
+    win32API.PrintVA = Win32::PrintVA;
+    win32API.ErrorVA = Win32::ErrorVA;
 
-    InitArena( &globalPlatformArena );
-    InitArena( &globalTmpArena );
-    // Set up an initial context that the platform itself can use
-    Context platformContext =
-    {
-        Allocator::CreateFrom( &globalPlatformArena ),
-        Allocator::CreateFrom( &globalTmpArena ),
-    };
-    InitContextStack( platformContext );
+    ::InitGlobalPlatform( win32API, logChannels );
+
+    // TODO At the moment, InitGlobalPlatform above needs the win32 platform ready to be able to create a thread,
+    // while InitState here relies on the globalPlatform being already set up. Clarify this!!
+    Win32::InitState( &Win32::platformState );
 }

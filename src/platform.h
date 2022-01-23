@@ -129,8 +129,8 @@ typedef PLATFORM_LOCK_MUTEX(LockMutexFunc);
 typedef PLATFORM_UNLOCK_MUTEX(UnlockMutexFunc);
 
 
-#define PLATFORM_CURRENT_TIME_MILLIS(x) f64 x()
-typedef PLATFORM_CURRENT_TIME_MILLIS(CurrentTimeMillisFunc);
+#define PLATFORM_ELAPSED_TIME_MILLIS(x) f64 x()
+typedef PLATFORM_ELAPSED_TIME_MILLIS(ElapsedTimeMillisFunc);
 
 #define PLATFORM_SHELL_EXECUTE(x)       int x( char const* cmdLine )
 typedef PLATFORM_SHELL_EXECUTE(ShellExecuteFunc);
@@ -178,7 +178,7 @@ struct PlatformAPI
     Platform::UnlockMutexFunc*                  UnlockMutex;
 
     // Misc
-    Platform::CurrentTimeMillisFunc*            CurrentTimeMillis;
+    Platform::ElapsedTimeMillisFunc*            ElapsedTimeMillis;
     Platform::ShellExecuteFunc*                 ShellExecute;
 
     Platform::PrintFunc*                        Print;
@@ -208,12 +208,4 @@ struct PlatformAPI
 #endif
 };
 extern PlatformAPI globalPlatform;
-
-
-// TODO Add support for different log severities and categories/filters
-// TODO Use the Context!
-// https://preshing.com/20120522/lightweight-in-memory-logging
-#define LOG globalPlatform.Print
-#define LOGW globalPlatform.Error
-#define LOGE globalPlatform.Error
 

@@ -18,14 +18,16 @@
 #include "maths.h"
 #include "platform.h"
 #include "memory.h"
+#include "context.h"
 #include "threading.h"
 #include "datatypes.h"
+#include "clock.h"
+#include "logging.h"
 #include "strings.h"
 
 #include "platform.cpp"
+#include "logging.cpp"
 #include "win32_platform.cpp"
-
-PlatformAPI globalPlatform;
 
 // Conflicts with benchmark.h
 #undef internal
@@ -146,7 +148,12 @@ TEST_MUTEX(SpinLockMutex);
 int main(int argc, char** argv)
 {
     SetUnhandledExceptionFilter( Win32::ExceptionHandler );
-    InitGlobalPlatform();
+    Logging::ChannelDecl channels[] =
+    {
+        { "Platform" },
+        { "Net" },
+    };
+    InitGlobalPlatform( channels );
 
     ::benchmark::Initialize(&argc, argv);
     if (::benchmark::ReportUnrecognizedArguments(argc, argv))

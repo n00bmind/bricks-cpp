@@ -888,7 +888,7 @@ template <typename K> INLINE u64  DefaultHashFunc( K const& key )          { ret
 template <typename K> INLINE bool DefaultEqFunc( K const& a, K const& b )  { return a == b; }
 
 template <typename K>
-const K ZeroKey = K();
+const K ZeroKey{};
 
 // NOTE Type K must have a default constructor, and all keys must be different to the default-constructed value
 template <typename K, typename V, typename AllocType = Allocator>
@@ -951,6 +951,9 @@ struct Hashtable
     {
         *this = std::move( rhs );
     }
+
+
+    bool Empty() const { return count == 0; }
 
 #if 0
     Hashtable& operator =( Hashtable&& rhs )
@@ -1195,6 +1198,7 @@ private:
 // Head and tail will wrap around when needed and can never overlap.
 // Can be iterated both from tail to head (oldest to newest) or the other way around.
 
+// TODO 'Head' & 'Tail' here have the exact opposite meaning you would expect for a queue, hence are super confusing!
 // TODO Look at the code inside #ifdef MEM_REPLACE_PLACEHOLDER in https://github.com/cmuratori/refterm/blob/main/refterm_example_source_buffer.c
 // for an example of how to speed up linear reads & writes that go beyond the end of the buffer,
 // by just mapping the same block of memory twice back to back!
@@ -1397,7 +1401,7 @@ struct SyncRingBuffer
             i32 _count;
         };
 #endif
-        atomic_i64 indexData;
+        atomic_u64 indexData;
     };
 
 
@@ -1424,8 +1428,9 @@ struct SyncRingBuffer
         ASSERT( indexData.is_lock_free(), "'indexData' attribute is not lock-free (check alignment?)" );
     };
 
-    int Count() const { return (indexData.LOAD_ACQUIRE() >> 32); }
+    int Count() const { return (int)(indexData.LOAD_ACQUIRE() >> 32); }
     int Capacity() const { return buffer.capacity; }
+    bool Empty() const { return Count() > 0; }
     bool Available() const { return Count() < buffer.capacity; }
 
     void Clear()
@@ -1435,17 +1440,15 @@ struct SyncRingBuffer
 
     T* PushEmpty( bool clear = true )
     {
-        i32 headIndex;
-        // TODO Given that we already do an acquire in the CAS below this can probably be relaxed?
-        // Does this affect our chances of looping back in any way?
-        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        u32 headIndex;
+        u64 newData, curData = indexData.LOAD_RELAXED();
         do
         {
             headIndex = curData & 0xFFFFFFFF;
-            i64 count = curData >> 32;
+            u64 count = curData >> 32;
 
-            i64 onePastHeadIndex = (headIndex + 1) & (buffer.capacity - 1);
-            if( count < buffer.capacity )
+            u64 onePastHeadIndex = (headIndex + 1) & (buffer.capacity - 1);
+            if( count < (u64)buffer.capacity )
                 count++;
 
             newData = (count << 32) | onePastHeadIndex;
@@ -1465,11 +1468,51 @@ struct SyncRingBuffer
         return result;
     }
 
+    // TODO Do TryPopRange too!
+    T* PushEmptyRangeAdjacent( int rangeLen, bool clear = true )
+    {
+        u32 len = U32(rangeLen);
+
+        u32 headIndex;
+        u64 newData, curData = indexData.LOAD_RELAXED();
+        do
+        {
+            headIndex = curData & 0xFFFFFFFF;
+            u64 count = curData >> 32;
+
+            u32 remaining = buffer.capacity - headIndex;
+            bool adjacent = remaining >= len;
+
+            // If we're close to the end of the buffer and the range doesn't fit, skip the remaining bytes and place it at the front
+            u64 onePastHeadIndex = adjacent ? (headIndex + len) & (buffer.capacity - 1) : len;
+            if( !adjacent )
+                headIndex = 0;
+            count += (adjacent ? len : remaining + len);
+            count = Min( count, (u64)buffer.capacity );
+
+            newData = (count << 32) | onePastHeadIndex;
+        } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
+
+        T* result = buffer.data + headIndex;
+        if( clear )
+            // TODO Clear the skipped end of the buffer too?
+            ZEROP( result, rangeLen * SIZEOF(T) );
+
+        return result;
+    }
+
+    T* PushRangeAdjacent( T const* item, int rangeLen )
+    {
+        T* result = PushEmptyRangeAdjacent( rangeLen, false );
+        COPYP( item, result, rangeLen * sizeof(T) );
+        return result;
+    }
+
 #if 0
     T Pop()
     {
         i64 count, onePastHeadIndex;
-        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        u64 newData, curData = indexData.LOAD_ACQUIRE();
         do
         {
             onePastHeadIndex = curData & 0xFFFFFFFF;
@@ -1493,15 +1536,15 @@ struct SyncRingBuffer
 
     bool TryPop( T* out )
     {
-        i64 count, onePastHeadIndex;
-        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        u64 count, onePastHeadIndex;
+        u64 newData, curData = indexData.LOAD_ACQUIRE();
         do
         {
             onePastHeadIndex = curData & 0xFFFFFFFF;
             count = curData >> 32;
 
             // Try to do the whole #! and just return whether we did anything at the end
-            i64 newCount = (count > 0) ? count - 1 : count;
+            u64 newCount = (count > 0) ? count - 1 : count;
             newData = (newCount << 32) | onePastHeadIndex;
 
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
@@ -1509,8 +1552,7 @@ struct SyncRingBuffer
         bool success = count > 0;
         if( success )
         {
-            // count was _not_ decremented this time
-            i64 tailIndex = onePastHeadIndex - count;
+            u64 tailIndex = onePastHeadIndex - count;
             tailIndex &= (buffer.capacity - 1);
             *out = buffer.data[tailIndex];
         }
@@ -1543,7 +1585,7 @@ struct SyncRingBuffer
     bool TryPopHead( T* out )
     {
         i64 count, onePastHeadIndex;
-        i64 newData, curData = indexData.LOAD_ACQUIRE();
+        u64 newData, curData = indexData.LOAD_ACQUIRE();
         do
         {
             onePastHeadIndex = curData & 0xFFFFFFFF;
@@ -1601,7 +1643,7 @@ struct SyncRingBuffer
 private:
     int IndexFromHeadOffset( int offset, int* countOut )
     {
-        i64 curData = indexData.LOAD_ACQUIRE();
+        u64 curData = indexData.LOAD_ACQUIRE();
         i32 onePastHeadIndex = curData & 0xFFFFFFFF;
         *countOut = curData >> 32;
 
@@ -1613,14 +1655,14 @@ private:
 
     int IndexFromTailOffset( int offset, int* countOut )
     {
-        i64 curData = indexData.LOAD_ACQUIRE();
-        i32 onePastHeadIndex = curData & 0xFFFFFFFF;
-        int count = curData >> 32;
+        u64 curData = indexData.LOAD_ACQUIRE();
+        u32 onePastHeadIndex = curData & 0xFFFFFFFF;
+        u32 count = curData >> 32;
 
-        int result = onePastHeadIndex - count + offset;
+        int result = (int)(onePastHeadIndex - count + offset);
         result &= (buffer.capacity - 1);
 
-        *countOut = count;
+        *countOut = (int)count;
         return result;
     }
 #if 0
