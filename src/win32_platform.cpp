@@ -38,6 +38,8 @@ namespace Win32
 {
     struct ThreadInfo
     {
+        Context context;
+
         char const* name;
         wchar_t* nameOwned;
         Platform::ThreadHandle handle;
@@ -158,6 +160,9 @@ namespace Win32
     internal DWORD WINAPI WorkerThreadProc( LPVOID lpParam )
     {
         ThreadInfo* info = (ThreadInfo*)lpParam;
+        // Set up base Context
+        // TODO We're gonna need to do this again upon hot reloading for any long-running threads
+        Platform::InitContextStack( info->context );
 
         return (DWORD)info->func( info->userData );
     }
@@ -221,6 +226,7 @@ namespace Win32
         info->name = name;
         info->func = threadFunc;
         info->userData = userdata;
+        info->context = threadContext;
 
         info->handle = ::CreateThread( 0, MEGABYTES(1),
                                        WorkerThreadProc, (LPVOID)info,
@@ -236,7 +242,7 @@ namespace Win32
         if( info )
             platformState.liveThreads.Remove( info );
         else
-            LOGE( "Platform", "Thread with handle 0x%x not found!", handle );
+            LogE( "Platform", "Thread with handle 0x%x not found!", handle );
 
         WaitForSingleObject( handle, INFINITE );
 
@@ -361,7 +367,6 @@ namespace Win32
         va_start( args, fmt );
         vfprintf( stdout, fmt, args );
         va_end( args );
-        fprintf( stdout, "\n" );
     }
 
     PLATFORM_PRINT(Error)
@@ -370,19 +375,16 @@ namespace Win32
         va_start( args, fmt );
         vfprintf( stderr, fmt, args );
         va_end( args );
-        fprintf( stderr, "\n" );
     }
 
     PLATFORM_PRINT_VA(PrintVA)
     {
         vfprintf( stdout, fmt, args );
-        fprintf( stdout, "\n" );
     }
 
     PLATFORM_PRINT_VA(ErrorVA)
     {
         vfprintf( stderr, fmt, args );
-        fprintf( stderr, "\n" );
     }
 
     DWORD GetLastError( char* result_string = nullptr, sz result_string_len = 0 )
@@ -564,26 +566,25 @@ namespace Win32
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
+    ASSERT_HANDLER(DefaultAssertHandler)
+    {
+        // TODO Logging
+        char buffer[256] = {};
+
+        va_list args;
+        va_start( args, msg );
+        vsnprintf( buffer, ASSERT_SIZE( ARRAYCOUNT(buffer) ), msg, args );
+        va_end( args );
+
+        Error( "ASSERTION FAILED! :: \"%s\" (%s@%d)\n", buffer, file, line );
+
+        char callstack[16384];
+        DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 2 );
+
+        Error( "%s", callstack );
+    }
+
 }
-
-ASSERT_HANDLER(DefaultAssertHandler)
-{
-    // TODO Logging
-    char buffer[256] = {};
-
-    va_list args;
-    va_start( args, msg );
-    vsnprintf( buffer, ASSERT_SIZE( ARRAYCOUNT(buffer) ), msg, args );
-    va_end( args );
-
-    Win32::Error( "ASSERTION FAILED! :: \"%s\" (%s@%d)\n", buffer, file, line );
-
-    char callstack[16384];
-    Win32::DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 2 );
-
-    Win32::Error( "%s", callstack );
-}
-
 
 
 
@@ -592,8 +593,9 @@ void InitGlobalPlatform( Buffer<Logging::ChannelDecl> logChannels )
     PlatformAPI win32API = {};
     win32API.Alloc = Win32::Alloc;
     win32API.Free = Win32::Free;
-    win32API.PushContext = PushContext;
-    win32API.PopContext = PopContext;
+    win32API.GetContext = Platform::GetContext;
+    win32API.PushContext = Platform::PushContext;
+    win32API.PopContext = Platform::PopContext;
     win32API.ReadEntireFile = Win32::ReadEntireFile;
     win32API.WriteEntireFile = Win32::WriteEntireFile;
     win32API.CreateThread = Win32::CreateThread;
@@ -614,8 +616,9 @@ void InitGlobalPlatform( Buffer<Logging::ChannelDecl> logChannels )
     win32API.Error = Win32::Error;
     win32API.PrintVA = Win32::PrintVA;
     win32API.ErrorVA = Win32::ErrorVA;
+    win32API.DefaultAssertHandler = Win32::DefaultAssertHandler;
 
-    ::InitGlobalPlatform( win32API, logChannels );
+    Platform::InitGlobalPlatform( win32API, logChannels );
 
     // TODO At the moment, InitGlobalPlatform above needs the win32 platform ready to be able to create a thread,
     // while InitState here relies on the globalPlatform being already set up. Clarify this!!

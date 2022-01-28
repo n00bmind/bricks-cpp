@@ -55,14 +55,13 @@ ENUM_STRUCT_WITH_NAMES(Volume, VOLUME_ITEMS);
     void Init( State* state, Buffer<ChannelDecl> channels );
     void Shutdown( State* state );
 
-    void InitThreadContext( struct State* state );
-
     // NOTE These macros should seamlesly work when passing a va_list directly instead of var args
-#define LOG( channel, msg, ... )     Logging::LogInternal( channel, Logging::Volume::Info, __FILE__, __LINE__, msg, ##__VA_ARGS__ )
-#define LOGD( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Debug, __FILE__, __LINE__, msg, ##__VA_ARGS__ )
-#define LOGW( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Warning, __FILE__, __LINE__, msg, ##__VA_ARGS__ )
-#define LOGE( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Error, __FILE__, __LINE__, msg, ##__VA_ARGS__ )
+#define LogD( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Debug,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
+#define LogI( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Info,      __FILE__, __LINE__, msg, ##__VA_ARGS__ )
+#define LogW( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Warning,   __FILE__, __LINE__, msg, ##__VA_ARGS__ )
+#define LogE( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Error,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
+#define LogF( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Fatal,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
     void LogInternal( char const* channelName, Volume volume, char const* file, int line, char const* msg, ... );
-    void LogInternal( char const* channelName, Volume volume, char const* file, int line, char const* msg, va_list args );
+    void LogInternalVA( char const* channelName, Volume volume, char const* file, int line, char const* msg, va_list args );
 } // namespace Logging
 

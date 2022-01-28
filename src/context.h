@@ -7,7 +7,6 @@ namespace Logging
 
 // Global context to use across the entire application
 // NOTE We wanna make sure everything inside here is not generally synchronized across threads to keep it fast!
-// i.e. allocator, temp allocator, assert handler, logger (how do we collate and flush all logs?)
 struct Context
 {
     Allocator       allocator;
@@ -18,12 +17,14 @@ struct Context
     // ...
     // TODO Application-defined custom data
 };
-void InitContextStack( Context const& baseContext );
+Context InitContext( MemoryArena* mainArena, MemoryArena* tmpArena, Logging::State* logState );
 
-extern thread_local Context** globalContext;
-#define CTX (**globalContext)
-#define CTX_ALLOC &CTX.allocator
+// Access the platform's thread-local Context from anywhere in the app
+Context& GetContext();
+#define CTX          GetContext()
+#define CTX_ALLOC    &CTX.allocator
 #define CTX_TMPALLOC &CTX.tmpAllocator
+
 
 struct ScopedContext
 {

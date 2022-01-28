@@ -61,12 +61,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
-struct Context;
 struct Allocator;
+struct Context;
 template <typename T, typename AllocType = Allocator> struct Array;
-
-// NOTE This must be defined by the application
-//struct AppState;
 
 
 namespace Platform
@@ -78,6 +75,8 @@ typedef PLATFORM_ALLOC(AllocFunc);
 typedef PLATFORM_FREE(FreeFunc);
 
 
+#define PLATFORM_GET_CONTEXT(x)         Context** x()
+typedef PLATFORM_GET_CONTEXT(GetContextFunc);
 #define PLATFORM_PUSH_CONTEXT(x)        void x( Context const& newContext )
 typedef PLATFORM_PUSH_CONTEXT(PushContextFunc);
 #define PLATFORM_POP_CONTEXT(x)         void x()
@@ -100,7 +99,7 @@ typedef PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFileFunc);
 
 #define PLATFORM_THREAD_FUNC(x)         int x( void* userdata )
 typedef PLATFORM_THREAD_FUNC(ThreadFunc);
-#define PLATFORM_CREATE_THREAD(x)       Platform::ThreadHandle x( char const* name, Platform::ThreadFunc* threadFunc, void* userdata )
+#define PLATFORM_CREATE_THREAD(x)       Platform::ThreadHandle x( char const* name, Platform::ThreadFunc* threadFunc, void* userdata, Context const& threadContext )
 typedef PLATFORM_CREATE_THREAD(CreateThreadFunc);
 // Returns the thread's exit code
 #define PLATFORM_JOIN_THREAD(x)         int x( Platform::ThreadHandle handle )
@@ -151,6 +150,7 @@ struct PlatformAPI
     Platform::FreeFunc*                         Free;
 
     // Context
+    Platform::GetContextFunc*                   GetContext;
     Platform::PushContextFunc*                  PushContext;
     Platform::PopContextFunc*                   PopContext;
 
@@ -185,6 +185,7 @@ struct PlatformAPI
     Platform::PrintFunc*                        Error;
     Platform::PrintVAFunc*                      PrintVA;
     Platform::PrintVAFunc*                      ErrorVA;
+    AssertHandlerFunc*                          DefaultAssertHandler;
 
 #if 0
 #if !CONFIG_RELEASE

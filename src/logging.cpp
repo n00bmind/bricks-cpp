@@ -2,7 +2,7 @@
 namespace Logging
 {
 
-    void LogInternal( char const* channelName, Volume volume, char const* file, int line, char const* msg, va_list args )
+    void LogInternalVA( char const* channelName, Volume volume, char const* file, int line, char const* msg, va_list args )
     {
         State* state = CTX.logState;
 
@@ -42,7 +42,7 @@ namespace Logging
         va_list args;
         va_start( args, msg );
 
-        LogInternal( channelName, volume, file, line, msg, args );
+        LogInternalVA( channelName, volume, file, line, msg, args );
         va_end( args );
     }
 
@@ -64,11 +64,6 @@ namespace Logging
     PLATFORM_THREAD_FUNC(LoggingThread)
     {
         State* state = (State*)userdata;
-
-        // Set up an initial context for the thread
-        Core::SetUpThreadContext( &state->threadArena,
-                                  &state->threadTmpArena,
-                                  GetGlobalLoggingState() );
 
         while( state->thread.LOAD_RELAXED() )
         {
@@ -107,19 +102,18 @@ namespace Logging
         state->endpoints.Push( endpoint );
     }
 
-    void InitThreadContext( State* state )
-    {
-        CTX.logState = state;
-    }
-
     void Init( State* state, Buffer<ChannelDecl> channels )
     {
+        // Init everything from the main thread's arena
         INIT( state->channels )( I32(channels.length) );
         INIT( state->endpoints )( 8 );
         INIT( state->msgBuffer )( 64 * 1024 );
         INIT( state->entryQueue )( 1024 );
         INIT( state->entrySemaphore );
         INIT( state->thread )( nullptr );
+
+        InitArena( &state->threadArena );
+        InitArena( &state->threadTmpArena );
 
         for( ChannelDecl const& cd : channels )
         {
@@ -132,8 +126,12 @@ namespace Logging
         // TODO File creation etc
         //AttachEndpoint( Endpoints::RawFileLog, state );
 
-        state->thread.STORE_RELAXED( Core::CreateThread( "LoggingThread", LoggingThread, state ) );
-        InitThreadContext( state );
+        // Set up an initial context for the thread
+        Context threadContext = InitContext( &state->threadArena, &state->threadTmpArena, state );
+        state->thread.STORE_RELAXED( Core::CreateThread( "LoggingThread", LoggingThread, state, threadContext ) );
+
+        // Once ready, set the state in this thread's Context so it's ready to use
+        CTX.logState = state;
     }
 
     void Shutdown( State* state )

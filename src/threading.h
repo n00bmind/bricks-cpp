@@ -3,9 +3,10 @@
 
 namespace Core
 {
-    inline Platform::ThreadHandle CreateThread( char const* name, Platform::ThreadFunc threadFunc, void* userdata = nullptr )
+    inline Platform::ThreadHandle CreateThread( char const* name, Platform::ThreadFunc threadFunc, void* userdata = nullptr,
+                                                Context const& threadContext = {} )
     {
-        return globalPlatform.CreateThread( name, threadFunc, userdata );
+        return globalPlatform.CreateThread( name, threadFunc, userdata, threadContext );
     }
 
     inline int JoinThread( Platform::ThreadHandle handle )
@@ -22,9 +23,6 @@ namespace Core
     {
         return globalPlatform.IsMainThread();
     }
-
-    // TODO We're gonna need to do this again upon hot reloading for any long-running threads
-    void SetUpThreadContext( MemoryArena* mainArena, MemoryArena* tmpArena, Logging::State* logState );
 } // namespace Core
 
 

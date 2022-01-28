@@ -42,10 +42,12 @@
 #include "strings.h"
 #include "http.h"
 
-#include "platform.cpp"
+#include "common.cpp"
+#include "context.cpp"
 #include "logging.cpp"
-#include "win32_platform.cpp"
 #include "http.cpp"
+#include "platform.cpp"
+#include "win32_platform.cpp"
 
 
 struct
@@ -188,7 +190,7 @@ struct MutexTester
 
         Array<Platform::ThreadHandle> threads( threadCount );
         for (int i = 0; i < threadCount; i++)
-            threads.Push( Core::CreateThread( "Test thread", MutexTesterThread<T>, this ) );
+            threads.Push( Core::CreateThread( "Test thread", MutexTesterThread<T>, this, {} ) );
         for( Platform::ThreadHandle& t : threads )
             Core::JoinThread( t );
 

@@ -50,8 +50,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define ASSERT_HANDLER(name) void name( const char* file, int line, const char* msg, ... )
 typedef ASSERT_HANDLER(AssertHandlerFunc);
 
-ASSERT_HANDLER(DefaultAssertHandler);
-AssertHandlerFunc* globalAssertHandler = DefaultAssertHandler;
+extern AssertHandlerFunc* globalAssertHandler;
 
 #if !CONFIG_RELEASE
 #define NOT_IMPLEMENTED ASSERT(!"NotImplemented")

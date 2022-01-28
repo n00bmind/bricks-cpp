@@ -1,20 +1,24 @@
-
 //
-// Include this only on platform exe, not the application dll
+// NOTE NOTE NOTE Include this only on platform exe, not the application dll
 //
 
+namespace Platform
+{
 
 // Global stack of Contexts
 thread_local Context   globalContextStack[64];
 thread_local Context*  globalContextPtr;
-thread_local Context** globalContext;
-
 
 void InitContextStack( Context const& baseContext )
 {
     globalContextPtr  = globalContextStack;
     *globalContextPtr = baseContext;
-    globalContext     = &globalContextPtr;
+}
+
+
+PLATFORM_GET_CONTEXT( GetContext )
+{
+    return &globalContextPtr;
 }
 
 PLATFORM_PUSH_CONTEXT( PushContext )
@@ -30,42 +34,17 @@ PLATFORM_POP_CONTEXT( PopContext )
         globalContextPtr--;
 }
 
-namespace Core
-{
-    void SetUpThreadContext( MemoryArena* mainArena, MemoryArena* tmpArena, Logging::State* logState )
-    {
-        // Only do this at the beginning of new threads
-        ASSERT( !globalContext );
-
-        if( !IsInitialized( *mainArena ) )
-            InitArena( mainArena );
-        if( !IsInitialized( *tmpArena ) )
-            InitArena( tmpArena );
-
-        Context threadContext =
-        {
-            Allocator::CreateFrom( mainArena ),
-            Allocator::CreateFrom( tmpArena ),
-        };
-        InitContextStack( threadContext );
-
-        Logging::InitThreadContext( logState );
-    }
-}
-
 
 // Global platform
-
-PlatformAPI globalPlatform;
 
 internal MemoryArena globalPlatformArena;
 internal MemoryArena globalTmpArena;
 
 
-Logging::State* GetGlobalLoggingState()
+internal Logging::State* GetGlobalLoggingState()
 {
     // NOTE Merely declaring this (or any data type in datatypes.h) as a global requires
-    // a properly setup Context, so we may want to initialize that lazily instead?
+    // a properly setup Context, so just create the object lazily
     persistent Logging::State logState;
     return &logState;
 }
@@ -74,9 +53,20 @@ void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::Channel
 {
     globalPlatform = platformAPI;
 
-    Core::SetUpThreadContext( &globalPlatformArena, &globalTmpArena, nullptr );
+    InitArena( &globalPlatformArena );
+    InitArena( &globalTmpArena );
+
+    // Set up Context for the main thread
+    Context threadContext =
+    {
+        Allocator::CreateFrom( &globalPlatformArena ),
+        Allocator::CreateFrom( &globalTmpArena ),
+    };
+    InitContextStack( threadContext );
 
     // Set up initial logging state (this requires a working Context & allocators)
     Logging::Init( GetGlobalLoggingState(), logChannels );
 }
+
+} // namespace Platform
 
