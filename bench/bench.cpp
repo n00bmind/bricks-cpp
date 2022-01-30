@@ -26,7 +26,6 @@
 #include "strings.h"
 
 #include "common.cpp"
-#include "context.cpp"
 #include "logging.cpp"
 #include "platform.cpp"
 #include "win32_platform.cpp"

@@ -29,6 +29,7 @@ namespace Http
         i32 statusCode;
         // TODO Turn this into an enum/string probably?
         i32 error;
+        u32 requestId;
         // TODO If this is not found in the response data.. what should the default be?
         bool close = true;
         // FIXME Unify with error code
@@ -63,6 +64,7 @@ namespace Http
         String port;
         String resource;
         Method method;
+        u32 id;
         bool https;
     };
 
@@ -82,14 +84,13 @@ namespace Http
     bool Init( State* state );
     void Shutdown( State* state );
 
-    bool Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
-              void* userData = nullptr, u32 flags = 0 );
-    bool Get( State* state, char const* url, Callback callback,
-              void* userData = nullptr, u32 flags = 0 );
-    bool Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
-               Callback callback, void* userData = nullptr, u32 flags = 0 );
-    bool Post( State* state, char const* url, char const* bodyData, Callback callback,
-               void* userData = nullptr, u32 flags = 0 );
+    u32 Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
+             void* userData = nullptr, u32 flags = 0 );
+    u32 Get( State* state, char const* url, Callback callback, void* userData = nullptr, u32 flags = 0 );
+
+    u32 Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
+              Callback callback, void* userData = nullptr, u32 flags = 0 );
+    u32 Post( State* state, char const* url, char const* bodyData, Callback callback, void* userData = nullptr, u32 flags = 0 );
 
     void ProcessResponses( State* state );
 

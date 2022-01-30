@@ -43,7 +43,6 @@
 #include "http.h"
 
 #include "common.cpp"
-#include "context.cpp"
 #include "logging.cpp"
 #include "http.cpp"
 #include "platform.cpp"
@@ -262,9 +261,8 @@ TEST_F( HttpTest, Get )
         ASSERT_TRUE( response.body );
     };
 
-    bool ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client",
-                          callback, &done );
-    ASSERT_TRUE( ret );
+    u32 ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client", callback, &done );
+    ASSERT_TRUE( ret != 0 );
 
     f32 start = Core::AppTimeSeconds();
     while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
@@ -286,10 +284,9 @@ TEST_F( HttpTest, Post )
         ASSERT_TRUE( response.body );
     };
 
-    bool ret = Http::Post( &globalState.http, "https://httpbin.org/post",
-                           "{\"message\":\"Hello, https_client!\"}",
-                           callback, &done );
-    ASSERT_TRUE( ret );
+    u32 ret = Http::Post( &globalState.http, "https://httpbin.org/post", "{\"message\":\"Hello, https_client!\"}",
+                          callback, &done );
+    ASSERT_TRUE( ret != 0 );
 
     f32 start = Core::AppTimeSeconds();
     while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )

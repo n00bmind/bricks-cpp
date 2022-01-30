@@ -43,14 +43,16 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #else
 #define ASSERT(expr, ...) \
     ((void)( !(expr) \
-             && (globalAssertHandler( __FILE__, __LINE__, IF_ELSE( HAS_ARGS(__VA_ARGS__) )( __VA_ARGS__ )( #expr ) ), 1) \
+             && (GetGlobalAssertHandler()( __FILE__, __LINE__, IF_ELSE( HAS_ARGS(__VA_ARGS__) )( __VA_ARGS__ )( #expr ) ), 1) \
              && HALT() ))
 #endif
 
 #define ASSERT_HANDLER(name) void name( const char* file, int line, const char* msg, ... )
 typedef ASSERT_HANDLER(AssertHandlerFunc);
 
-extern AssertHandlerFunc* globalAssertHandler;
+// Use a getter so we access the same value from anywhere in the app
+AssertHandlerFunc* GetGlobalAssertHandler();
+void SetGlobalAssertHandler( AssertHandlerFunc* f );
 
 #if !CONFIG_RELEASE
 #define NOT_IMPLEMENTED ASSERT(!"NotImplemented")

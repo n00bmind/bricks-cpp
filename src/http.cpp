@@ -597,6 +597,7 @@ namespace Http
         response->url = request->url;
         response->callback = request->callback;
         response->callbackData = request->callbackData;
+        response->requestId = request->id;
 
         if( !Connect( request ) )
         {
@@ -712,9 +713,12 @@ namespace Http
         state->initialized = false;
     }
 
+
+    internal u32 nextRequestId = 1;
+
     // TODO We're gonna want some way of reusing connections to the same server etc
-    bool Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
-              void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    u32 Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
+             void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         // Enqueue to the http thread and return immediately
         Request request = {};
@@ -725,23 +729,23 @@ namespace Http
         request.headers = headers;
         request.callback = callback;
         request.callbackData = userData;
+        request.id = nextRequestId++;
 
         // TODO Move!?
         state->requestQueue.Push( std::move(request) );
         state->requestSemaphore.Signal();
 
-        return true;
+        return request.id;
     }
 
-    bool Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/,
-              u32 flags /*= 0*/ )
+    u32 Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         Array<Header> headers;
         return Get( state, url, headers, callback, userData, flags );
     }
 
-    bool Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
-               Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    u32 Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
+              Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         // Enqueue to the http thread and return immediately
         Request request = {};
@@ -753,16 +757,16 @@ namespace Http
         request.bodyData = bodyData;
         request.callback = callback;
         request.callbackData = userData;
+        request.id = nextRequestId++;
 
         // TODO Move!?
         state->requestQueue.Push( std::move(request) );
         state->requestSemaphore.Signal();
 
-        return true;
+        return request.id;
     }
 
-    bool Post( State* state, char const* url, char const* bodyData, Callback callback, 
-               void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    u32 Post( State* state, char const* url, char const* bodyData, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         Array<Header> headers;
         return Post( state, url, headers, bodyData, callback, userData, flags );
