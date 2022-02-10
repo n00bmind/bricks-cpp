@@ -24,7 +24,7 @@ namespace Logging
         newEntry->channelName = channelName;
         newEntry->sourceFile  = file;
         newEntry->sourceLine  = line;
-        newEntry->timestamp   = Core::AppTimeSeconds();
+        newEntry->timeSeconds = Core::AppTimeSeconds();
         newEntry->threadId    = Core::GetThreadId();
         newEntry->volume      = volume;
         newEntry->msgLen      = len;
@@ -51,15 +51,36 @@ namespace Logging
     {
         LOG_ENDPOINT(DebugLog)
         {
+            Entry const& e = entry;
             if( e.volume < Volume::Error )
-                globalPlatform.Print( "%s: %.3f %s : %s\n", e.volume.Name(), e.timestamp, e.channelName, e.msg );
+                globalPlatform.Print( "%s: %.3f %s : %s\n", e.volume.Name(), e.timeSeconds, e.channelName, e.msg );
             else
-                globalPlatform.Error( "%s: %.3f %s : %s\n", e.volume.Name(), e.timestamp, e.channelName, e.msg );
+                globalPlatform.Error( "%s: %.3f %s : %s\n", e.volume.Name(), e.timeSeconds, e.channelName, e.msg );
         }
 
         // TODO 
         LOG_ENDPOINT(RawFileLog);
     }
+
+    void AttachEndpoint( StaticStringHash name, EndpointFunc* endpoint, void* userdata /*= nullptr*/ )
+    {
+        // FIXME Sync!
+
+        u32 id = name.Hash32();
+
+        EndpointInfo* match = nullptr;
+        for( EndpointInfo& e : CTX.logState->endpoints )
+            if( id == e.id && name == e.name )
+            {
+                e = { name.data, endpoint, userdata, id };
+                match = &e;
+                break;
+            }
+
+        if( !match )
+            CTX.logState->endpoints.Push( { name.data, endpoint, userdata, id } );
+    }
+
 
     PLATFORM_THREAD_FUNC(LoggingThread)
     {
@@ -74,8 +95,8 @@ namespace Logging
             if( state->entryQueue.TryPop( &entry ) )
             {
                 // Send to available endpoints
-                for( EndpointFunc* tgt : state->endpoints )
-                    tgt( entry );
+                for( EndpointInfo const& tgt : state->endpoints )
+                    tgt.func( entry, tgt.userdata );
 
                 // Clear out the range in the msg buffer, and advance it as much as we can
                 ZEROP( (void*)entry.msg, entry.msgLen );
@@ -97,11 +118,6 @@ namespace Logging
     }
 
 
-    void AttachEndpoint( EndpointFunc* endpoint, State* state )
-    {
-        state->endpoints.Push( endpoint );
-    }
-
     void Init( State* state, Buffer<ChannelDecl> channels )
     {
         // Init everything from the main thread's arena
@@ -121,17 +137,17 @@ namespace Logging
             c->minVolume = cd.minVolume;
         }
 
+        // Once ready, set the state in this thread's Context so it's ready to use
+        CTX.logState = state;
+
         // DefaultEndpoints
-        AttachEndpoint( Endpoints::DebugLog, state );
+        AttachEndpoint( "StandardOut", Endpoints::DebugLog );
         // TODO File creation etc
-        //AttachEndpoint( Endpoints::RawFileLog, state );
+        //AttachEndpoint( "FileOut", Endpoints::RawFileLog );
 
         // Set up an initial context for the thread
         Context threadContext = InitContext( &state->threadArena, &state->threadTmpArena, state );
         state->thread.STORE_RELAXED( Core::CreateThread( "LoggingThread", LoggingThread, state, threadContext ) );
-
-        // Once ready, set the state in this thread's Context so it's ready to use
-        CTX.logState = state;
     }
 
     void Shutdown( State* state )

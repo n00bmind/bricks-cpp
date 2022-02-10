@@ -38,8 +38,8 @@
 #include "context.h"
 #include "threading.h"
 #include "datatypes.h"
-#include "logging.h"
 #include "strings.h"
+#include "logging.h"
 #include "http.h"
 
 #include "common.cpp"
@@ -67,6 +67,8 @@ struct
 #pragma warning( disable : 4702 )
 #pragma warning( disable : 5219 )
 
+
+// TODO Math tests
 
 class DatatypesTest : public testing::Test
 {

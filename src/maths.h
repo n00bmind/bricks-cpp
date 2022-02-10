@@ -180,3 +180,45 @@ u64 Hash64( void const* key, const int len )
     return buf[0];
 }
 
+
+/*
+ :: Some findings from the compile time hash experiments ::
+    - The STL is a major clusterfuck, even for quick experiments like this one. Never again touch it with a 10-foot pole.
+    - constexpr by itself is also a big disaster, as you still need to be very careful to assign everything to a constexpr variable
+      or do template trickery to ensure the compiler is actually doing what the word implies, even in Release!
+      (or use C++ 14 and 'consteval', WTF!?)
+    - Putting a template in front of the constexpr function seems to _decrease_ compilation times, I assume the template must be acting
+      as a cache of the final expression for each string length, hence saving a ton of compile time expression evaluations
+      (and there are tons of string with the same length in the test body).
+    - Using the ForceCompileTime trick also seems to decrease compilation times a little, no explanation for this one, as there are no
+      repeating words in the test body, so I don't know what could be cached here.
+*/
+
+// Fairly typical FNV1-a loop in recursive form
+// Number of collisions is low enough (0 in a test body of 100K+) that this can be used as a 1-to-1 id for short name strings
+// (assuming we still check for them ofc!)
+// https://mikejsavage.co.uk/blog/cpp-tricks-compile-time-string-hashing.html
+constexpr u64 CompileTimeHash64( const char * str, size_t n, u64 basis = 0xcbf29ce484222325ULL )
+{
+    return n == 0 ? basis : CompileTimeHash64( str + 1, n - 1, ( basis ^ str[ 0 ] ) * 0x100000001b3ULL );
+}
+
+template<size_t N>
+constexpr u64 CompileTimeHash64( const char (&str)[N] )
+{
+    return CompileTimeHash64( str, N - 1 );
+}
+
+template<size_t N>
+constexpr u32 CompileTimeHash32( const char (&str)[N] )
+{
+    return (u32)(CompileTimeHash64( str ) & U32MAX);
+}
+
+#define CONSTEVAL_HASH(x) \
+    ForceCompileTime<u64, CompileTimeHash64(x)>::value
+
+#define CONSTEVAL_HASH_32(x) \
+    ForceCompileTime<u32, CompileTimeHash32(x)>::value
+
+

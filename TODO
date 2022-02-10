@@ -1,9 +1,14 @@
 
-- Make all datatypes (& String) do shallow copies by default (default copy & assignment)
+- Investigate if/how we could make all datatypes (& String) do shallow copies by default (default copy & assignment)
 - Investigate how we could use something similar to the REFLECT() mechanism in KoM to enable automatic deep copies where needed
 
-Http features:
+HTTP
 - Chunked transfers
 - Automatic redirect handling
 - Certificate verification
 - Authentication?
+
+REFLECTION
+- Kind of like this idea ..  https://simoncoenen.com/blog/programming/StaticReflection
+  But I'd definitely try to composite all that info and not have everything inherit from a specific class!
+  Also not so much interested in dynamic casting and object factories (specially for serialisation)

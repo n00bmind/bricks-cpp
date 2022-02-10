@@ -22,8 +22,8 @@
 #include "threading.h"
 #include "datatypes.h"
 #include "clock.h"
-#include "logging.h"
 #include "strings.h"
+#include "logging.h"
 
 #include "common.cpp"
 #include "logging.cpp"

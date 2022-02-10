@@ -206,10 +206,9 @@ INLINE bool DefaultEqFunc< const char* >( char const* const& a, char const* cons
 
 // Read only string
 // By default it only just references character data living somewhere else
+// TODO This description is wrong currently, but do we want to make this the default again for naked C strings?
 // It can optionally own the memory too (for easily moving string data around or building formatted strings etc.)
 
-// TODO Write some tests to make sure the default of not copying anything is not a problem when stored inside containers
-// TODO Remove all the lazily placed Valid() checks where it makes sense
 struct String
 {
     enum Flags : u32
@@ -230,29 +229,29 @@ struct String
     {}
 
     String( char const* cString, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     { InternalClone( cString ); }
 
     explicit String( char const* cString, int len, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     { InternalClone( cString, len ); }
 
     explicit String( char const* cString, char const* cStringEnd, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     { InternalClone( cString, cStringEnd ? I32( cStringEnd - cString ) : StringLength( cString ) ); }
 
     explicit String( StringBuffer const& buffer, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     // Don't count null terminator
     { InternalClone( buffer.data, I32(buffer.length - 1) ); }
 
     explicit String( Buffer<char> const& buffer, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     // Don't count null terminator
     { InternalClone( buffer.data, I32(buffer.length - 1) ); }
 
     explicit String( Buffer<> const& buffer, u32 flags_ = 0 )
-        : flags( flags_ & ~Owned )
+        : flags( flags_ | Owned )
     // Don't count null terminator
     { InternalClone( (char const*)buffer.data, I32(buffer.length - 1) ); }
 
@@ -393,11 +392,12 @@ public:
     }
 
 
-    static String Ref( char const* src, int len = 0 )
+    static String Ref( char const* src, int len = 0, u32 flags = 0 )
     {
         String result;
         result.data = src;
         result.length = len;
+        result.flags = flags & ~Owned;
         return result;
     }
     static String Ref( String const& other )
@@ -788,17 +788,59 @@ public:
 #endif
 };
 
-// Automatically figure out length for string literals
-// TODO constexpr
-INLINE String operator"" _str( const char *s, size_t len )
-{
-    return String::Ref( s, I32(len) );
-}
-
 // Correctly hash Strings
 template <>
 INLINE u64  DefaultHashFunc< String >( String const& key )  { return key.Hash(); }
 
+
+// Version accepting string literals only, so we can guarantee a Ref is fine always
+struct StaticString : public String
+{
+    template <size_t N>
+    constexpr StaticString( char const (&s)[N], u32 flags_ = 0 )
+        : String( flags_ & ~Owned )
+    {
+        data = s;
+        length = (int)N;
+    }
+
+    // for non-const char arrays like buffers
+    template<size_t N> StaticString( char (&)[N] ) = delete;
+    //StaticString( char const* ) = delete;
+
+protected:
+    constexpr StaticString( char const* s, size_t len, u32 flags_ = 0 )
+        : String( flags & ~Owned )
+    {
+        data = s;
+        length = (int)len;
+    }
+
+    friend StaticString operator"" _s( const char* s, size_t len );
+};
+
+INLINE StaticString operator"" _s( const char *s, size_t len )
+{
+    return StaticString( s, len );
+}
+
+
+// Version that gets hashed in compile time
+struct StaticStringHash : public StaticString
+{
+    const u64 hash;
+
+    // TODO Check constexpr!
+    template <size_t N>
+    constexpr StaticStringHash( char const (&s)[N], u32 flags_ = 0 )
+        : StaticString( s, flags_ )
+        , hash( CompileTimeHash64( s ) )
+    {}
+    // for non-const char arrays like buffers
+    template<size_t N> StaticStringHash( char (&)[N] ) = delete;
+
+    constexpr u32 Hash32() const { return (u32)(hash & U32MAX); }
+};
 
 
 // String builder to help compose Strings piece by piece

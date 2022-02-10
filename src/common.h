@@ -121,6 +121,16 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
     #define INLINE_LAMBDA __attribute__((always_inline))
 #endif
 
+// Force actual compile time execution of a constexpr function (similar to 'consteval')
+// USE SPARINGLY
+template <typename T, T F>
+struct ForceCompileTime
+{
+    static constexpr T value = F;
+};
+#define CONSTEVAL(type, funcCall) \
+    ForceCompileTime<type, funcCall>::value
+
 
 typedef int8_t   i8;
 typedef int16_t  i16;
@@ -173,6 +183,7 @@ typedef std::atomic<u64> atomic_u64;
 // TODO (may need to use C's assert?)
 // https://akrzemi1.wordpress.com/2017/05/18/asserts-in-constexpr-functions/
 // https://ericniebler.com/2014/09/27/assert-and-constexpr-in-cxx11/
+// https://andreasfertig.blog/2018/08/use-of-the-comma-operator/
 
 INLINE constexpr i8
 I8( i32 value )
@@ -401,6 +412,9 @@ int main()
 #define _ENUM_INIT_WITH_VALUES(x, v)            { #x, _ENUM_ARGS v, x },
 #define _ENUM_INIT_WITH_NAMES_VALUES(x, n, v)   {  n, _ENUM_ARGS v, x },
 
+// TODO Add a constexpr string to enum constructor as explained in "Compile Time Assisted String To Enum"
+// in https://blog.demofox.org/2016/09/23/exploring-compile-time-hashing/
+
 struct EnumBase
 { };
 
@@ -408,6 +422,12 @@ struct EnumBase
 struct enumName : public EnumBase                                                  \
 {                                                                                  \
     i32 index;                                                                     \
+                                                                                   \
+    enum Enum : i32                                                                \
+    {                                                                              \
+        xItemList(_ENUM_ENTRY)                                                     \
+    };                                                                             \
+                                                                                   \
                                                                                    \
     constexpr enumName( int index_ = 0 ) : index( index_ )                         \
     {                                                                              \
@@ -417,8 +437,16 @@ struct enumName : public EnumBase                                               
     INLINE constexpr operator int() { return index; }                              \
     INLINE constexpr bool operator ==( enumName const& other ) const               \
     { return index == other.index; }                                               \
+    INLINE constexpr bool operator ==( Enum const& other ) const                   \
+    { return index == (int)other; }                                                \
     INLINE constexpr bool operator <( enumName const& other ) const                \
     { return index < other.index; }                                                \
+    INLINE constexpr bool operator <=( enumName const& other ) const               \
+    { return index <= other.index; }                                               \
+    INLINE constexpr bool operator >( enumName const& other ) const                \
+    { return index > other.index; }                                                \
+    INLINE constexpr bool operator >=( enumName const& other ) const               \
+    { return index >= other.index; }                                               \
                                                                                    \
     INLINE constexpr char const* Name()  const { return names[index]; }            \
     INLINE constexpr valueType const& Value() const { return values[index]; }      \
@@ -426,11 +454,6 @@ struct enumName : public EnumBase                                               
                                                                                    \
     using EnumTypeName = enumName;                                                 \
     using ValueType = valueType;                                                   \
-                                                                                   \
-    enum Enum : i32                                                                \
-    {                                                                              \
-        xItemList(_ENUM_ENTRY)                                                     \
-    };                                                                             \
                                                                                    \
     struct Item                                                                    \
     {                                                                              \

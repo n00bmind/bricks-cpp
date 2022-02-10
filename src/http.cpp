@@ -220,14 +220,15 @@ namespace Http
             tmpHeaders.Put( String::Clone( h.name ).ToLowercase(), h.value );
 
         // Add common and 'mandatory' headers to the user provided set
-        tmpHeaders.Put( "user-agent"_str, "BricksEngine/1.0"_str );
-        tmpHeaders.Put( "host"_str, String::FromFormatTmp( "%s:%s", request.host.CStr(), request.port.CStr() ) );
+        // TODO Check static strings
+        tmpHeaders.Put( "user-agent"_s, "BricksEngine/1.0"_s );
+        tmpHeaders.Put( "host"_s, String::FromFormatTmp( "%s:%s", request.host.CStr(), request.port.CStr() ) );
         if( request.bodyData )
-            tmpHeaders.Put( "content-length"_str, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
+            tmpHeaders.Put( "content-length"_s, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
         // TODO 
         //tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
-        tmpHeaders.PutIfNotFound( "accept"_str, "*/*"_str );
-        tmpHeaders.PutIfNotFound( "content-type"_str, "application/json; charset=utf-8"_str );
+        tmpHeaders.PutIfNotFound( "accept"_s, "*/*"_s );
+        tmpHeaders.PutIfNotFound( "content-type"_s, "application/json; charset=utf-8"_s );
 
 
         // TODO Keep any interesting info in the request
@@ -269,7 +270,7 @@ namespace Http
         for( auto it = tmpHeaders.Items(); it; ++it )
             sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
         // TODO Should we skip this when there's no body?
-        sb.Append( "\r\n"_str );
+        sb.Append( "\r\n" );
         if( request.bodyData )
             sb.AppendFormat( "%s", request.bodyData.CStr() );
 
