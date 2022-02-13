@@ -335,7 +335,7 @@ public:
     operator T const*() const { return data; }
     operator T*() { return data; }
 
-    operator bool() const { return data && length; }
+    INLINE bool Valid() const { return data && length; }
 
     T*          begin()         { return data; }
     const T*    begin() const   { return data; }

@@ -260,7 +260,7 @@ TEST_F( HttpTest, Get )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        ASSERT_TRUE( response.body );
+        ASSERT_TRUE( response.body.Valid() );
     };
 
     u32 ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client", callback, &done );
@@ -283,7 +283,7 @@ TEST_F( HttpTest, Post )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        ASSERT_TRUE( response.body );
+        ASSERT_TRUE( response.body.Valid() );
     };
 
     u32 ret = Http::Post( &globalState.http, "https://httpbin.org/post", "{\"message\":\"Hello, https_client!\"}",

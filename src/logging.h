@@ -64,7 +64,6 @@ ENUM_STRUCT_WITH_NAMES(Volume, VOLUME_ITEMS);
 
     void AttachEndpoint( StaticStringHash name, EndpointFunc* endpoint, void* userdata = nullptr );
 
-    // NOTE These macros should seamlesly work when passing a va_list directly instead of var args
 #define LogD( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Debug,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
 #define LogI( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Info,      __FILE__, __LINE__, msg, ##__VA_ARGS__ )
 #define LogW( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Warning,   __FILE__, __LINE__, msg, ##__VA_ARGS__ )

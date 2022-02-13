@@ -315,7 +315,7 @@ static int parse_url(char const* src_url, bool *https, char *host, char *port, c
     char str[1024] = {};
 
     String urlString = String::CloneTmp( src_url );
-    char* url = (char*)urlString.CStr();
+    char* url = (char*)urlString.c();
 
     if(strncmp( url, "http://", 7)==0) {
         p1=&url[7];
@@ -1235,15 +1235,15 @@ String Https::BuildRequest( char const* method, char const* host, char const* po
     StringBuilder sb;
     sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, dir );
     for( auto it = headers.Items(); it; ++it )
-        sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
+        sb.AppendFormat( "%s: %s\r\n", (*it).key.c(), (*it).value.c() );
     // TODO Should we skip this when there's no body?
     sb.Append( "\r\n"_str );
     if( bodyData )
-        sb.AppendFormat( "%s", bodyData.CStr() );
+        sb.AppendFormat( "%s", bodyData.c() );
 
     String result = sb.ToStringTmp();
 #if 0
-    printf("--- REQ:\n%s\n---\n", result.CStr() );
+    printf("--- REQ:\n%s\n---\n", result.c() );
 #endif
 
     return result;

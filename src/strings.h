@@ -371,11 +371,11 @@ public:
     bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
     explicit operator bool() const { return !Empty(); }
-    operator char const*() const { return CStr(); }
+    operator char const*() const { return c(); }
 
     bool Empty() const { return length == 0 || data == nullptr; }
     bool Valid() const { return Empty() || data[length] == 0; }
-    char const* CStr() const { ASSERT( Valid() ); return data ? data : ""; }
+    char const* c() const { ASSERT( Valid() ); return data ? data : ""; }
 
     StringBuffer ToBuffer() const { return StringBuffer( data, length ); }
     Buffer<u8> ToBufferU8() const { return Buffer<u8>( (u8*)data, length ); }
@@ -585,7 +585,7 @@ public:
                 if( nextLength )
                 {
                     String str =  String::Ref( nextData, nextLength );
-                    str.CStr();
+                    str.c();
 
                     result->Push( str );
                     nextData = s;
@@ -600,7 +600,7 @@ public:
         if( nextLength )
         {
             String str =  String::Ref( nextData, nextLength );
-            str.CStr();
+            str.c();
 
             result->Push( str );
         }

@@ -23,7 +23,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 
-// TODO Write copy/move constructors & assignments
+// TODO Write copy/move constructors & assignments for everybody
 
 /////     DYNAMIC ARRAY    /////
 
@@ -60,22 +60,21 @@ struct Array
         , allocator( allocator_ )
         , memParams( params )
     {
-        ASSERT( capacity > 0 );
         ASSERT( allocator );
         data = ALLOC_ARRAY( allocator, T, capacity, memParams );
     }
 
-    Array( T* buffer, i32 count_, i32 capacity_ )
+    // NOTE Arrays initialized from a buffer have count set equal to their capacity by default
+    Array( T* buffer, i32 bufferLen, i32 initialCount = -1 )
         : data( buffer )
-        , count( count_ )
-        , capacity( capacity_ )
+        , count( initialCount == -1 ? bufferLen : initialCount )
+        , capacity( bufferLen )
     {
-        ASSERT( data && count >= 0 && capacity > 0 && count <= capacity );
+        ASSERT( count >= 0 && count <= capacity );
     }
 
-    // NOTE Arrays initialized from a buffer have count set equal to their capacity by default
-    Array( T* buffer, i32 bufferLen )
-        : Array( buffer, bufferLen, bufferLen )
+    explicit Array( Buffer<T> buffer )
+        : Array( buffer.data, (int)buffer.length, (int)buffer.length )
     {}
 
     ~Array()
@@ -275,11 +274,11 @@ struct Array
     }
 
     template <typename AllocType2 = Allocator>
-    static Array<T, AllocType2> Clone( Buffer<T> buffer, AllocType2* allocator = nullptr )
+    static Array<T, AllocType2> Clone( Array<T, AllocType2> const& other, AllocType2* allocator = nullptr )
     {
-        Array<T, AllocType2> result( I32( buffer.length ), allocator ? allocator : CTX_ALLOC );
-        result.ResizeToCapacity();
-        COPYP( buffer.data, result.data, buffer.length * SIZEOF(T) );
+        Array<T, AllocType2> result( other.capacity, allocator ? allocator : CTX_ALLOC );
+        result.count = other.count;
+        COPYP( other.data, result.data, result.count * SIZEOF(T) );
         return result;
     }
 
@@ -297,9 +296,23 @@ struct Array
     }
 };
 
+// Helper functions to clone stuff into arrays without having to specify freaking template arguments everywhere
+template <typename T, typename AllocType = Allocator>
+Array<T, AllocType> ArrayClone( Array<T, AllocType> const& other, AllocType* allocator = nullptr )
+{
+    return Array<T, AllocType>::Clone( other, allocator );
+}
+
+template <typename T, typename AllocType = Allocator>
+Array<T, AllocType> ArrayClone( Buffer<T> const& other, AllocType* allocator = nullptr )
+{
+    return Array<T, AllocType>::Clone( Array<T, AllocType>( other ), allocator );
+}
+
+// Declare a static array and its Array wrapper in a single line
 #define ARRAY( T, len, name ) \
         T UNIQUE(__array_storage)[len] = {}; \
-        Array<T> name = { UNIQUE(__array_storage), 0, len };
+        Array<T> name = { UNIQUE(__array_storage), len, 0 };
 
 #if 0
 template <typename T, typename AllocType>

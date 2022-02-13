@@ -96,9 +96,9 @@ namespace Http
         // TODO Investigate how to do proper non-blocking connects
         // The old Https code had its own mbedtls_net_connect_timeout, which seems like it heavily borrows from the
         // mbedtls_net_connect source code. The problem is afaik connect & select will still block.. so?
-        if( (ret = mbedtls_net_connect( &request->tls.fd, request->host.CStr(), request->port.CStr(), MBEDTLS_NET_PROTO_TCP )) != 0 )
+        if( (ret = mbedtls_net_connect( &request->tls.fd, request->host.c(), request->port.c(), MBEDTLS_NET_PROTO_TCP )) != 0 )
         {
-            //LogError( Net, "mbedtls_net_connect returned %d", ret );
+            LogE( "Net", "mbedtls_net_connect returned %d", ret );
             return false;
         }
 
@@ -113,7 +113,7 @@ namespace Http
         if( (ret = mbedtls_net_set_block( &request->tls.fd )) != 0 )
 #endif
         {
-            //LogError( Net, "mbedtls_net_set_nonblock returned %d", ret );
+            LogE( "Net", "mbedtls_net_set_nonblock returned %d", ret );
             return false;
         }
 
@@ -123,7 +123,7 @@ namespace Http
                                                     MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT ))
                 != 0 )
             {
-                //LogError( Net, "mbedtls_ssl_config_defaults returned %d\n\n", ret );
+                LogE( "Net", "mbedtls_ssl_config_defaults returned %d\n\n", ret );
                 return false;
             }
 
@@ -137,7 +137,7 @@ namespace Http
                     constexpr const char *cafile = "/path/to/trusted-ca-list.pem";
                     if( (ret = mbedtls_x509_crt_parse_file( &request->tls.cacert, cafile )) != 0 )
                     {
-                        //LogError(  Net, "mbedtls_x509_crt_parse returned -0x%x\n\n", -ret );
+                        LogE(  "Net", "mbedtls_x509_crt_parse_file returned -0x%x\n\n", -ret );
                         return false;
                     }
                 }
@@ -148,7 +148,7 @@ namespace Http
                         // +1 to account for the null terminator
                         if( (ret = mbedtls_x509_crt_parse( &request->tls.cacert, (u8*)ca_crt_rsa[i], strlen( ca_crt_rsa[i] ) + 1 )) != 0 )
                         {
-                            // TODO Log error
+                            LogE(  "Net", "mbedtls_x509_crt_parse returned -0x%x\n\n", -ret );
                             return false;
                         }
                     }
@@ -163,8 +163,7 @@ namespace Http
 
             if( (ret = mbedtls_ctr_drbg_seed( &request->tls.ctrDrbg, mbedtls_entropy_func, &request->tls.entropy, nullptr, 0 )) != 0 )
             {
-                // TODO 
-                //LogError( Net, "mbedtls_ctr_drbg_seed returned %d", ret );
+                LogE( "Net", "mbedtls_ctr_drbg_seed returned %d", ret );
                 return false;
             }
             mbedtls_ssl_conf_rng( &request->tls.config, mbedtls_ctr_drbg_random, &request->tls.ctrDrbg ); 
@@ -175,13 +174,13 @@ namespace Http
 
             if( (ret = mbedtls_ssl_setup( &request->tls.context, &request->tls.config )) != 0 )
             {
-                //LogError( Net, "mbedtls_ssl_setup returned %d\n\n", ret );
+                LogE( "Net", "mbedtls_ssl_setup returned %d\n\n", ret );
                 return false;
             }
 
-            if( (ret = mbedtls_ssl_set_hostname( &request->tls.context, request->host.CStr() )) != 0 )
+            if( (ret = mbedtls_ssl_set_hostname( &request->tls.context, request->host.c() )) != 0 )
             {
-                //LogError( Net, "mbedtls_ssl_set_hostname returned %d\n\n", ret );
+                LogE( "Net", "mbedtls_ssl_set_hostname returned %d\n\n", ret );
                 return false;
             }
 #if NON_BLOCKING
@@ -195,7 +194,7 @@ namespace Http
             {
                 if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE )
                 {
-                    //LogError( Net, "mbedtls_ssl_handshake returned -0x%x\n\n", (unsigned int)-ret );
+                    LogE( "Net", "mbedtls_ssl_handshake returned -0x%x\n\n", (unsigned int)-ret );
                     return false;
                 }
             }
@@ -222,7 +221,7 @@ namespace Http
         // Add common and 'mandatory' headers to the user provided set
         // TODO Check static strings
         tmpHeaders.Put( "user-agent"_s, "BricksEngine/1.0"_s );
-        tmpHeaders.Put( "host"_s, String::FromFormatTmp( "%s:%s", request.host.CStr(), request.port.CStr() ) );
+        tmpHeaders.Put( "host"_s, String::FromFormatTmp( "%s:%s", request.host.c(), request.port.c() ) );
         if( request.bodyData )
             tmpHeaders.Put( "content-length"_s, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
         // TODO 
@@ -265,18 +264,18 @@ namespace Http
         char const* method = request.method.Name();
 
         StringBuilder sb;
-        sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, request.resource.CStr() );
+        sb.AppendFormat( "%s %s HTTP/1.1\r\n", method, request.resource.c() );
         // FIXME Uppercase first letter!
         for( auto it = tmpHeaders.Items(); it; ++it )
-            sb.AppendFormat( "%s: %s\r\n", (*it).key.CStr(), (*it).value.CStr() );
+            sb.AppendFormat( "%s: %s\r\n", (*it).key.c(), (*it).value.c() );
         // TODO Should we skip this when there's no body?
         sb.Append( "\r\n" );
         if( request.bodyData )
-            sb.AppendFormat( "%s", request.bodyData.CStr() );
+            sb.AppendFormat( "%s", request.bodyData.c() );
 
         String result = sb.ToStringTmp();
 #if HTTP_DEBUG_PRINT
-        printf("--- REQ:\n%s---\n", result.CStr() );
+        printf("--- REQ:\n%s---\n", result.c() );
 #endif
 
         return result;
@@ -521,7 +520,7 @@ namespace Http
     {
         String responseString = String::Ref( response->rawData );
 #if HTTP_DEBUG_PRINT
-        printf("--- RSP:\n%s---\n", responseString.CStr() );
+        printf("--- RSP:\n%s---\n", responseString.c() );
 #endif
 
         while( true )
@@ -572,7 +571,7 @@ namespace Http
                     String word = line.ConsumeWord();
                     if( !word || !word.EndsWith( ":" ) )
                     {
-                        LogW( /*Net,*/ "Malformed response header: '%s'", line.CStr() );
+                        LogW( "Net", "Malformed response header: '%s'", line.c() );
                         continue;
                     }
                     // Remove final ':'
@@ -581,7 +580,7 @@ namespace Http
 
                     if( !line )
                     {
-                        LogW( /*Net,*/ "Empty response header: '%s'", name.CStr() );
+                        LogW( "Net", "Empty response header: '%s'", name.c() );
                         continue;
                     }
 
@@ -657,6 +656,9 @@ namespace Http
                 Response response = {};
                 ProcessRequest( &req, &response );
 
+                if( response.statusCode >= 300 )
+                    LogW( "Net", "Response from %s :: %d", response.url.c(), response.statusCode );
+
                 // TODO Move!?
                 state->responseQueue.Push( std::move(response) );
             }
@@ -717,24 +719,30 @@ namespace Http
 
     internal u32 nextRequestId = 1;
 
+    internal void AddRequest( State* state, Request* request )
+    {
+        request->id = nextRequestId++;
+
+        // TODO Check this actually moves
+        state->requestQueue.Push( std::move(*request) );
+        state->requestSemaphore.Signal();
+
+        LogI( "Net", "Requesting %s", request->url.c() );
+    }
+
     // TODO We're gonna want some way of reusing connections to the same server etc
-    u32 Get( State* state, char const* url, Array<Header> const& headers, Callback callback,
-             void* userData /*= nullptr*/, u32 flags /*= 0*/ )
+    u32 Get( State* state, char const* url, Buffer<Header> headers, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         // Enqueue to the http thread and return immediately
         Request request = {};
 
         InitRequest( url, &request );
         request.method = Method::Get;
-        // TODO Default to moving the headers?
-        request.headers = headers;
+        INIT( request.headers )( ArrayClone( headers ) );
         request.callback = callback;
         request.callbackData = userData;
-        request.id = nextRequestId++;
 
-        // TODO Move!?
-        state->requestQueue.Push( std::move(request) );
-        state->requestSemaphore.Signal();
+        AddRequest( state, &request );
 
         return request.id;
     }
@@ -745,7 +753,7 @@ namespace Http
         return Get( state, url, headers, callback, userData, flags );
     }
 
-    u32 Post( State* state, char const* url, Array<Header> const& headers, char const* bodyData,
+    u32 Post( State* state, char const* url, Buffer<Header> headers, char const* bodyData,
               Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
         // Enqueue to the http thread and return immediately
@@ -753,16 +761,12 @@ namespace Http
 
         InitRequest( url, &request );
         request.method = Method::Post;
-        // TODO Default to moving the headers?
-        request.headers = headers;
+        INIT( request.headers )( ArrayClone( headers ) );
         request.bodyData = bodyData;
         request.callback = callback;
         request.callbackData = userData;
-        request.id = nextRequestId++;
 
-        // TODO Move!?
-        state->requestQueue.Push( std::move(request) );
-        state->requestSemaphore.Signal();
+        AddRequest( state, &request );
 
         return request.id;
     }
@@ -782,7 +786,8 @@ namespace Http
         Response response;
         while( state->responseQueue.TryPop( &response ) )
         {
-            response.callback( response, response.callbackData );
+            if( response.callback )
+                response.callback( response, response.callbackData );
         }
     }
 } // namespace Http
