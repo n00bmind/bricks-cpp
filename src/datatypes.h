@@ -310,7 +310,7 @@ Array<T, AllocType> ArrayClone( Buffer<T> const& other, AllocType* allocator = n
 }
 
 // Declare a static array and its Array wrapper in a single line
-#define ARRAY( T, len, name ) \
+#define ARRAY_DECL( T, len, name ) \
         T UNIQUE(__array_storage)[len] = {}; \
         Array<T> name = { UNIQUE(__array_storage), len, 0 };
 

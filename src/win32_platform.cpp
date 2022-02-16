@@ -50,7 +50,7 @@ namespace Win32
 
     struct State
     {
-        ARRAY(ThreadInfo, 16, liveThreads );
+        ARRAY_DECL(ThreadInfo, 16, liveThreads );
         f64 appStartTimeMillis;
     };
     internal State platformState = {};

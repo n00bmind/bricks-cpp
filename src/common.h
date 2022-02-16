@@ -346,11 +346,11 @@ public:
 using StringBuffer = Buffer<char const>;
 
 // This is the least horrible thing I could come up with ¬¬
-#define INLINE_BUFFER(T, ...)                                 \
-[]()                                                          \
-{                                                             \
-    static constexpr T literal[] = { __VA_ARGS__ };           \
-    return Buffer<T>( literal, sizeof(literal) / sizeof(T) ); \
+#define BUFFER(T, ...)                    \
+[]()                                      \
+{                                         \
+    static T literal[] = { __VA_ARGS__ }; \
+    return Buffer<T>( literal );          \
 }()
     
 

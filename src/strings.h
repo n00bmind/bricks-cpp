@@ -801,7 +801,8 @@ struct StaticString : public String
         : String( flags_ & ~Owned )
     {
         data = s;
-        length = (int)N;
+        // Array for includes the null terminator, so dont count it
+        length = (int)N - 1;
     }
 
     // for non-const char arrays like buffers
@@ -849,10 +850,8 @@ struct StringBuilder
 {
     BucketArray<char> buckets;
 
-    // TODO Raise bucket size when we know it works
     explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
-        //: buckets( 32, params )
-        : buckets( 4, allocator )
+        : buckets( 32, allocator )
     {}
 
     bool Empty() const { return buckets.count == 0; }
