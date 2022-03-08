@@ -254,19 +254,21 @@ protected:
 TEST_F( HttpTest, Get )
 {
     bool done = false;
+    // TODO Move to a method in the class above?
     auto callback = []( const Http::Response& response, void* userdata  )
     {
         bool* done = (bool*)userdata;
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        ASSERT_TRUE( response.body.Valid() );
+        ASSERT_TRUE( response.body.ValidCString() );
     };
 
     u32 ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client", callback, &done );
     ASSERT_TRUE( ret != 0 );
 
     f32 start = Core::AppTimeSeconds();
+    // TODO Move to a method in the class above?
     while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
@@ -283,11 +285,33 @@ TEST_F( HttpTest, Post )
         *done = true;
 
         ASSERT_EQ( response.statusCode, 200 );
-        ASSERT_TRUE( response.body.Valid() );
+        ASSERT_TRUE( response.body.ValidCString() );
     };
 
     u32 ret = Http::Post( &globalState.http, "https://httpbin.org/post", "{\"message\":\"Hello, https_client!\"}",
                           callback, &done );
+    ASSERT_TRUE( ret != 0 );
+
+    f32 start = Core::AppTimeSeconds();
+    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
+        Http::ProcessResponses( &globalState.http );
+
+    ASSERT_TRUE( done );
+}
+
+TEST_F( HttpTest, GetChunked )
+{
+    bool done = false;
+    auto callback = []( const Http::Response& response, void* userdata  )
+    {
+        bool* done = (bool*)userdata;
+        *done = true;
+
+        ASSERT_EQ( response.statusCode, 200 );
+        ASSERT_TRUE( response.body.ValidCString() );
+    };
+
+    u32 ret = Http::Get( &globalState.http, "https://httpbin.org/stream/10", callback, &done );
     ASSERT_TRUE( ret != 0 );
 
     f32 start = Core::AppTimeSeconds();

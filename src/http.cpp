@@ -227,7 +227,6 @@ namespace Http
         // TODO 
         //tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
         tmpHeaders.PutIfNotFound( "accept"_s, "*/*"_s );
-        tmpHeaders.PutIfNotFound( "content-type"_s, "application/json; charset=utf-8"_s );
 
 
         // TODO Keep any interesting info in the request
@@ -268,7 +267,6 @@ namespace Http
         // FIXME Uppercase first letter!
         for( auto it = tmpHeaders.Items(); it; ++it )
             sb.AppendFormat( "%s: %s\r\n", (*it).key.c(), (*it).value.c() );
-        // TODO Should we skip this when there's no body?
         sb.Append( "\r\n" );
         if( request.bodyData )
             sb.AppendFormat( "%s", request.bodyData.c() );
@@ -389,34 +387,34 @@ namespace Http
 #endif
 
     // Return true if there's more data to read
-    // TODO Test small chunks / big files
-    static bool Read( Request* request, BucketArray<Array<u8>>* readChunks, Response* response )
+    // TODO Test small buffers / big files
+    static bool Read( Request* request, BucketArray<Array<u8>>* readBuffers, Response* response )
     {
-        static constexpr int chunkSize = 4096;
-        // Get a new chunk or reuse the last one
-        Array<u8>* chunk = nullptr;
-        if( readChunks->Empty() || (*readChunks->Last()).Available() == 0 )
+        static constexpr int bufferSize = 4096;
+        // Get a new buffer or reuse the last one
+        Array<u8>* buffer = nullptr;
+        if( readBuffers->Empty() || (*readBuffers->Last()).Available() == 0 )
         {
-            chunk = readChunks->PushEmpty( false );
-            INIT( *chunk )( chunkSize, CTX_TMPALLOC );
+            buffer = readBuffers->PushEmpty( false );
+            INIT( *buffer )( bufferSize, CTX_TMPALLOC );
         }
         else
-            chunk = &(*readChunks->Last());
+            buffer = &(*readBuffers->Last());
 
-        // Read into the new chunk
+        // Try to read until the end of the current buffer
         int ret = 0;
         if( request->https )
-            ret = mbedtls_ssl_read( &request->tls.context, (u_char *)chunk->end(), (size_t)chunk->Available() );
+            ret = mbedtls_ssl_read( &request->tls.context, (u_char *)buffer->end(), (size_t)buffer->Available() );
         else
-            ret = mbedtls_net_recv_timeout( &request->tls.fd, (u_char *)chunk->end(), (size_t)chunk->Available(), 5000 );
+            ret = mbedtls_net_recv_timeout( &request->tls.fd, (u_char *)buffer->end(), (size_t)buffer->Available(), 5000 );
 
         if( ret > 0 )
-            chunk->count += ret;
+            buffer->count += ret;
 
-        bool keepReading = false;
         if( ret == MBEDTLS_ERR_SSL_WANT_READ )
+        {
             // Data not yet ready
-            keepReading = true;
+        }
         else if( ret <= 0 )
         {
             if( ret == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY )
@@ -438,78 +436,143 @@ namespace Http
                     LogE( "Net", "Read error (%d): %s", response->error, errorBuf );
                 }
             }
-
-            keepReading = false;
         }
 
         // Parse contents to see if we're done
-        // NOTE Most examples either break the read loop once they get a single positive return value, or keep reading until they get a 0.
-        // Amazingly, doing the first option means we get incomplete responses, while doing the second one causes an extra 400 response to arrive from the ether (!?)
-        // TODO Is this really the best we can do? Does http(s) really suck so bad??
-        if( !keepReading )
+
+        int totalSize = 0;
+        for( Array<u8> const& c : *readBuffers )
+            totalSize += c.count;
+
+        bool done = false;
+        if( totalSize )
         {
-            int totalSize = 0;
-            for( Array<u8> const& c : *readChunks )
-                totalSize += c.count;
+            ASSERT( response->rawData.capacity == 0 );
 
-            if( totalSize )
+            int off = 0;
+            // Compact down and null terminate the current contents
+            u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
+            for( Array<u8> const& c : *readBuffers )
             {
-                ASSERT( response->rawData.capacity == 0 );
+                c.CopyTo( rawData + off );
+                off += c.count;
+            }
+            *(rawData + off) = 0;
 
-                int off = 0;
-                // Compact down and null terminate the current contents
-                u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
-                for( Array<u8> const& c : *readChunks )
-                {
-                    c.CopyTo( rawData + off );
-                    off += c.count;
-                }
-                *(rawData + off) = 0;
+            if( response->error == 0 )
+            {
+#define LINE_END "\r\n"
+#define HEADER_END "\r\n\r\n"
+                char const* stringData = (char const*)rawData;
 
-                if( response->error == 0 )
+                if( char const* bodyStart = StringFind( stringData, HEADER_END ) )
                 {
-                    bool done = false;
-                    // FIXME Case insensitive search
-                    if( char const* str = StringFind( (char const*)rawData, "Content-Length") )
+                    // Don't count terminator
+                    bodyStart += sizeof(HEADER_END) - 1;
+                    int bodySize = totalSize - I32(bodyStart - stringData);
+
+                    if( char const* len = StringFindIgnoreCase( stringData, "Content-Length") )
                     {
-                        // Skip colon
-                        str += sizeof("Content-Length") + 1;
+                        // Skip colon + space
+                        len += sizeof("Content-Length");
+                        while( *len == ' ' )
+                            len++;
 
-                        int contentLength = 0;
-                        bool parsed = StringToI32( str, &contentLength );
-                        ASSERT( parsed );
-
-                        if( totalSize >= contentLength )
+                        if( char const* end = StringFind( len, LINE_END ) )
                         {
-                            INIT( response->rawData )( totalSize + 1 );
-                            response->rawData.Append( rawData, totalSize + 1 );
+                            int contentLength = 0;
+                            bool parsed = StringToI32( len, &contentLength );
+                            ASSERT( parsed );
 
-                            done = true;
+                            if( bodySize >= contentLength )
+                                done = true;
                         }
                     }
+                    else if( char const* enc = StringFindIgnoreCase( stringData, "Transfer-Encoding") )
+                    {
+                        // Skip colon + space
+                        enc += sizeof("Transfer-Encoding");
+                        while( *enc == ' ' )
+                            enc++;
 
-                    if( !done )
-                        keepReading = true;
+                        if( char const* end = StringFind( enc, LINE_END ) )
+                        {
+                            String encodingTypes = String::Ref( enc, end );
+                            while( encodingTypes )
+                            {
+                                String encoding = encodingTypes.ConsumeWord();
+                                if( encoding == "chunked" )
+                                {
+                                    // Reconstruct body parts as we go
+                                    BucketArray<char> chunks( 1024, CTX_TMPALLOC );
+
+                                    // Parse chunks in body
+                                    String body = String::Ref( bodyStart, bodySize );
+                                    while( body )
+                                    {
+                                        String chunkLine = body.ConsumeLine();
+
+                                        int chunkSize = 0;
+                                        bool parsed = chunkLine.ToI32( &chunkSize, 16 );
+                                        ASSERT( parsed );
+
+                                        // Last chunk
+                                        if( chunkSize == 0 )
+                                        {
+                                            if( body.length > 0 && body != LINE_END )
+                                            {
+                                                // TODO Trailer
+                                                NOT_IMPLEMENTED;
+                                            }
+                                            done = true;
+                                            break;
+                                        }
+                                        chunks.Append( body.data, chunkSize );
+                                        body.Consume( chunkSize );
+                                        body.ConsumeLine();
+                                    }
+
+                                    if( done )
+                                        response->body = String::Clone( chunks );
+                                }
+                                else
+                                {
+                                    // TODO Implement "gzip"
+                                    NOT_IMPLEMENTED;
+                                }
+
+                                if( encodingTypes && encodingTypes[0] == ',' )
+                                    encodingTypes.Consume( 1 );
+                            }
+                        }
+                    }
+                    else
+                    {
+                        // TODO Check response code cause depending on that the content may be implied to be 0
+                        // (i.e: 304, see https://www.httpwatch.com/httpgallery/chunked/)
+                    }
                 }
-                else
-                {
-                    // Copy over whatever is there so far
-                    INIT( response->rawData )( totalSize + 1 );
-                    response->rawData.Append( rawData, totalSize + 1 );
-                }
+#undef LINE_END
+#undef HEADER_END
+            }
+
+            if( done || response->error )
+            {
+                INIT( response->rawData )( totalSize + 1 );
+                response->rawData.Append( rawData, totalSize + 1 );
             }
         }
 
-        return keepReading;
+        return !done;
     }
 
     static bool ReadBlocking( Request* request, Response* response )
     {
-        BucketArray<Array<u8>> readChunks( 8, CTX_TMPALLOC );
+        BucketArray<Array<u8>> readBuffers( 8, CTX_TMPALLOC );
 
         while( response->rawData.Empty() && !response->error )
         {
-            if( !Read( request, &readChunks, response ) )
+            if( !Read( request, &readBuffers, response ) )
                 break;
         }
 
@@ -530,7 +593,7 @@ namespace Http
             {
                 // Header is over. Save the remainder as the body
                 // TODO Terminator?
-                response->body = { (u8*)responseString.data, responseString.length };
+                response->body = String::Ref( responseString.data, responseString.length );
                 break;
             }
             else
@@ -557,7 +620,7 @@ namespace Http
                         LogE( "Net", "Bad protocol" );
                         return false;
                     }
-                    response->reason = word.data;
+                    response->reason = word;
                 }
                 else
                 {
@@ -654,7 +717,13 @@ namespace Http
             while( state->requestQueue.TryPop( &req ) )
             {
                 Response response = {};
-                ProcessRequest( &req, &response );
+                bool result = ProcessRequest( &req, &response );
+
+                if( !result )
+                {
+                    LogE( "Net", "Error while processing request to '%s'", req.url.c() );
+                    continue;
+                }
 
                 if( response.statusCode >= 300 )
                     LogW( "Net", "Response from %s :: %d", response.url.c(), response.statusCode );

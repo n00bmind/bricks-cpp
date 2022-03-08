@@ -22,8 +22,8 @@ namespace Http
         String url;
         Array<u8> rawData;
         String headers;
-        Buffer<u8> body;
-        char const* reason;
+        String body;
+        String reason;
         Callback callback;
         void* callbackData;
         i32 statusCode;

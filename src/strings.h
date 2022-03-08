@@ -89,6 +89,7 @@ INLINE bool StringsEqual( char const* a, char const* b, sz len = 0, bool caseSen
         if( len != StringLength( b ) )
             return false;
 
+        // TODO SSE
         for( sz i = 0; i < len; ++i )
             if( tolower( a[i] ) != tolower( b[i] ) )
                 return false;
@@ -103,28 +104,141 @@ INLINE void StringCopy( char const* src, char* dst, sz dstSize )
 
 INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
 INLINE char const* StringFind( char const* str, char const* find ) { return strstr( str, find ); }
-inline char const* StringFindSuffix( const char* str, const char* find )
+INLINE char const* StringFind( char const* str, char const* find, int len )
+{
+    int findLen = StringLength( find );
+    if( findLen == 0 )
+        return str;
+
+    if( len < findLen )
+        return nullptr;
+
+    const char c = find[0];
+    while( char const* p = (char const*)memchr( str, c, (size_t)len ) )
+    {
+        if( (p - str) > (len - findLen) )
+            break;
+
+        if( strncmp( p, find, (size_t)findLen ) == 0 )
+            return p;
+
+        len -= (int)(p - str);
+        str = p;
+    }
+    return nullptr;
+}
+
+// Adapted from https://www.codeproject.com/Articles/383185/SSE-accelerated-case-insensitive-substring-search
+inline char const* StringFindIgnoreCase( char const* str, char const* find )
+{
+    char const *s1, *s2;
+    // TODO Supposedly caching tolower/toupper for all ASCII makes this faster, which I find hard to believe but.. bench it!
+    char const l = (char)tolower(*find);
+    char const u = (char)toupper(*find);
+    
+    if (!*find)
+        return str; // an empty substring matches everything
+
+    // TODO Optimize with SSE (see article above)
+    for (; *str; ++str)
+    {
+        if (*str == l || *str == u)
+        {
+            s1 = str + 1;
+            s2 = find + 1;
+            
+            while (*s1 && *s2 && tolower(*s1) == tolower(*s2))
+                ++s1, ++s2;
+            
+            if (!*s2)
+                return str;
+        }
+    }
+ 
+    return nullptr;
+}
+
+inline char const* StringFindLast( char const* str, char c )
+{
+    return strrchr( str, c );
+}
+inline char const* StringFindLast( char const* str, char c, int len )
+{
+    for( char const* s = str + len - 1; s >= str; --s )
+    {
+        if( *s == c )
+            return s;
+    }
+    return nullptr;
+}
+
+// Adapted from https://stackoverflow.com/questions/1634359/is-there-a-reverse-function-for-strstr
+inline char const* StringFindLast( char const* str, char const* find )
 {
     if ( !str || !find )
         return nullptr;
 
-    size_t strLen = strlen( str );
+    if( *find == '\0' )
+        return str + strlen( str );
+
+    char const* result = nullptr;
+    for( ;; )
+    {
+        char const* p = strstr( str, find );
+        if( p == nullptr )
+            break;
+
+        result = p;
+        str = p + 1;
+    }
+
+    return result;
+}
+
+// TODO Bench against StringFindLast above
+inline char const* StringFindSuffix( const char* str, const char* find, int len = 0 )
+{
+    if ( !str || !find )
+        return nullptr;
+
+    size_t strLen = len ? len : strlen( str );
     size_t sufLen = strlen( find );
     if ( sufLen >  strLen )
         return nullptr;
 
     if ( strncmp( str + strLen - sufLen, find, sufLen ) == 0 )
-	{
-		// Found it
-		return str + strLen - sufLen;
-	}
+    {
+        // Found it
+        return str + strLen - sufLen;
+    }
 
-	// Fail
-	return nullptr;
+    // Fail
+    return nullptr;
 }
 
-INLINE bool StringStartsWith( char const* str, char const* find ) { return str && find && strstr( str, find ) == str; }
-INLINE bool StringEndsWith( char const* str, char const* find ) { return StringFindSuffix( str, find ) != nullptr; }
+INLINE bool StringStartsWith( char const* str, char const* find )
+{
+    return str && find && strstr( str, find ) == str;
+}
+INLINE bool StringStartsWith( char const* str, char const* find, int len )
+{
+    if ( !str || !find )
+        return false;
+
+    size_t findLen = strlen( find );
+    if( (size_t)len < findLen )
+        return false;
+
+    return strncmp( str, find, findLen ) == 0;
+}
+INLINE bool StringEndsWith( char const* str, char const* find )
+{
+    return StringFindSuffix( str, find ) != nullptr;
+}
+INLINE bool StringEndsWith( char const* str, char const* find, int len )
+{
+    return StringFindSuffix( str, find, len ) != nullptr;
+}
 
 // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found
 inline char* StringToLowercase( char* str, int len = 0 )
@@ -144,12 +258,12 @@ inline char* StringToLowercase( char* str, int len = 0 )
     return str;
 }
 
-inline bool StringToI32( char const* str, i32* output )
+inline bool StringToI32( char const* str, i32* output, int base = 0 )
 {
     bool result = false;
 
     char* end = nullptr;
-    *output = strtol( str, &end, 0 );
+    *output = strtol( str, &end, base );
 
     if( *output == 0 )
         result = (end != nullptr);
@@ -161,12 +275,12 @@ inline bool StringToI32( char const* str, i32* output )
     return result;
 }
 
-inline bool StringToU32( char const* str, u32* output )
+inline bool StringToU32( char const* str, u32* output, int base = 0 )
 {
     bool result = false;
 
     char* end = nullptr;
-    *output = strtoul( str, &end, 0 );
+    *output = strtoul( str, &end, base );
 
     if( *output == 0 )
         result = (end != nullptr);
@@ -204,10 +318,10 @@ INLINE bool DefaultEqFunc< const char* >( char const* const& a, char const* cons
 
 
 
-// Read only string
-// By default it only just references character data living somewhere else
-// TODO This description is wrong currently, but do we want to make this the default again for naked C strings?
-// It can optionally own the memory too (for easily moving string data around or building formatted strings etc.)
+// Read-only string
+// By default it's constructed by cloning any data passed to it (can optionally use temporary memory for that)
+// It can also be just a reference to character data somewhere (see Ref() overloads)
+// Newly-created owned strings will be null-terminated.
 
 struct String
 {
@@ -222,16 +336,18 @@ struct String
     i32 length;             // Not including null terminator
     u32 flags;
 
-    constexpr String( u32 flags_ = 0 )
+    explicit constexpr String( u32 flags_ = 0 )
         : data( "" )
         , length( 0 )
         , flags( flags_ )
     {}
 
+    // Conversion constructor from a C string. The given string MUST be null-terminated
     String( char const* cString, u32 flags_ = 0 )
         : flags( flags_ | Owned )
     { InternalClone( cString ); }
 
+    // If given len is 0, the source string MUST be null-terminated
     explicit String( char const* cString, int len, u32 flags_ = 0 )
         : flags( flags_ | Owned )
     { InternalClone( cString, len ); }
@@ -242,18 +358,11 @@ struct String
 
     explicit String( StringBuffer const& buffer, u32 flags_ = 0 )
         : flags( flags_ | Owned )
-    // Don't count null terminator
-    { InternalClone( buffer.data, I32(buffer.length - 1) ); }
+    { InternalClone( buffer.data, I32(buffer.length) ); }
 
     explicit String( Buffer<char> const& buffer, u32 flags_ = 0 )
         : flags( flags_ | Owned )
-    // Don't count null terminator
-    { InternalClone( buffer.data, I32(buffer.length - 1) ); }
-
-    explicit String( Buffer<> const& buffer, u32 flags_ = 0 )
-        : flags( flags_ | Owned )
-    // Don't count null terminator
-    { InternalClone( (char const*)buffer.data, I32(buffer.length - 1) ); }
+    { InternalClone( buffer.data, I32(buffer.length) ); }
 
 
     String( String const& other )
@@ -270,6 +379,7 @@ struct String
 
     ~String()
     { Clear(); }
+
 
     void Clear()
     {
@@ -341,10 +451,12 @@ private:
 
         Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
         data = ALLOC_ARRAY( allocator, char, len + 1 );
-        // Null terminate it even if we expect this to be overwritten
+        // Null terminate it even if we expect we'll be writing to data later
         ((char*)data)[len] = 0;
     }
 
+    // Will copy len chars and append an extra null-terminator at the end
+    // If no len is given, assumes src itself is null-terminated and computes its StringLength
     void InternalClone( char const* src, int len = 0 )
     {
         ASSERT( src );
@@ -363,19 +475,37 @@ private:
             flags |= Owned;
         }
 
-        ASSERT( Valid() );
+        ASSERT( ValidCString() );
     }
 
 public:
 
     bool operator ==( String const& other ) const { return IsEqual( other.data, other.length ); }
     bool operator ==( const char* cString ) const { return IsEqual( cString ); }
+    bool operator !=( String const& other ) const { return !(*this == other); }
+    bool operator !=( const char* cString ) const { return !(*this == cString); }
+
     explicit operator bool() const { return !Empty(); }
     operator char const*() const { return c(); }
+    char const& operator []( int index ) const { ASSERT( index >= 0 && index < length ); return data[index]; }
 
     bool Empty() const { return length == 0 || data == nullptr; }
-    bool Valid() const { return Empty() || data[length] == 0; }
-    char const* c() const { ASSERT( Valid() ); return data ? data : ""; }
+    bool ValidCString() const { return Empty() || data[length] == 0; }
+
+    // Return a valid C String
+    // If not null-terminated, makes a new temporary copy with a terminator appended and returns that
+    char const* c() const
+    {
+        if( ValidCString() )
+            return data ? data : "";
+        else
+        {
+            // Will already append terminator
+            static thread_local String cString( data, length, Temporary );
+            ASSERT( cString.ValidCString() );
+            return cString.data;
+        }
+    }
 
     StringBuffer ToBuffer() const { return StringBuffer( data, length ); }
     Buffer<u8> ToBufferU8() const { return Buffer<u8>( (u8*)data, length ); }
@@ -400,64 +530,71 @@ public:
         result.flags = flags & ~Owned;
         return result;
     }
+    static String Ref( char const* src, char const* end )
+    {
+        return Ref( src, end ? I32(end - src) : 0 );
+    }
     static String Ref( String const& other )
     {
         return Ref( other.data, other.length );
     }
     static String Ref( Buffer<> const& buffer )
     {
-        // Don't count terminator
-        return Ref( (char const*)buffer.data, I32(buffer.length - 1) );
+        return Ref( (char const*)buffer.data, I32(buffer.length) );
     }
 
     static String Clone( char const* src, int len = 0 )
     {
-        String result( src, len );
-        return result;
+        return String( src, len );
     }
     static String CloneTmp( char const* src, int len = 0 )
     {
-        String result( src, len, Temporary );
-        return result;
+        return String( src, len, Temporary );
     }
-
     static String Clone( char const* src, char const* end )
     {
-        String result( src, end ? I32( end - src ) : 0 );
-        return result;
+        return String( src, end ? I32(end - src) : 0 );
     }
     static String CloneTmp( char const* src, char const* end )
     {
-        String result( src, end ? I32( end - src ) : 0, Temporary );
-        return result;
+        return String( src, end ? I32(end - src) : 0, Temporary );
+    }
+    template <typename T>
+    static String Clone( Buffer<T> const& buffer, int len = 0 )
+    {
+        return String( (char const*)buffer.data, len ? len : I32(buffer.length) );
+    }
+    template <typename T>
+    static String CloneTmp( Buffer<T> const& buffer, int len = 0 )
+    {
+        return String( (char const*)buffer.data, len ? len : I32(buffer.length), Temporary );
     }
 
+    // Automatically appends null-terminator
     static String Clone( BucketArray<char> const& src )
     {
-        String result( src.count );
+        String result( src.count + 1 );
         src.CopyTo( (char*)result.data, result.length );
-
-        // TODO Should we auto null terminate here?
-        ASSERT( result.Valid() );
+        result.InPlaceModify()[result.length] = 0;
+        ASSERT( result.ValidCString() );
         return result;
     }
     static String CloneTmp( BucketArray<char> const& src )
     {
         String result( src.count, Temporary );
         src.CopyTo( (char*)result.data, result.length );
-
-        // TODO Should we auto null terminate here?
-        ASSERT( result.Valid() );
+        result.InPlaceModify()[result.length] = 0;
+        ASSERT( result.ValidCString() );
         return result;
     }
 
-    // Clone src string, while replacing all instances of match with subst
+    // Clone src string, while replacing all instances of match with subst (uses StringBuilder)
     static String CloneReplace( char const* src, char const* match, char const* subst );
 
 private:
     static String FromFormat( char const* fmt, va_list args, bool temporary )
     {
-        // TODO Apparently I read somewhere that these need to be copied to correctly use them twice?
+        // TODO I read somewhere that apparently these need to be copied to correctly use them twice?
 #if 0
         va_list argsCopy;
         va_copy( argsCopy, args );
@@ -466,13 +603,13 @@ private:
         int len = vsnprintf( nullptr, 0, fmt, args );
 
         String result( len, temporary ? Temporary : None );
-        // Actual string buffer has one extra character for the null terminator
+        // Actual string buffer above has one extra character for the null terminator
         vsnprintf( (char*)result.data, (size_t)result.length + 1, fmt, args/*Copy*/ );
 #if 0
         va_end( argsCopy );
 #endif
 
-        ASSERT( result.Valid() );
+        ASSERT( result.ValidCString() );
         return result;
     }
 
@@ -489,7 +626,6 @@ public:
 
         return result;
     }
-
     static String FromFormatTmp( char const* fmt, ... )
     {
         va_list args;
@@ -513,110 +649,42 @@ public:
 
     bool StartsWith( const char* cString ) const
     {
-        if( Empty() )
+        if( !cString || Empty() )
             return false;
-
-        return StringStartsWith( data, cString );
+        return StringStartsWith( data, cString, length );
     }
 
     bool EndsWith ( char const* cString ) const
     {
-        if( Empty() )
+        if( !cString || Empty() )
             return false;
-
-        // TODO Could be faster
-        return StringEndsWith( data, cString );
+        return StringEndsWith( data, cString, length );
     }
 
-    // FIXME Use faster string functions
     const char* FindString( const char* cString ) const
     {
-        ASSERT( *cString );
+        if( !cString || Empty() )
+            return nullptr;
+        return StringFind( data, cString, length );
+    }
+
+    char const* FindLast( char c ) const
+    {
         if( Empty() )
             return nullptr;
-
-        const char* prospect = data;
-        int remaining = length;
-        while( remaining > 0 && *prospect )
-        {
-            const char* nextThis = prospect;
-            const char* nextThat = cString;
-            while( *nextThis && *nextThis == *nextThat )
-            {
-                nextThis++;
-                nextThat++;
-
-                if( *nextThat == '\0' )
-                    return prospect;
-            }
-
-            prospect++;
-            remaining--;
-        }
-
-        return nullptr;
+        return StringFindLast( data, c, length );
     }
 
-    int FindLast( char c ) const
-    {
-        int result = -1;
-        for( int i = length - 1; i >= 0; --i )
-        {
-            if( data[i] == c )
-            {
-                result = i;
-                break;
-            }
-        }
 
-        return result;
-    }
-
-    void Split( BucketArray<String>* result, char separator = ' ' )
-    {
-        i32 nextLength = 0;
-
-        char const* s = data;
-        char const* nextData = s;
-        while( char c = *s++ )
-        {
-            if( c == separator )
-            {
-                if( nextLength )
-                {
-                    String str =  String::Ref( nextData, nextLength );
-                    str.c();
-
-                    result->Push( str );
-                    nextData = s;
-                    nextLength = 0;
-                }
-            }
-            else
-                nextLength++;
-        }
-
-        // Last piece
-        if( nextLength )
-        {
-            String str =  String::Ref( nextData, nextLength );
-            str.c();
-
-            result->Push( str );
-        }
-
-        ASSERT( Valid() );
-    }
-
-    char* InPlaceModify() { return (char*)data; }
-
-    // NOTE All 'Consume' methods mutate the current String by inserting terminators at the consumed boundaries
-    // (ideally we'd like to be able to return non-null terminated Strings to avoid modifying the input)
+    // NOTE All 'ConsumeX' methods advance the current data pointer a certain number of characters (and reduce length accordingly)
+    // This means they are only allowed on Ref Strings!
     String ConsumeLine()
     {
+        ASSERT( !(flags & Owned) );
+
         int lineLen = length;
-        char* atNL = &InPlaceModify()[length];
-        char* onePastNL = (char*)FindString( "\n" );
+        char const* atNL = data + length;
+        char const* onePastNL = (char*)FindString( "\n" );
 
         if( onePastNL )
         {
@@ -628,16 +696,14 @@ public:
             else if( *onePastNL == '\r' )
                 onePastNL++;
 
-            lineLen = I32( onePastNL - data );
+            lineLen = I32(onePastNL - data);
         }
         ASSERT( lineLen <= length );
 
-        *atNL = '\0';
-        String line = String::Ref( data, I32( atNL - data ) );
+        String line = String::Ref( data, I32(atNL - data) );
 
         data = onePastNL;
         length -= lineLen;
-        ASSERT( Valid() );
 
         return line;
     }
@@ -645,6 +711,8 @@ public:
     // Consume next word trimming whatever whitespace is there at the beginning
     String ConsumeWord()
     {
+        ASSERT( !(flags & Owned) );
+
         ConsumeWhitespace();
 
         int wordLen = 0;
@@ -656,22 +724,21 @@ public:
 
             wordLen = I32( end - data );
         }
-
         ASSERT( wordLen <= length );
-        InPlaceModify()[wordLen] = '\0';
+
         String result = String::Ref( data, wordLen );
 
         // Consume stripped part
-        wordLen++;
         data += wordLen;
         length -= wordLen;
-        ASSERT( Valid() );
 
         return result;
     }
 
     int ConsumeWhitespace()
     {
+        ASSERT( !(flags & Owned) );
+
         const char *start = data;
         int remaining = length;
 
@@ -681,17 +748,18 @@ public:
             remaining--;
         }
 
-        int advanced = length - remaining;
+        int advancedCount = length - remaining;
 
         data = start;
         length = remaining;
 
-        ASSERT( Valid() );
-        return advanced;
+        return advancedCount;
     }
 
     String Consume( int charCount )
     {
+        ASSERT( !(flags & Owned) );
+
         const char *next = data;
         int remaining = Min( charCount, length );
 
@@ -700,19 +768,19 @@ public:
             next++;
             remaining--;
         }
+        int advancedCount = I32( next - data );
+        ASSERT( advancedCount <= length );
 
-        int len = I32( next - data );
-        ASSERT( len <= length );
-        String result = String::Ref( data, len );
+        String result = String::Ref( data, advancedCount );
 
         data = next;
-        length -= len;
+        length -= advancedCount;
 
-        ASSERT( Valid() );
         return result;
     }
 
-    int Scan( const char *format, ... )
+
+    int Scan( const char *format, ... ) const
     {
         va_list args;
         va_start( args, format );
@@ -723,6 +791,8 @@ public:
         return result;
     }
 
+    // Extracts a 'literal string' enclosed in either single or double quotes, checking for and skipping escaped quotes in the middle
+    // The returned string doesn't include the quotes
     String ScanString() const
     {
         String result;
@@ -742,23 +812,23 @@ public:
                 remaining--;
             }
 
+            // Don't include starting quote
             ++start;
             result.data = start;
-            result.length = I32( next - start );
+            result.length = I32(next - start);
         }
 
-        ASSERT( result.Valid() );
         return result;
     }
 
-    bool ToI32( i32* output ) const
+    bool ToI32( i32* output, int base = 0 ) const
     {
-        return StringToI32( data, output );
+        return StringToI32( data, output, base );
     }
 
-    bool ToU32( u32* output ) const
+    bool ToU32( u32* output, int base = 0 ) const
     {
-        return StringToU32( data, output );
+        return StringToU32( data, output, base );
     }
 
     bool ToBool( bool* output ) const
@@ -766,10 +836,45 @@ public:
         return StringToBool( data, output );
     }
 
+    // Find all locations of the given separator in this String and create a bunch of Ref Strings pointing to the substrings
+    void Split( BucketArray<String>* result, char separator = ' ' ) const
+    {
+        i32 nextLength = 0;
+
+        char const* s = data;
+        char const* nextData = s;
+        while( char c = *s++ )
+        {
+            if( c == separator )
+            {
+                if( nextLength )
+                {
+                    String str = String::Ref( nextData, nextLength );
+                    result->Push( str );
+
+                    nextData = s;
+                    nextLength = 0;
+                }
+            }
+            else
+                nextLength++;
+        }
+
+        // Last piece
+        if( nextLength )
+        {
+            String str = String::Ref( nextData, nextLength );
+            result->Push( str );
+        }
+    }
+
+
+    char* InPlaceModify() { return (char*)data; }
+
     // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found
     char* ToLowercase()
     {
-        return StringToLowercase( (char*)data, length );
+        return StringToLowercase( InPlaceModify(), length );
     }
 
 #if 0
@@ -805,7 +910,8 @@ struct StaticString : public String
         length = (int)N - 1;
     }
 
-    // for non-const char arrays like buffers
+    // NOTE Explicitly forbid non-const char arrays
+    // NOTE No protection against passing a const char array allocated in the stack though, so DON'T!
     template<size_t N> StaticString( char (&)[N] ) = delete;
     //StaticString( char const* ) = delete;
 
@@ -831,7 +937,7 @@ struct StaticStringHash : public StaticString
 {
     const u64 hash;
 
-    // TODO Check constexpr!
+    // TODO Check actually constexpr!
     template <size_t N>
     constexpr StaticStringHash( char const (&s)[N], u32 flags_ = 0 )
         : StaticString( s, flags_ )
@@ -855,6 +961,11 @@ struct StringBuilder
     {}
 
     bool Empty() const { return buckets.count == 0; }
+
+    void Clear()
+    {
+        buckets.Clear();
+    }
 
     void Append( char const* str, int length = 0 )
     {
@@ -917,7 +1028,7 @@ String String::CloneReplace( char const* src, char const* match, char const* sub
         builder.Append( src + index, srcLen - index );
 
     String result = builder.ToString();
-    ASSERT( result.Valid() );
+    ASSERT( result.ValidCString() );
     return result;
 }
 

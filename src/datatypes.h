@@ -50,6 +50,7 @@ struct Array
         , count( 0 )
         , capacity( 0 )
         , allocator( nullptr )
+        , memParams{}
     {}
 
     // NOTE All newly allocated arrays start empty
@@ -69,11 +70,23 @@ struct Array
         : data( buffer )
         , count( initialCount == -1 ? bufferLen : initialCount )
         , capacity( bufferLen )
+        , allocator( nullptr )
+        , memParams{}
     {
         ASSERT( count >= 0 && count <= capacity );
     }
 
-    explicit Array( Buffer<T> buffer )
+    // Convert from any static array of a compatible type
+    // NOTE The array itself must be an lvalue, so passing an array literal directly as the constructor argument wont work!
+    // TODO can we do a const version that does it?
+#if 0
+    template <typename SrcT, size_t N>
+        Array( SrcT (&data_)[N] )
+        : Array( data_, (int)N, (int)N )
+        {}
+#endif
+
+    Array( Buffer<T> buffer )
         : Array( buffer.data, (int)buffer.length, (int)buffer.length )
     {}
 
@@ -82,6 +95,7 @@ struct Array
         if( allocator )
             FREE( allocator, data, memParams );
     }
+
 
     operator Buffer<T>()
     {
@@ -159,6 +173,7 @@ struct Array
         ASSERT( count < capacity );
         T* result = data + count++;
         if( clear )
+            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
             INIT( *result );
 
         return result;
@@ -167,6 +182,7 @@ struct Array
     T* Push( const T& item )
     {
         T* slot = PushEmpty( false );
+        // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
         INIT( *slot )( item );
 
         return slot;
@@ -570,6 +586,7 @@ struct BucketArray
         count++;
         T* result = &last->data[last->count++];
         if( clear )
+            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
             INIT( *result );
 
         return result;
@@ -578,6 +595,7 @@ struct BucketArray
     T* Push( const T& item )
     {
         T* slot = PushEmpty( false );
+        // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
         INIT( *slot )( item );
         return slot;
     }
@@ -1037,6 +1055,7 @@ struct Hashtable
             {
                 keys[i] = key;
                 if( clear )
+                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
                     INIT( values[i] )();
                 ++count;
                 if( occupiedOut )
@@ -1046,6 +1065,7 @@ struct Hashtable
             else if( eqFunc( keys[i], key ) )
             {
                 if( clear )
+                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
                     INIT( values[i] )();
                 if( occupiedOut )
                     *occupiedOut = true;
@@ -1194,6 +1214,7 @@ private:
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 
         for( int i = 0; i < capacity; ++i )
+            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
             INIT( keys[i] )();
         for( int i = 0; i < oldCapacity; ++i )
         {
@@ -1788,7 +1809,7 @@ struct SyncQueue
         if( canPop )
         {
             T* result = (T*)((u8*)tail + sizeof(Page) + tail->TailIndex() * sizeof(T));
-            *out = *result;
+            *out = std::move( *result );
             tail->count--;
 
             if( tail->count == 0 && tail != head )
