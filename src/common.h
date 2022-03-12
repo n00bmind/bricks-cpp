@@ -101,6 +101,8 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 
 // Do a placement new on any variable with simpler syntax
 #define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type
+// NOTE Don't use with a pointer to a base class, as apparently this may inhibit virtual destructor calls
+#define DEINIT(var) var.~decltype(var)()
 
 #define __CONCAT(x, y) x ## y
 #define CONCAT(x, y) __CONCAT(x, y)
@@ -325,6 +327,8 @@ public:
     {}
 
     // Convert from any static array of a compatible type
+    // NOTE The array itself must be an lvalue, so passing an array literal directly as the constructor argument wont work!
+    // TODO can we do a const version that does it?
     template <typename SrcT, size_t N>
     Buffer( SrcT (&data_)[N] )
         : data( data_ )

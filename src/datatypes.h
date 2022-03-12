@@ -351,9 +351,23 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 // a Handle points to (for option 2).
 //
 // The smart thing to do is probably separate these two objectives in two separate datatypes: BucketArray tries to be as simple as
-// possible and just compacts its items down inside the buckets, while PagedPool is composed of a BucketArray plus a roster that it
+// possible and just compacts its items down inside each bucket, while PagedPool is composed of a BucketArray plus a roster that it
 // uses to hand out Handles to any added items (complete with generation numbers etc.)
 
+// TODO Rewrite more in the style of PagedPool in KoM (where pages are just a linear array of pointers) to make it faster to 
+// iterate & access in line with the first objective above .. BUT compacting means we can never have an index
+// Once you remove elements inside a bucket..
+//   · How does that bucket get filled up again? (insertion)
+//   · What happens when it's fully empty? (the array of page pointers gets rewritten)
+//   · BUT if we can never ref. items directly why do we need/want a linear array of pages?
+//   · Will also need a RemoveOrdered for usage as a i.e. StringBuilder
+
+
+// TODO It seems really that the stable referencing is the true differentiating factor, and hence there's two things here:
+// - BucketArray that iterates fast by compacting but doesnt provide any means of referencing items
+// - BucketPool that has an occupancy mask and provides Handles with gen. numbers and even naked pointers but is slower to iterate
+// We could then add:
+// - CompactPool composed of a BucketArray + roster that both iterates fast and provides storable Handles in exchange for complexity
 template <typename T, typename AllocType = Allocator>
 struct BucketArray
 {

@@ -447,23 +447,20 @@ namespace Http
         bool done = false;
         if( totalSize )
         {
-            ASSERT( response->rawData.capacity == 0 );
+            if( response->rawData )
+                DEINIT( response->rawData );
 
-            int off = 0;
             // Compact down and null terminate the current contents
-            u8* rawData = ALLOC_ARRAY( CTX_TMPALLOC, u8, totalSize + 1 );
+            INIT( response->rawData )( totalSize + 1 );
             for( Array<u8> const& c : *readBuffers )
-            {
-                c.CopyTo( rawData + off );
-                off += c.count;
-            }
-            *(rawData + off) = 0;
+                response->rawData.Append( c );
+            response->rawData.Push( 0 );
 
             if( response->error == 0 )
             {
 #define LINE_END "\r\n"
 #define HEADER_END "\r\n\r\n"
-                char const* stringData = (char const*)rawData;
+                char const* stringData = (char const*)response->rawData.begin();
 
                 if( char const* bodyStart = StringFind( stringData, HEADER_END ) )
                 {
@@ -485,7 +482,10 @@ namespace Http
                             ASSERT( parsed );
 
                             if( bodySize >= contentLength )
+                            {
+                                response->body = String::Ref( bodyStart, bodySize );
                                 done = true;
+                            }
                         }
                     }
                     else if( char const* enc = StringFindIgnoreCase( stringData, "Transfer-Encoding") )
@@ -524,6 +524,8 @@ namespace Http
                                                 // TODO Trailer
                                                 NOT_IMPLEMENTED;
                                             }
+
+                                            response->body = String::Clone( chunks );
                                             done = true;
                                             break;
                                         }
@@ -531,9 +533,6 @@ namespace Http
                                         body.Consume( chunkSize );
                                         body.ConsumeLine();
                                     }
-
-                                    if( done )
-                                        response->body = String::Clone( chunks );
                                 }
                                 else
                                 {
@@ -555,12 +554,6 @@ namespace Http
 #undef LINE_END
 #undef HEADER_END
             }
-
-            if( done || response->error )
-            {
-                INIT( response->rawData )( totalSize + 1 );
-                response->rawData.Append( rawData, totalSize + 1 );
-            }
         }
 
         return !done;
@@ -570,7 +563,7 @@ namespace Http
     {
         BucketArray<Array<u8>> readBuffers( 8, CTX_TMPALLOC );
 
-        while( response->rawData.Empty() && !response->error )
+        while( !response->error )
         {
             if( !Read( request, &readBuffers, response ) )
                 break;
@@ -591,9 +584,6 @@ namespace Http
             String line = responseString.ConsumeLine();
             if( line.Empty() )
             {
-                // Header is over. Save the remainder as the body
-                // TODO Terminator?
-                response->body = String::Ref( responseString.data, responseString.length );
                 break;
             }
             else
@@ -638,7 +628,6 @@ namespace Http
                         continue;
                     }
                     // Remove final ':'
-                    word.InPlaceModify()[ word.length - 1 ] = 0;
                     String name = String::Ref( word.data, word.length - 1 );
 
                     if( !line )

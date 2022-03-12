@@ -571,21 +571,22 @@ public:
     }
 
     // Automatically appends null-terminator
-    static String Clone( BucketArray<char> const& src )
+    static String Clone( BucketArray<char> const& src, bool temporary = false )
     {
-        String result( src.count + 1 );
+        bool terminated = (*src.Last()) == 0;
+
+        String result( terminated ? src.count : src.count + 1 );
         src.CopyTo( (char*)result.data, result.length );
-        result.InPlaceModify()[result.length] = 0;
+
+        if( !terminated )
+            result.InPlaceModify()[result.length] = 0;
+
         ASSERT( result.ValidCString() );
         return result;
     }
     static String CloneTmp( BucketArray<char> const& src )
     {
-        String result( src.count, Temporary );
-        src.CopyTo( (char*)result.data, result.length );
-        result.InPlaceModify()[result.length] = 0;
-        ASSERT( result.ValidCString() );
-        return result;
+        return Clone( src, true );
     }
 
     // Clone src string, while replacing all instances of match with subst (uses StringBuilder)
