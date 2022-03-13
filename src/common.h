@@ -113,7 +113,7 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 
 #if defined(_MSC_VER)
     #define INLINE __forceinline
-    #if __cplusplus > 201703L
+    #if __cplusplus > 201703L || _MSVC_LANG > 201703L
         #define INLINE_LAMBDA [[msvc::forceinline]]
     #else
         #define INLINE_LAMBDA 
@@ -132,6 +132,14 @@ struct ForceCompileTime
 };
 #define CONSTEVAL(type, funcCall) \
     ForceCompileTime<type, funcCall>::value
+
+// Marker for a compile-time if, in case we either decide to go full nuts and use c++17, or find a decent substitute
+// NOTE msvc has an outstanding bug going on for a decade which causes the __cplusplus macro to always return a really old value
+#if __cplusplus >= 201703L || _MSVC_LANG >= 201703L
+    #define STATIC_IF if constexpr
+#else
+    #define STATIC_IF if
+#endif
 
 
 typedef int8_t   i8;

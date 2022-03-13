@@ -336,10 +336,11 @@ struct String
     i32 length;             // Not including null terminator
     u32 flags;
 
-    explicit constexpr String( u32 flags_ = 0 )
-        : data( "" )
-        , length( 0 )
-        , flags( flags_ )
+    constexpr String()
+        : data( "" ) , length( 0 ) , flags( 0 )
+    {}
+    explicit constexpr String( u32 flags_ )
+        : data( "" ) , length( 0 ) , flags( flags_ )
     {}
 
     // Conversion constructor from a C string. The given string MUST be null-terminated
@@ -474,6 +475,11 @@ private:
             length = new_len;
             flags |= Owned;
         }
+        else
+        {
+            data = "";
+            length = 0;
+        }
 
         ASSERT( ValidCString() );
     }
@@ -501,7 +507,8 @@ public:
         else
         {
             // Will already append terminator
-            static thread_local String cString( data, length, Temporary );
+            static thread_local String cString;
+            cString = String( data, length, Temporary );
             ASSERT( cString.ValidCString() );
             return cString.data;
         }
