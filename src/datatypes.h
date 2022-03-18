@@ -236,7 +236,7 @@ struct Array
     }
 
     template <class Predicate>
-    T* Find( Predicate p )
+    T* Find( Predicate&& p )
     {
         T* result = nullptr;
         for( int i = 0; i < count; ++i )
@@ -252,14 +252,14 @@ struct Array
     }
 
     template <class Predicate>
-    T const* Find( Predicate p ) const
+    T const* Find( Predicate&& p ) const
     {
         T* slot = ((Array<T, AllocType>*)this)->Find( p );
         return slot;
     }
 
     template <class Predicate>
-    bool Contains( Predicate p ) const
+    bool Contains( Predicate&& p ) const
     {
         T const* slot = Find( p );
         return slot != nullptr;
@@ -737,7 +737,7 @@ struct BucketArray
 
     T const* Find( T const& item ) const
     {
-        T* result = ((BucketArray<T>*)this)->Find( item, cmp );
+        T* result = ((BucketArray<T, AllocType>*)this)->Find( item, cmp );
         return result;
     }
 
@@ -748,7 +748,7 @@ struct BucketArray
     }
 
     template <class Predicate>
-    T* Find( Predicate p )
+    T* Find( Predicate&& p )
     {
         T* result = nullptr;
 
@@ -768,14 +768,14 @@ struct BucketArray
     }
 
     template <class Predicate>
-    T const* Find( Predicate p ) const
+    T const* Find( Predicate&& p ) const
     {
-        T* slot = ((BucketArray<T>*)this)->Find( p );
+        T* slot = ((BucketArray<T, AllocType>*)this)->Find( p );
         return slot;
     }
 
     template <class Predicate>
-    bool Contains( Predicate p ) const
+    bool Contains( Predicate&& p ) const
     {
         T const* slot = Find( p );
         return slot != nullptr;
@@ -1747,11 +1747,11 @@ struct SyncQueue
         Page* next;
         i32 capacity;
         i32 count;
-        i32 onePastHeadIndex;
+        i32 onePastTailIndex;
 
-        int TailIndex() const
+        int HeadIndex() const
         {
-            int result = onePastHeadIndex - count;
+            int result = onePastTailIndex - count;
             result &= (capacity - 1 );
             return result;
         }
@@ -1784,21 +1784,27 @@ struct SyncQueue
         head = tail = AllocPage( pageCapacity );
     }
 
+    T* PageItemUnsafe( Page* p, int index )
+    {
+        // Skip Page header
+        return (T*)((u8*)p + sizeof(Page) + p->onePastTailIndex * sizeof(T));
+    }
+
     T* PushEmpty( bool clear = true )
     {
         T* result = nullptr;
         {
             Mutex::Scope lock( mutex );
 
-            if( head->count >= head->capacity )
+            if( tail->count >= tail->capacity )
             {
-                head->next = AllocPage( head->capacity );
-                head = head->next;
+                tail->next = AllocPage( tail->capacity );
+                tail = tail->next;
             }
 
-            result = (T*)((u8*)head + sizeof(Page) + head->onePastHeadIndex * sizeof(T));
-            head->onePastHeadIndex = (head->onePastHeadIndex + 1) & (head->capacity - 1);
-            head->count++;
+            result = PageItemUnsafe( tail, tail->onePastTailIndex );
+            tail->onePastTailIndex = (tail->onePastTailIndex + 1) & (tail->capacity - 1);
+            tail->count++;
 
             count++;
         }
@@ -1822,23 +1828,86 @@ struct SyncQueue
         bool canPop = count > 0;
         if( canPop )
         {
-            T* result = (T*)((u8*)tail + sizeof(Page) + tail->TailIndex() * sizeof(T));
+            T* result = PageItemUnsafe( head, head->HeadIndex() );
             *out = std::move( *result );
-            tail->count--;
+            head->count--;
 
-            if( tail->count == 0 && tail != head )
+            if( head->count == 0 && head != tail )
             {
-                Page* newTail = tail->next;
+                Page* oldHead = head;
+                head = head->next;
 
-                tail->next = firstFree;
-                firstFree = tail;
-                tail = newTail;
+                oldHead->next = firstFree;
+                firstFree = oldHead;
             }
 
             count--;
         }
 
         return canPop;
+    }
+
+    T* Find( T const& item )
+    {
+        Mutex::Scope lock( mutex );
+
+        Page* p = head;
+        while( p )
+        {
+            for( int i = 0; i < p->count; ++i )
+            {
+                int index = (p->HeadIndex() + i) & (p->capacity - 1);
+                T* it = PageItemUnsafe( p, index );
+                if( *it == item )
+                    return it;
+            }
+            p = p->next;
+        }
+
+        return nullptr;
+    }
+
+    T const* Find( T const& item ) const
+    {
+        return ((SyncQueue<T, AllocType>*)this)->Find( item );
+    }
+
+    bool Contains( T const& item ) const
+    {
+        return Find( item ) != nullptr;
+    }
+
+    template<typename Predicate>
+    T* Find( Predicate&& pred )
+    {
+        Mutex::Scope lock( mutex );
+
+        Page* p = head;
+        while( p )
+        {
+            for( int i = 0; i < p->count; ++i )
+            {
+                int index = (p->HeadIndex() + i) & (p->capacity - 1);
+                T* it = PageItemUnsafe( p, index );
+                if( pred( *(T const*)it ) )
+                    return it;
+            }
+            p = p->next;
+        }
+
+        return nullptr;
+    }
+
+    template<typename Predicate>
+    T const* Find( Predicate&& pred ) const
+    {
+        return ((SyncQueue<T, AllocType>*)this)->Find( pred );
+    }
+
+    template<typename Predicate>
+    bool Contains( Predicate&& pred ) const
+    {
+        return Find( pred ) != nullptr;
     }
 
 private:

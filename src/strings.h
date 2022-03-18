@@ -517,15 +517,15 @@ public:
     StringBuffer ToBuffer() const { return StringBuffer( data, length ); }
     Buffer<u8> ToBufferU8() const { return Buffer<u8>( (u8*)data, length ); }
 
-    bool IsEqual( const char* cString, sz len = 0, bool caseSensitive = true ) const
+    bool IsEqual( const char* str, sz len = 0, bool caseSensitive = true ) const
     {
         if( !len )
-            len = cString ? StringLength( cString ) : 0;
-        return length == len && StringsEqual( data, cString, length, caseSensitive );
+            len = str ? StringLength( str ) : 0;
+        return length == len && (data == str || StringsEqual( data, str, length, caseSensitive ));
     }
-    bool IsEqualIgnoreCase( const char* cString, sz len = 0 ) const
+    bool IsEqualIgnoreCase( const char* str, sz len = 0 ) const
     {
-        return IsEqual( cString, len, false );
+        return IsEqual( str, len, false );
     }
 
 

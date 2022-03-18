@@ -91,6 +91,8 @@ namespace Http
               Callback callback, void* userData = nullptr, u32 flags = 0 );
     u32 Post( State* state, char const* url, char const* bodyData, Callback callback, void* userData = nullptr, u32 flags = 0 );
 
+    bool InFlight( State* state, u32 requestId );
+
     void ProcessResponses( State* state );
 
 } // namespace Http

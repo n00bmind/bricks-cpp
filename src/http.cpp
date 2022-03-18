@@ -92,13 +92,15 @@ namespace Http
     static bool Connect( Request* request, u32 flags = 0 )
     {
         int ret = 0;
+        char err[128];
 
         // TODO Investigate how to do proper non-blocking connects
         // The old Https code had its own mbedtls_net_connect_timeout, which seems like it heavily borrows from the
         // mbedtls_net_connect source code. The problem is afaik connect & select will still block.. so?
         if( (ret = mbedtls_net_connect( &request->tls.fd, request->host.c(), request->port.c(), MBEDTLS_NET_PROTO_TCP )) != 0 )
         {
-            LogE( "Net", "mbedtls_net_connect returned %d", ret );
+            mbedtls_strerror( ret, err, sizeof(err) );
+            LogE( "Net", "mbedtls_net_connect returned '%s' (%d)", err, ret );
             return false;
         }
 
@@ -113,7 +115,8 @@ namespace Http
         if( (ret = mbedtls_net_set_block( &request->tls.fd )) != 0 )
 #endif
         {
-            LogE( "Net", "mbedtls_net_set_nonblock returned %d", ret );
+            mbedtls_strerror( ret, err, sizeof(err) );
+            LogE( "Net", "mbedtls_net_set_nonblock returned '%s' (%d)", err, ret );
             return false;
         }
 
@@ -123,7 +126,8 @@ namespace Http
                                                     MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT ))
                 != 0 )
             {
-                LogE( "Net", "mbedtls_ssl_config_defaults returned %d\n\n", ret );
+                mbedtls_strerror( ret, err, sizeof(err) );
+                LogE( "Net", "mbedtls_ssl_config_defaults returned '%s' (%d)", err, ret );
                 return false;
             }
 
@@ -137,7 +141,8 @@ namespace Http
                     constexpr const char *cafile = "/path/to/trusted-ca-list.pem";
                     if( (ret = mbedtls_x509_crt_parse_file( &request->tls.cacert, cafile )) != 0 )
                     {
-                        LogE(  "Net", "mbedtls_x509_crt_parse_file returned -0x%x\n\n", -ret );
+                        mbedtls_strerror( ret, err, sizeof(err) );
+                        LogE( "Net", "mbedtls_x509_crt_parse_file returned '%s' (%d)", err, ret );
                         return false;
                     }
                 }
@@ -148,7 +153,8 @@ namespace Http
                         // +1 to account for the null terminator
                         if( (ret = mbedtls_x509_crt_parse( &request->tls.cacert, (u8*)ca_crt_rsa[i], strlen( ca_crt_rsa[i] ) + 1 )) != 0 )
                         {
-                            LogE(  "Net", "mbedtls_x509_crt_parse returned -0x%x\n\n", -ret );
+                            mbedtls_strerror( ret, err, sizeof(err) );
+                            LogE( "Net", "mbedtls_x509_crt_parse returned '%s' (%d)", err, ret );
                             return false;
                         }
                     }
@@ -163,7 +169,8 @@ namespace Http
 
             if( (ret = mbedtls_ctr_drbg_seed( &request->tls.ctrDrbg, mbedtls_entropy_func, &request->tls.entropy, nullptr, 0 )) != 0 )
             {
-                LogE( "Net", "mbedtls_ctr_drbg_seed returned %d", ret );
+                mbedtls_strerror( ret, err, sizeof(err) );
+                LogE( "Net", "mbedtls_ctr_drbg_seed returned '%s' (%d)", err, ret );
                 return false;
             }
             mbedtls_ssl_conf_rng( &request->tls.config, mbedtls_ctr_drbg_random, &request->tls.ctrDrbg ); 
@@ -174,13 +181,15 @@ namespace Http
 
             if( (ret = mbedtls_ssl_setup( &request->tls.context, &request->tls.config )) != 0 )
             {
-                LogE( "Net", "mbedtls_ssl_setup returned %d\n\n", ret );
+                mbedtls_strerror( ret, err, sizeof(err) );
+                LogE( "Net", "mbedtls_ssl_setup returned '%s' (%d)", err, ret );
                 return false;
             }
 
             if( (ret = mbedtls_ssl_set_hostname( &request->tls.context, request->host.c() )) != 0 )
             {
-                LogE( "Net", "mbedtls_ssl_set_hostname returned %d\n\n", ret );
+                mbedtls_strerror( ret, err, sizeof(err) );
+                LogE( "Net", "mbedtls_ssl_set_hostname returned '%s' (%d)", err, ret );
                 return false;
             }
 #if NON_BLOCKING
@@ -194,7 +203,8 @@ namespace Http
             {
                 if( ret != MBEDTLS_ERR_SSL_WANT_READ && ret != MBEDTLS_ERR_SSL_WANT_WRITE )
                 {
-                    LogE( "Net", "mbedtls_ssl_handshake returned -0x%x\n\n", (unsigned int)-ret );
+                    mbedtls_strerror( ret, err, sizeof(err) );
+                    LogE( "Net", "mbedtls_ssl_handshake returned '%s' (%d)", err, ret );
                     return false;
                 }
             }
@@ -833,6 +843,11 @@ namespace Http
     {
         Array<Header> headers;
         return Post( state, url, headers, bodyData, callback, userData, flags );
+    }
+
+    bool InFlight( State* state, u32 requestId )
+    {
+        return state->requestQueue.Contains( [requestId]( Request const& r ){ return r.id == requestId; } );
     }
 
 

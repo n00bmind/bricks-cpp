@@ -198,15 +198,20 @@ u64 Hash64( void const* key, const int len )
 // Number of collisions is low enough (0 in a test body of 100K+) that this can be used as a 1-to-1 id for short name strings
 // (assuming we still check for them ofc!)
 // https://mikejsavage.co.uk/blog/cpp-tricks-compile-time-string-hashing.html
-constexpr u64 CompileTimeHash64( const char * str, size_t n, u64 basis = 0xcbf29ce484222325ULL )
+constexpr u64 CompileTimeHash64( const u8* data, size_t n, u64 basis = 0xcbf29ce484222325ULL )
 {
-    return n == 0 ? basis : CompileTimeHash64( str + 1, n - 1, ( basis ^ str[ 0 ] ) * 0x100000001b3ULL );
+    return n == 0 ? basis : CompileTimeHash64( data + 1, n - 1, ( basis ^ data[0] ) * 0x100000001b3ULL );
+}
+
+constexpr u32 CompileTimeHash32( const u8* data, size_t n, u64 basis = 0xcbf29ce484222325ULL )
+{
+    return (u32)(CompileTimeHash64( data, n, basis ) & U32MAX);
 }
 
 template<size_t N>
 constexpr u64 CompileTimeHash64( const char (&str)[N] )
 {
-    return CompileTimeHash64( str, N - 1 );
+    return CompileTimeHash64( (u8*)str, N - 1 );
 }
 
 template<size_t N>
@@ -215,10 +220,46 @@ constexpr u32 CompileTimeHash32( const char (&str)[N] )
     return (u32)(CompileTimeHash64( str ) & U32MAX);
 }
 
-#define CONSTEVAL_HASH(x) \
-    ForceCompileTime<u64, CompileTimeHash64(x)>::value
+// Taken from https://stackoverflow.com/a/12996028/2151254
+template<typename T, typename std::enable_if_t<sizeof( T ) <= 8>* = nullptr>
+constexpr u64 CompileTimeHash64( T data )
+{
+    u64 x = (u64)data;
+    x = (x ^ (x >> 30)) * 0xbf58476d1ce4e5b9ULL;
+    x = (x ^ (x >> 27)) * 0x94d049bb133111ebULL;
+    x = x ^ (x >> 31);
+    return x;
+}
 
-#define CONSTEVAL_HASH_32(x) \
-    ForceCompileTime<u32, CompileTimeHash32(x)>::value
+template<typename T, typename std::enable_if_t<sizeof( T ) <= 4>* = nullptr>
+constexpr u32 CompileTimeHash32( T data )
+{
+    u32 x = (u32)data;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = ((x >> 16) ^ x) * 0x45d9f3b;
+    x = (x >> 16) ^ x;
+    return x;
+}
+
+// There just seems to be no way of doing this in this wonderful language
+#if 0
+template<typename T>
+constexpr u64 CompileTimeHash64( const T& data )
+{
+    return CompileTimeHash64( (u8*)&data, sizeof(T) );
+}
+
+template<typename T>
+constexpr u32 CompileTimeHash32( const T& data )
+{
+    return (u32)CompileTimeHash64( data );
+}
+#endif
+
+#define CONSTEVAL_HASH(...) \
+    ForceCompileTime<u64, CompileTimeHash64(__VA_ARGS__)>::value
+
+#define CONSTEVAL_HASH_32(...) \
+    ForceCompileTime<u32, CompileTimeHash32(__VA_ARGS__)>::value
 
 
