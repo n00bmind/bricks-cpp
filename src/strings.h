@@ -582,13 +582,11 @@ public:
     {
         bool terminated = (*src.Last()) == 0;
 
-        String result( terminated ? src.count : src.count + 1 );
-        src.CopyTo( (char*)result.data, result.length );
+        // Constructor already accounts for the terminator space
+        String result( terminated ? src.count - 1 : src.count );
+        src.CopyTo( (char*)result.data, result.length + 1 );
 
-        if( !terminated )
-            result.InPlaceModify()[result.length] = 0;
-
-        ASSERT( result.ValidCString() );
+        result.InPlaceModify()[result.length] = 0;
         return result;
     }
     static String CloneTmp( BucketArray<char> const& src )

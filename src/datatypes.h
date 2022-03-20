@@ -1787,7 +1787,7 @@ struct SyncQueue
     T* PageItemUnsafe( Page* p, int index )
     {
         // Skip Page header
-        return (T*)((u8*)p + sizeof(Page) + p->onePastTailIndex * sizeof(T));
+        return (T*)((u8*)p + sizeof(Page) + index * sizeof(T));
     }
 
     T* PushEmpty( bool clear = true )
@@ -1823,25 +1823,29 @@ struct SyncQueue
 
     bool TryPop( T* out )
     {
-        Mutex::Scope lock( mutex );
-
         bool canPop = count > 0;
         if( canPop )
         {
-            T* result = PageItemUnsafe( head, head->HeadIndex() );
-            *out = std::move( *result );
-            head->count--;
+            Mutex::Scope lock( mutex );
 
-            if( head->count == 0 && head != tail )
+            canPop = count > 0;
+            if( canPop )
             {
-                Page* oldHead = head;
-                head = head->next;
+                T* result = PageItemUnsafe( head, head->HeadIndex() );
+                *out = std::move( *result );
+                head->count--;
 
-                oldHead->next = firstFree;
-                firstFree = oldHead;
+                if( head->count == 0 && head != tail )
+                {
+                    Page* oldHead = head;
+                    head = head->next;
+
+                    oldHead->next = firstFree;
+                    firstFree = oldHead;
+                }
+
+                count--;
             }
-
-            count--;
         }
 
         return canPop;

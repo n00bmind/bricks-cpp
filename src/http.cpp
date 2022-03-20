@@ -718,14 +718,15 @@ namespace Http
                 Response response = {};
                 bool result = ProcessRequest( &req, &response );
 
-                if( !result )
+                if( result )
+                {
+                    if( response.statusCode >= 300 )
+                        LogW( "Net", "Response from %s :: %d", response.url.c(), response.statusCode );
+                }
+                else
                 {
                     LogE( "Net", "Error while processing request to '%s'", req.url.c() );
-                    continue;
                 }
-
-                if( response.statusCode >= 300 )
-                    LogW( "Net", "Response from %s :: %d", response.url.c(), response.statusCode );
 
                 // TODO Move!?
                 state->responseQueue.Push( std::move(response) );
@@ -843,11 +844,6 @@ namespace Http
     {
         Array<Header> headers;
         return Post( state, url, headers, bodyData, callback, userData, flags );
-    }
-
-    bool InFlight( State* state, u32 requestId )
-    {
-        return state->requestQueue.Contains( [requestId]( Request const& r ){ return r.id == requestId; } );
     }
 
 
