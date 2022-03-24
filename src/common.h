@@ -417,10 +417,11 @@ int main()
 // TODO We should probably just construct Items on request, since it's kind of an exotic concept which will be seldom used anyway
 // (maybe even remove it entirely!)
 #define _ENUM_VALUE(x, ...)                     items[x].value,
-#define _ENUM_VALUE_HASH1(x, ...)               (u64)x,                                 // Use index as a dummy value
+#define _ENUM_VALUE_HASH_DUMMY(x, ...)          (u64)x,                                 // Use index as a dummy value
+// FIXME This works only for up to 64 bit values or strings
 // TODO We may just want to return the value itself for integer values, since we'll be using consecutive values
 // which may mean more chance for the compiler to optimize FromValue() into a jump table
-#define _ENUM_VALUE_HASH3(x, _, v)              CompileTimeHash64( values[x] ),
+#define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( values[x] ),
 #define _ENUM_VALUE_CASE(x, ...)                case valueHashes[x]: \
                                                     if( values[x] == value )           \
                                                     {                              \
@@ -541,10 +542,10 @@ struct enumName : public EnumStruct<enumName>                                   
     };                                                                                \
 };                                                                  
 
-#define ENUM_STRUCT(enumName, xItemList)                                _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH1, xItemList, _ENUM_INIT)
-#define ENUM_STRUCT_WITH_NAMES(enumName, xItemList)                     _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH1, xItemList, _ENUM_INIT_WITH_NAMES)
-#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xItemList)         _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH3, xItemList, _ENUM_INIT_WITH_VALUES)
-#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xItemList)   _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH3, xItemList, _ENUM_INIT_WITH_NAMES_VALUES)
+#define ENUM_STRUCT(enumName, xItemList)                                _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH_DUMMY,    xItemList, _ENUM_INIT)
+#define ENUM_STRUCT_WITH_NAMES(enumName, xItemList)                     _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH_DUMMY,    xItemList, _ENUM_INIT_WITH_NAMES)
+#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xItemList)         _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH,          xItemList, _ENUM_INIT_WITH_VALUES)
+#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xItemList)   _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH,          xItemList, _ENUM_INIT_WITH_NAMES_VALUES)
 
 
 /////     DEFER    /////
