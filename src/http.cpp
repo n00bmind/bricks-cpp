@@ -1,6 +1,6 @@
 #include "ca_cert.h"
 
-#define HTTP_DEBUG_PRINT 1
+#define HTTP_DEBUG_PRINT 0
 
 // SPEC: https://datatracker.ietf.org/doc/html/rfc2616
 
@@ -403,13 +403,13 @@ namespace Http
         static constexpr int bufferSize = 4096;
         // Get a new buffer or reuse the last one
         Array<u8>* buffer = nullptr;
-        if( readBuffers->Empty() || (*readBuffers->Last()).Available() == 0 )
+        if( readBuffers->Empty() || readBuffers->Last().Available() == 0 )
         {
             buffer = readBuffers->PushEmpty( false );
             INIT( *buffer )( bufferSize, CTX_TMPALLOC );
         }
         else
-            buffer = &(*readBuffers->Last());
+            buffer = &readBuffers->Last();
 
         // Try to read until the end of the current buffer
         int ret = 0;
@@ -539,7 +539,7 @@ namespace Http
                                             done = true;
                                             break;
                                         }
-                                        chunks.Append( body.data, chunkSize );
+                                        chunks.Push( body.data, chunkSize );
                                         body.Consume( chunkSize );
                                         body.ConsumeLine();
                                     }
@@ -716,6 +716,9 @@ namespace Http
             while( state->requestQueue.TryPop( &req ) )
             {
                 Response response = {};
+#if HTTP_DEBUG_PRINT
+                printf("-- Processing request to %s\n", req.url.c() );
+#endif
                 bool result = ProcessRequest( &req, &response );
 
                 if( result )
@@ -728,6 +731,9 @@ namespace Http
                     LogE( "Net", "Error while processing request to '%s'", req.url.c() );
                 }
 
+#if HTTP_DEBUG_PRINT
+                printf("-- Queuing response with callback %p\n", response.callback );
+#endif
                 // TODO Move!?
                 state->responseQueue.Push( std::move(response) );
             }
@@ -855,8 +861,16 @@ namespace Http
         Response response;
         while( state->responseQueue.TryPop( &response ) )
         {
+#if HTTP_DEBUG_PRINT
+                printf("-- Processing response from %s\n", response.url.c() );
+#endif
             if( response.callback )
+            {
+#if HTTP_DEBUG_PRINT
+                printf("-- Executing callback to %p\n", response.callback );
+#endif
                 response.callback( response, response.callbackData );
+            }
         }
     }
 } // namespace Http

@@ -580,7 +580,7 @@ public:
     // Automatically appends null-terminator
     static String Clone( BucketArray<char> const& src, bool temporary = false )
     {
-        bool terminated = (*src.Last()) == 0;
+        bool terminated = src.Last() == 0;
 
         // Constructor already accounts for the terminator space
         String result( terminated ? src.count - 1 : src.count );
@@ -979,7 +979,7 @@ struct StringBuilder
             length = StringLength( str );
 
         // Not including null terminator
-        buckets.Append( str, length );
+        buckets.Push( str, length );
     }
 
     void AppendFormat( char const* fmt, ... )
@@ -996,17 +996,17 @@ struct StringBuilder
 
         // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
         // length needed for each append (n above) so we don't need this extra copy
-        buckets.Append( buf, n - 1 );
+        buckets.Push( buf, n - 1 );
     }
 
     String ToString()
     {
-        buckets.Append( "\0", 1 );
+        buckets.Push( '\0' );
         return String::Clone( buckets );
     }
     String ToStringTmp()
     {
-        buckets.Append( "\0", 1 );
+        buckets.Push( '\0' );
         return String::CloneTmp( buckets );
     }
 };

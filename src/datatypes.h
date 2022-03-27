@@ -24,6 +24,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 // TODO Write copy/move constructors & assignments for everybody
+// TODO Move Push() for everybody
 
 /////     DYNAMIC ARRAY    /////
 
@@ -151,6 +152,24 @@ struct Array
         return capacity - count;
     }
 
+    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = {} )
+    {
+        ASSERT( new_allocator );
+        T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
+
+        sz copy_size = Min( count, new_capacity ) * SIZEOF(T);
+        COPYP( data, new_data, copy_size );
+
+        if( allocator )
+            FREE( allocator, data, memParams );
+
+        data      = new_data;
+        count     = Min( count, new_capacity );
+        capacity  = new_capacity;
+        allocator = new_allocator;
+        memParams = new_params;
+    }
+
     T& operator[]( int i )
     {
         ASSERT( i >= 0 && i < count );
@@ -265,7 +284,7 @@ struct Array
         return slot != nullptr;
     }
 
-    void Append( T const* buffer, int bufferLen )
+    void Push( T const* buffer, int bufferLen )
     {
         ASSERT( Available() >= bufferLen );
 
@@ -276,7 +295,7 @@ struct Array
     template <typename AllocType2 = Allocator>
     void Append( Array<T, AllocType2> const& array )
     {
-        Append( array.data, array.count );
+        Push( array.data, array.count );
     }
 
     // Deep copy
@@ -338,11 +357,277 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 
 /////     BUCKET ARRAY     /////
 
+// Growable container that allocates its items in pages, or 'buckets', so no extra copying occurs whatsoever when new items get added.
+// The buckets themselves are indexed in a linear array, which should stay reasonably hot when iterated often, and could easily
+// be modified in a lock-free fashion for the multithreaded version.
+// Items are kept compact in their respective buckets, so iteration remains really fast.
+// On the flip side, items don't have stable addressing, so pointers to items are not safe to store.
+
+template <typename T, typename AllocType = Allocator>
+struct BucketArray
+{
+    // TODO Do we wanna keep the count+capacity in the array of buckets or do we wanna put them inline with the bucket memory?
+    // (more buckets per cache line vs. dereferencing each bucket block more often)
+    struct Bucket
+    {
+        T* data;
+        i32 count;
+        i32 capacity;
+    };
+
+    struct Idx
+    {
+        BucketArray<T, AllocType>* array;
+        i32 index;
+
+        //INLINE Idx( BucketArray<T, AllocType>* a, i32 i )
+            //: array( a ), index( i )
+        //{}
+        //INLINE  operator i32() const                { return index; }
+        INLINE T&       operator *()                        { return (*array)[index]; }
+        INLINE T const& operator *() const                  { return (*array)[index]; }
+        INLINE bool     operator ==( Idx const& rhs ) const { return array == rhs.array && index == rhs.index; }
+        INLINE bool     operator !=( Idx const& rhs ) const { return array != rhs.array || index != rhs.index; }
+        INLINE Idx&     operator ++()                       { ++index; return *this; }
+        INLINE Idx      operator ++( int)                   { Idx result(*this); index++; return result; }
+    };
+
+    Bucket* bucketBuffer;
+    T* firstFree;
+    i32 bucketBufferCount;
+    i32 bucketBufferCapacity;
+    i32 bucketCapacity;
+    i32 bucketMask;
+    i32 bucketShift;
+
+    AllocType* allocator;
+    MemoryParams memParams;
+    i32 count;
+
+
+    BucketArray()
+    {
+        ZEROP( this, sizeof(*this) );
+    }
+
+    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+        : firstFree( nullptr )
+        , bucketBufferCount( 0 )
+        , bucketCapacity( bucketSize )
+        , bucketMask( bucketSize - 1 )
+        , bucketShift( Log2( bucketSize ) )
+        , allocator( allocator_ )
+        , memParams( params )
+        , count( 0 )
+    {
+        ASSERT( bucketSize > 0 );
+        // Allocate an initial array of buckets
+        bucketBufferCapacity = 4;
+        bucketBuffer = ALLOC_ARRAY( allocator, Bucket, bucketBufferCapacity, memParams );
+
+        // We need a minimum size to be able to chain it in the freelist when retiring
+        ASSERT( bucketSize * sizeof(T) > sizeof(T*), "Bucket size too small" );
+        // Allocate a single initial bucket
+        AllocBucket();
+    }
+
+    ~BucketArray()
+    {
+        for( int i = 0; i < bucketBufferCount; ++i )
+            FREE( allocator, bucketBuffer[i].data, memParams );
+
+        while( firstFree )
+        {
+            T* data = firstFree;
+            firstFree = *(T**)&firstFree[0];
+
+            FREE( allocator, data, memParams );
+        }
+
+        FREE( allocator, bucketBuffer, memParams );
+    }
+
+
+    Idx         begin()         { return { this, 0 }; }
+    Idx         begin() const   { return { this, 0 }; }
+    Idx         end()           { return { this, count }; }
+    Idx         end() const     { return { this, count }; }
+
+    T&          First()         { return (*this)[0]; }
+    T const&    First() const   { return (*this)[0]; }
+    T&          Last()          { return (*this)[count - 1]; }
+    T const&    Last() const    { return (*this)[count - 1]; }
+
+    bool        Empty() const   { return count == 0; }
+
+    INLINE T& operator []( int index )
+    { 
+        ASSERT( index >= 0 && index < count, "BucketArray[%d] out of bounds (%d)", index, count ); 
+
+        // FIXME ??? What happens when (some) buckets start to empty?
+        const i32 item_idx = index & bucketMask;
+        const i32 bucket_idx = index >> bucketShift;
+
+        ASSERT( item_idx < bucketBuffer[bucket_idx].count, "Bucket[%d][%d] out of bounds (%d)", bucket_idx, item_idx, bucketBuffer[bucket_idx].count );
+        return bucketBuffer[ bucket_idx ].data[ item_idx ];
+    }
+    INLINE T const& operator []( int index ) const    
+    { 
+        return (*(BucketArray<T, AllocType>*)this)[ index ];
+    }
+
+
+    T* PushEmpty( bool clear = true )
+    {
+        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+        if( lastBucket->count == lastBucket->capacity )
+            lastBucket = AllocBucket();
+
+        T* result = lastBucket->data + lastBucket->count++;
+        if( clear )
+            INIT( *result );
+
+        count++;
+        return result;
+    }
+
+    T* Push( const T& item )
+    {
+        T* slot = PushEmpty( false );
+        INIT( *slot )( item );
+        return slot;
+    }
+
+    T* Push( T&& item )
+    {
+        T* slot = PushEmpty( false );
+        INIT( *slot )( std::move(item) );
+        return slot;
+    }
+
+    void Push( T const* buffer, int bufferLen )
+    {
+        int off = 0;
+        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+
+        while( off < bufferLen )
+        {
+            int remaining = Min( bufferLen - off, lastBucket->capacity - lastBucket->count );
+            COPYP( buffer + off, lastBucket->data + lastBucket->count, remaining );
+            lastBucket->count += remaining;
+
+            off += remaining;
+            if( off < bufferLen )
+                lastBucket = AllocBucket();
+        }
+
+        count += bufferLen;
+    }
+
+    T Pop()
+    {
+        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+        int idx = --lastBucket->count;
+        if( idx == 0 )
+            RetireBucket( lastBucket );
+
+        count--;
+        return std::move(lastBucket->data[ idx ]);
+    }
+
+    void Clear()
+    {
+        // Add all buckets to the free list (backwards so its faster)
+        // Skip bucket 0 since it won't be retired anyway
+        for( int i = bucketBufferCount - 1; i > 0; --i )
+            RetireBucket( bucketBuffer + i );
+
+        bucketBuffer[0].count = 0;
+    }
+
+
+    void CopyTo( T* buffer, sz bufferLen ) const
+    {
+        ASSERT( count <= bufferLen );
+
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket const& b = bucketBuffer[i];
+            COPYP( b.data, buffer, b.count * SIZEOF(T) );
+            buffer += b.count;
+        }
+    }
+
+    template <typename AllocType2 = Allocator>
+    void CopyTo( Array<T, AllocType2>* array ) const
+    {
+        ASSERT( count <= array->capacity );
+        array->Resize( count );
+
+        T* buffer = array->data;
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket const& b = bucketBuffer[i];
+            COPYP( b.data, buffer, b.count * SIZEOF(T) );
+            buffer += b.count;
+        }
+    }
+
+private:
+    Bucket* AllocBucket()
+    {
+        if( bucketBufferCount == bucketBufferCapacity )
+            GrowBucketBuffer();
+
+        Bucket* new_bucket   = &bucketBuffer[ bucketBufferCount++ ];
+        new_bucket->data     = ALLOC_ARRAY( allocator, T, bucketCapacity, memParams );
+        new_bucket->count    = 0;
+        new_bucket->capacity = bucketCapacity;
+
+        return new_bucket;
+    }
+
+    void RetireBucket( Bucket* b )
+    {
+        // If we're the last guy just don't
+        if( b == bucketBuffer )
+            return;
+
+        // Stick a pointer to the next guy at the beginning of the buffer
+        *(T**)&b->data[0] = firstFree;
+        firstFree = b->data;
+
+        // Move everybody following in the array of buckets forward
+        sz idx = b - bucketBuffer;
+        for( sz i = idx; i < bucketBufferCount - 1; ++i )
+            bucketBuffer[i] = bucketBuffer[i + 1];
+
+        bucketBuffer[ --bucketBufferCount ] = {};
+    }
+
+    void GrowBucketBuffer()
+    {
+        i32 new_capacity = bucketBufferCapacity * 2;
+
+        Bucket* new_buffer = ALLOC_ARRAY( allocator, Bucket, new_capacity, memParams );
+        COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
+
+        FREE( allocator, bucketBuffer, memParams );
+        bucketBuffer = new_buffer;
+        bucketBufferCapacity = new_capacity;
+    }
+};
+
+
+
+
+
+
 // TODO There's two conflicting views on this datatype rn:
-// - One would be that we want to keep it fast (both to iterate and to compact into an array), so we want to keep buckets compacted
+// 1 One would be that we want to keep it fast (both to iterate and to compact into an array), so we want to keep buckets compacted
 //   at all times, where any item removed is swapped with the last one (or subsequent items are moved down) so that we can iterate
 //   each bucket fast with just the pointer to the start of the bucket and its count.
-// - The second view is that this is a datatype used mainly for storage, and so we want items to keep a stable address, and be able
+// 2 The second view is that this is a datatype used mainly for storage, and so we want items to keep a stable address, and be able
 //   to return an Idx/Handle to them. For that we'd need to keep items in place always, and keep something like an occupancy bitfield.
 //
 // Now, Part Pools in KoM have this same exact duality, and I think the concept of a roster used there can help, but used in the
@@ -359,17 +644,17 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 // Once you remove elements inside a bucket..
 //   · How does that bucket get filled up again? (insertion)
 //   · What happens when it's fully empty? (the array of page pointers gets rewritten)
-//   · BUT if we can never ref. items directly why do we need/want a linear array of pages?
+//   · BUT if we can never ref. items directly why do we need/want a linear array of pages? (easier for the page array to stay hot, easier to multithread..)
 //   · Will also need a RemoveOrdered for usage as a i.e. StringBuilder
 
 
 // TODO It seems really that the stable referencing is the true differentiating factor, and hence there's two things here:
-// - BucketArray that iterates fast by compacting but doesnt provide any means of referencing items
-// - BucketPool that has an occupancy mask and provides Handles with gen. numbers and even naked pointers but is slower to iterate
+// - BucketArray that iterates fast by compacting but doesnt provide any means of referencing individual items
+// - PagedPool that has an occupancy mask and provides Handles (a composed index to the page + index inside the page) with gen. numbers and even naked pointers but is slower to iterate
 // We could then add:
 // - CompactPool composed of a BucketArray + roster that both iterates fast and provides storable Handles in exchange for complexity
 template <typename T, typename AllocType = Allocator>
-struct BucketArray
+struct OldBucketArray
 {
     struct Bucket
     {
@@ -486,10 +771,10 @@ struct BucketArray
 
 
 #if 0
-    static const BucketArray<T> Empty;
+    static const OldBucketArray<T> Empty;
 #endif
 
-    BucketArray()
+    OldBucketArray()
         : last( nullptr )
         , firstFree( nullptr )
         , allocator( nullptr )
@@ -497,7 +782,7 @@ struct BucketArray
         , count( 0 )
     {}
 
-    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    explicit OldBucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
         : first( bucketSize, allocator_, params )
         , last( &first )
         , firstFree( nullptr )
@@ -508,7 +793,7 @@ struct BucketArray
         ASSERT( allocator );
     }
 
-    BucketArray( BucketArray<T>&& other )
+    OldBucketArray( OldBucketArray<T>&& other )
         : first( other.first )
         , last( other.last )
         , firstFree( other.firstFree )
@@ -522,7 +807,7 @@ struct BucketArray
         other.count = 0;
     }
 
-    ~BucketArray()
+    ~OldBucketArray()
     {
         Clear();
         
@@ -536,8 +821,8 @@ struct BucketArray
     }
 
     // Disallow implicit copying
-    BucketArray( const BucketArray& ) = delete;
-    BucketArray& operator =( const BucketArray& ) = delete;
+    OldBucketArray( const OldBucketArray& ) = delete;
+    OldBucketArray& operator =( const OldBucketArray& ) = delete;
 
     bool        Empty() const { return count == 0; }
 
@@ -683,7 +968,7 @@ struct BucketArray
     }
     T& At( int index )
     {
-        return const_cast<BucketArray const*>(this)->At( index );
+        return const_cast<OldBucketArray const*>(this)->At( index );
     }
 
     void Grow( int newCount )
@@ -737,7 +1022,7 @@ struct BucketArray
 
     T const* Find( T const& item ) const
     {
-        T* result = ((BucketArray<T, AllocType>*)this)->Find( item, cmp );
+        T* result = ((OldBucketArray<T, AllocType>*)this)->Find( item, cmp );
         return result;
     }
 
@@ -770,7 +1055,7 @@ struct BucketArray
     template <class Predicate>
     T const* Find( Predicate&& p ) const
     {
-        T* slot = ((BucketArray<T, AllocType>*)this)->Find( p );
+        T* slot = ((OldBucketArray<T, AllocType>*)this)->Find( p );
         return slot;
     }
 
@@ -782,7 +1067,7 @@ struct BucketArray
     }
 
 
-    void Append( T const* buffer, int bufferLen )
+    void Push( T const* buffer, int bufferLen )
     {
         int totalCopied = 0;
         Bucket*& bucket = last;
@@ -807,7 +1092,7 @@ struct BucketArray
     template <typename AllocType2 = Allocator>
     void Append( Array<T, AllocType2> const& array )
     {
-        Append( array.data, array.count );
+        Push( array.data, array.count );
     }
 
     void CopyTo( T* buffer, sz bufferLen ) const
@@ -874,7 +1159,7 @@ private:
 
 #if 0
 template <typename T, typename AllocType>
-const BucketArray<T, AllocType> BucketArray<T, AllocType>::Empty = {};
+const OldBucketArray<T, AllocType> OldBucketArray<T, AllocType>::Empty = {};
 #endif
 
 
@@ -963,7 +1248,6 @@ struct Hashtable
     KeysEqFunc eqFunc;
     i32 count;
     i32 capacity;
-    MemoryParams memParams;
     u32 flags;
 
 
@@ -991,7 +1275,6 @@ struct Hashtable
 
     Hashtable( Hashtable&& rhs )
         : allocator( rhs.allocator )
-        , memParams( rhs.memParams )
         , flags( rhs.flags )
     {
         *this = std::move( rhs );
@@ -1248,7 +1531,7 @@ private:
 // Head and tail will wrap around when needed and can never overlap.
 // Can be iterated both from tail to head (oldest to newest) or the other way around.
 
-// TODO 'Head' & 'Tail' here have the exact opposite meaning you would expect for a queue, hence are super confusing!
+// FIXME 'Head' & 'Tail' here have the exact opposite meaning you would expect for a queue, hence are super confusing!
 // TODO Look at the code inside #ifdef MEM_REPLACE_PLACEHOLDER in https://github.com/cmuratori/refterm/blob/main/refterm_example_source_buffer.c
 // for an example of how to speed up linear reads & writes that go beyond the end of the buffer,
 // by just mapping the same block of memory twice back to back!
@@ -1784,40 +2067,45 @@ struct SyncQueue
         head = tail = AllocPage( pageCapacity );
     }
 
+private:
     T* PageItemUnsafe( Page* p, int index )
     {
         // Skip Page header
         return (T*)((u8*)p + sizeof(Page) + index * sizeof(T));
     }
 
-    T* PushEmpty( bool clear = true )
+    T* PushEmptyUnsafe( bool clear = true )
     {
-        T* result = nullptr;
+        if( tail->count >= tail->capacity )
         {
-            Mutex::Scope lock( mutex );
-
-            if( tail->count >= tail->capacity )
-            {
-                tail->next = AllocPage( tail->capacity );
-                tail = tail->next;
-            }
-
-            result = PageItemUnsafe( tail, tail->onePastTailIndex );
-            tail->onePastTailIndex = (tail->onePastTailIndex + 1) & (tail->capacity - 1);
-            tail->count++;
-
-            count++;
+            tail->next = AllocPage( tail->capacity );
+            tail = tail->next;
         }
+
+        T* result = PageItemUnsafe( tail, tail->onePastTailIndex );
+        tail->onePastTailIndex = (tail->onePastTailIndex + 1) & (tail->capacity - 1);
+        tail->count++;
+
+        count++;
 
         if( clear )
             ZEROP( result, sizeof(T) );
         return result;
     }
 
+public:
+    T* PushEmpty( bool clear = true )
+    {
+        Mutex::Scope lock( mutex );
+        return PushEmptyUnsafe( clear );
+    }
+
     T* Push( const T& item )
     {
-        T* result = PushEmpty( false );
+        Mutex::Scope lock( mutex );
+        T* result = PushEmptyUnsafe( false );
         *result = item;
+
         return result;
     }
 

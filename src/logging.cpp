@@ -18,6 +18,8 @@ namespace Logging
 
         // Figure out total length of the msg + entry header
         int len         = vsnprintf( nullptr, 0, msg, args );
+        // TODO Formalize what we're trying to do here using a BipBuffer instead .. https://www.codeproject.com/Articles/3479/The-Bip-Buffer-The-Circular-Buffer-with-a-Twist
+        // AND remove all 'Adjacent' variations from RingBuffer(s) cause they're quirky
         char* msgBuffer = state->msgBuffer.PushEmptyRangeAdjacent( len + 1, false );
 
         Entry* newEntry = state->entryQueue.PushEmpty();
