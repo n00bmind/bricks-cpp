@@ -1736,6 +1736,7 @@ private:
 // Any operations that would require locking the full buffer have been removed.
 // Can be used as a fixed-capacity thread-safe queue.
 
+// FIXME This type is very broken! Review all ops agains!
 template <typename T, typename AllocType = Allocator>
 struct SyncRingBuffer
 {
@@ -1790,6 +1791,7 @@ struct SyncRingBuffer
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
         T* result = buffer.data + headIndex;
+        // FIXME This is wrong. Consumer can observe result pointer not cleared
         if( clear )
             ZEROP( result, sizeof(T) );
 
@@ -1799,11 +1801,12 @@ struct SyncRingBuffer
     T* Push( const T& item )
     {
         T* result = PushEmpty( false );
+        // FIXME Consumer can observe result pointer being empty
         *result = item;
         return result;
     }
 
-    // TODO Do TryPopRange too!
+    // TODO Remove
     T* PushEmptyRangeAdjacent( int rangeLen, bool clear = true )
     {
         u32 len = U32(rangeLen);
@@ -1836,6 +1839,7 @@ struct SyncRingBuffer
         return result;
     }
 
+    // TODO Remove
     T* PushRangeAdjacent( T const* item, int rangeLen )
     {
         T* result = PushEmptyRangeAdjacent( rangeLen, false );
@@ -1863,6 +1867,7 @@ struct SyncRingBuffer
         {
             u64 tailIndex = onePastHeadIndex - count;
             tailIndex &= (buffer.capacity - 1);
+            // FIXME By the time we do the copy someone could have pushed at this index
             *out = buffer.data[tailIndex];
         }
         return success;
@@ -1886,6 +1891,7 @@ struct SyncRingBuffer
 
         bool success = count > 0;
         if( success )
+            // FIXME By the time we do the copy someone could have pushed again
             *out = buffer.data[onePastHeadIndex];
 
         return success;
