@@ -528,11 +528,13 @@ struct BucketArray
     {
         Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
         int idx = --lastBucket->count;
+        T result = std::move(lastBucket->data[ idx ]);
+
         if( idx == 0 )
             RetireBucket( lastBucket );
-
         count--;
-        return std::move(lastBucket->data[ idx ]);
+
+        return std::move(result);
     }
 
     void Clear()
