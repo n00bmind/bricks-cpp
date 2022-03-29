@@ -402,6 +402,7 @@ namespace Http
     {
         static constexpr int bufferSize = 4096;
         // Get a new buffer or reuse the last one
+        // FIXME This is stupid. Just use a single fixed buffer and keep pushing the intermediate to a BucketArray<u8>
         Array<u8>* buffer = nullptr;
         if( readBuffers->Empty() || readBuffers->Last().Available() == 0 )
         {
@@ -539,7 +540,9 @@ namespace Http
                                             done = true;
                                             break;
                                         }
-                                        chunks.Push( body.data, chunkSize );
+
+                                        if( chunkSize < body.length )
+                                            chunks.Push( body.data, chunkSize );
                                         body.Consume( chunkSize );
                                         body.ConsumeLine();
                                     }

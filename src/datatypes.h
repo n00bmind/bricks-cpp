@@ -357,11 +357,11 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 
 /////     BUCKET ARRAY     /////
 
-// Growable container that allocates its items in pages, or 'buckets', so no extra copying occurs whatsoever when new items get added.
+// Growable container that allocates its items in pages, or 'buckets', so no extra copying occurs whatsoever when new items get pushed.
 // The buckets themselves are indexed in a linear array, which should stay reasonably hot when iterated often, and could easily
-// be modified in a lock-free fashion for the multithreaded version.
-// Items are kept compact in their respective buckets, so iteration remains really fast.
-// On the flip side, items don't have stable addressing, so pointers to items are not safe to store.
+// be modified in a lock-free fashion for a potential multithreaded version.
+// Items are always kept compact, so iteration remains really fast. Since bucket sizes are Po2, it can be iterated using a normal integer index
+// or with the provided iterator (for new-style 'for each').
 
 template <typename T, typename AllocType = Allocator>
 struct BucketArray
@@ -375,34 +375,29 @@ struct BucketArray
         i32 capacity;
     };
 
-    struct Idx
-    {
-        BucketArray<T, AllocType>* array;
-        i32 index;
-
-        //INLINE Idx( BucketArray<T, AllocType>* a, i32 i )
-            //: array( a ), index( i )
-        //{}
-        //INLINE  operator i32() const                { return index; }
-        INLINE T&       operator *()                        { return (*array)[index]; }
-        INLINE T const& operator *() const                  { return (*array)[index]; }
-        INLINE bool     operator ==( Idx const& rhs ) const { return array == rhs.array && index == rhs.index; }
-        INLINE bool     operator !=( Idx const& rhs ) const { return array != rhs.array || index != rhs.index; }
-        INLINE Idx&     operator ++()                       { ++index; return *this; }
-        INLINE Idx      operator ++( int)                   { Idx result(*this); index++; return result; }
-    };
-
     Bucket* bucketBuffer;
     T* firstFree;
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
     i32 bucketCapacity;
-    i32 bucketMask;
-    i32 bucketShift;
 
     AllocType* allocator;
     MemoryParams memParams;
     i32 count;
+
+
+    struct Iterator
+    {
+        BucketArray<T, AllocType>* array;
+        i32 index;
+
+        INLINE T&           operator *()                                { return (*array)[index]; }
+        INLINE T const&     operator *() const                          { return (*array)[index]; }
+        INLINE bool         operator ==( Iterator const& rhs ) const    { return array == rhs.array && index == rhs.index; }
+        INLINE bool         operator !=( Iterator const& rhs ) const    { return array != rhs.array || index != rhs.index; }
+        INLINE Iterator&    operator ++()                               { ++index; return *this; }
+        INLINE Iterator     operator ++( int)                           { Iterator result(*this); index++; return result; }
+    };
 
 
     BucketArray()
@@ -414,13 +409,11 @@ struct BucketArray
         : firstFree( nullptr )
         , bucketBufferCount( 0 )
         , bucketCapacity( bucketSize )
-        , bucketMask( bucketSize - 1 )
-        , bucketShift( Log2( bucketSize ) )
         , allocator( allocator_ )
         , memParams( params )
         , count( 0 )
     {
-        ASSERT( bucketSize > 0 );
+        ASSERT( IsPowerOf2( bucketSize ) );
         // Allocate an initial array of buckets
         bucketBufferCapacity = 4;
         bucketBuffer = ALLOC_ARRAY( allocator, Bucket, bucketBufferCapacity, memParams );
@@ -448,10 +441,10 @@ struct BucketArray
     }
 
 
-    Idx         begin()         { return { this, 0 }; }
-    Idx         begin() const   { return { this, 0 }; }
-    Idx         end()           { return { this, count }; }
-    Idx         end() const     { return { this, count }; }
+    Iterator    begin()         { return { this, 0 }; }
+    Iterator    begin() const   { return { this, 0 }; }
+    Iterator    end()           { return { this, count }; }
+    Iterator    end() const     { return { this, count }; }
 
     T&          First()         { return (*this)[0]; }
     T const&    First() const   { return (*this)[0]; }
@@ -460,16 +453,17 @@ struct BucketArray
 
     bool        Empty() const   { return count == 0; }
 
+
+    // Same as an Array, we don't allow gaps in between elements, so the given index acts as a mask of the bucket index + index in the bucket
     INLINE T& operator []( int index )
     { 
-        ASSERT( index >= 0 && index < count, "BucketArray[%d] out of bounds (%d)", index, count ); 
+        ASSERT( index >= 0 && index < count, "BucketArray[%d] out of bounds (%d)", index, count );
 
-        // FIXME ??? What happens when (some) buckets start to empty?
-        const i32 item_idx = index & bucketMask;
-        const i32 bucket_idx = index >> bucketShift;
+        const int bucketShift = Log2( bucketCapacity );
+        const int bucketIndex = index >> bucketShift;
+        const int indexInBucket = index & (bucketCapacity - 1);
 
-        ASSERT( item_idx < bucketBuffer[bucket_idx].count, "Bucket[%d][%d] out of bounds (%d)", bucket_idx, item_idx, bucketBuffer[bucket_idx].count );
-        return bucketBuffer[ bucket_idx ].data[ item_idx ];
+        return bucketBuffer[ bucketIndex ].data[ indexInBucket ];
     }
     INLINE T const& operator []( int index ) const    
     { 
@@ -537,6 +531,10 @@ struct BucketArray
         return std::move(result);
     }
 
+    // TODO Remove (swap)
+    // TODO Insert
+    // TODO RemoveOrdered
+
     void Clear()
     {
         // Add all buckets to the free list (backwards so its faster)
@@ -547,6 +545,9 @@ struct BucketArray
         bucketBuffer[0].count = 0;
     }
 
+
+    // TODO Add Find
+    // TODO Add LowerBound search (see Algorithm.h)
 
     void CopyTo( T* buffer, sz bufferLen ) const
     {
@@ -574,6 +575,7 @@ struct BucketArray
             buffer += b.count;
         }
     }
+
 
 private:
     Bucket* AllocBucket()

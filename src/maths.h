@@ -34,53 +34,6 @@ INLINE T Max( T a, T b )
     return a > b ? a : b;
 }
 
-#define CountShift(bits)  if( n >> bits ) { n >>= bits; result += bits; }
-INLINE int Log2( i32 n )
-{
-    if( n <= 0 )
-        return -1;
-
-#if COMPILER_MSVC
-    unsigned long result;
-    _BitScanReverse( &result, (u32)n );
-#elif COMPILER_LLVM
-    NOT_IMPLEMENTED
-#else
-    u32 result = 0;
-    CountShift(16);
-    CountShift(8);
-    CountShift(4);
-    CountShift(2);
-    CountShift(1);
-#endif
-
-    return (int)result;
-}
-
-INLINE int Log2( i64 n )
-{
-    if( n <= 0 )
-        return -1;
-
-#if COMPILER_MSVC
-    unsigned long result;
-    _BitScanReverse64( &result, (u64)n );
-#elif COMPILER_LLVM
-    NOT_IMPLEMENTED
-#else
-    u32 result = 0;
-    CountShift(32);
-    CountShift(16);
-    CountShift(8);
-    CountShift(4);
-    CountShift(2);
-    CountShift(1);
-#endif
-
-    return (int)result;
-}
-#undef CountShift
-
 INLINE sz
 AlignUp( sz size, sz alignment )
 {
