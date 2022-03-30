@@ -1,3 +1,4 @@
+// NOTE Unused. Just here for reference
 // Taken from https://github.com/HISONA/https_client
 // Modified to add Windows support
 /*
