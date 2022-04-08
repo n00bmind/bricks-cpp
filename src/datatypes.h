@@ -207,6 +207,23 @@ struct Array
         return slot;
     }
 
+    T* Push( T&& item )
+    {
+        T* slot = PushEmpty( false );
+        INIT( *slot )( std::move(item) );
+
+        return slot;
+    }
+
+    template <class... TInitArgs>
+    T* PushInit( TInitArgs&&... args )
+    {
+        T* slot = PushEmpty( false );
+        INIT( *slot )( args... );
+
+        return slot;
+    }
+
     void Remove( T* item )
     {
         ASSERT( item >= begin() && item < end() );
@@ -496,6 +513,15 @@ struct BucketArray
     {
         T* slot = PushEmpty( false );
         INIT( *slot )( std::move(item) );
+        return slot;
+    }
+
+    template <class... TInitArgs>
+    T* PushInit( TInitArgs&&... args )
+    {
+        T* slot = PushEmpty( false );
+        INIT( *slot )( args... );
+
         return slot;
     }
 

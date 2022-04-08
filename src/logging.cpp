@@ -70,17 +70,15 @@ namespace Logging
 
         u32 id = name.Hash32();
 
-        EndpointInfo* match = nullptr;
+        // If an endpoint exists with the same name, just substitute it
         for( EndpointInfo& e : CTX.logState->endpoints )
             if( id == e.id && name == e.name )
             {
                 e = { name.data, endpoint, userdata, id };
-                match = &e;
-                break;
+                return;
             }
 
-        if( !match )
-            CTX.logState->endpoints.Push( { name.data, endpoint, userdata, id } );
+        CTX.logState->endpoints.Push( { name.data, endpoint, userdata, id } );
     }
 
 
@@ -148,6 +146,7 @@ namespace Logging
         //AttachEndpoint( "FileOut", Endpoints::RawFileLog );
 
         // Set up an initial context for the thread
+        // TODO Probably want a version of CreateThread that automates the creation of the arenas
         Context threadContext = InitContext( &state->threadArena, &state->threadTmpArena, state );
         state->thread.STORE_RELAXED( Core::CreateThread( "LoggingThread", LoggingThread, state, threadContext ) );
     }

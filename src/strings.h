@@ -883,20 +883,17 @@ public:
         return StringToLowercase( InPlaceModify(), length );
     }
 
-#if 0
-    // Deep copy
     // dst buffer will be null terminated always
     int CopyTo( char* dst, int dstLen ) const
     {
         ASSERT( dstLen > 0 );
-        int len = Min( length + 1, dstLen );
+        int copyLen = Min( length, dstLen - 1 );
 
-        strncpy( dst, data, (size_t)len );
-        dst[len] = 0;
+        COPYP( data, dst, copyLen );
+        dst[copyLen] = 0;
 
-        return len;
+        return copyLen;
     }
-#endif
 };
 
 // Correctly hash Strings
@@ -907,6 +904,9 @@ INLINE u64  DefaultHashFunc< String >( String const& key )  { return key.Hash();
 // Version accepting string literals only, so we can guarantee a Ref is fine always
 struct StaticString : public String
 {
+    constexpr StaticString()
+    {}
+
     template <size_t N>
     constexpr StaticString( char const (&s)[N], u32 flags_ = 0 )
         : String( flags_ & ~Owned )
@@ -921,12 +921,25 @@ struct StaticString : public String
     template<size_t N> StaticString( char (&)[N] ) = delete;
     //StaticString( char const* ) = delete;
 
+    // Always trivially copy
+    StaticString( StaticString const& rhs )
+    {
+        *this = rhs;
+    }
+
 protected:
     constexpr StaticString( char const* s, size_t len, u32 flags_ = 0 )
         : String( flags & ~Owned )
     {
         data = s;
         length = (int)len;
+    }
+
+    StaticString const& operator =( StaticString const& rhs )
+    {
+        data   = rhs.data;
+        length = rhs.length;
+        return *this;
     }
 
     friend StaticString operator"" _s( const char* s, size_t len );

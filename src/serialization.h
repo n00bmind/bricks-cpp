@@ -189,12 +189,19 @@ ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, F& f, S
     template <typename R, typename T> \
     ReflectResult Reflect( R& r, __VA_ARGS__& d )
 
-// These two don't work with FIELDs
-#define REFLECT_SPECIAL(reflector, ...)      \
+// These don't work with FIELDs
+#define REFLECT_SPECIAL_R(reflector, ...)      \
+    ReflectResult Reflect( reflector& r, __VA_ARGS__& d )
+
+#define REFLECT_SPECIAL_RT(reflector, ...)      \
+    template <typename T> \
+    ReflectResult Reflect( reflector& r, __VA_ARGS__& d )
+
+#define REFLECT_SPECIAL_RW(reflector, ...)      \
     template <bool RW> \
     ReflectResult Reflect( reflector<RW>& r, __VA_ARGS__& d )
 
-#define REFLECT_SPECIAL_T(reflector, ...)      \
+#define REFLECT_SPECIAL_RWT(reflector, ...)      \
     template <bool RW, typename T> \
     ReflectResult Reflect( reflector<RW>& r, __VA_ARGS__& d )
 

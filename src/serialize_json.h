@@ -16,7 +16,7 @@ struct JsonReflector : public Reflector<RW>
     BucketArray<StackEntry> stack;
     StackEntry* head;
 
-    // TODO How do we conditionally define specific attributes based on RW (a union is one way ofc)
+    // TODO How do we conditionally define specific members based on RW (a union is one way ofc)
     StringBuilder* builder;
     char const* debugJsonString;
 
@@ -79,9 +79,10 @@ struct JsonReflector : public Reflector<RW>
 
 protected:
 
-    JsonReflector( Allocator* allocator_ = CTX_TMPALLOC )
-        : Reflector( allocator_ )
-        , stack( 16, allocator_ )
+    JsonReflector( Allocator* allocator = CTX_TMPALLOC )
+        : Reflector( allocator )
+        , stack( 16, allocator )
+        , head( nullptr )
     {
     }
 };
@@ -185,7 +186,7 @@ INLINE void ReflectFieldEnd( u32 fieldOffset, JsonReflector<RW>& r )
 }
 
 
-REFLECT_SPECIAL( JsonReflector, int )
+REFLECT_SPECIAL_RW( JsonReflector, int )
 {
     STATIC_IF( r.IsWriting )
     {
@@ -208,7 +209,7 @@ REFLECT_SPECIAL( JsonReflector, int )
     return ReflectOk;
 }
 
-REFLECT_SPECIAL( JsonReflector, String )
+REFLECT_SPECIAL_RW( JsonReflector, String )
 {
     STATIC_IF( r.IsWriting )
     {
@@ -225,7 +226,7 @@ REFLECT_SPECIAL( JsonReflector, String )
     return ReflectOk;
 }
 
-REFLECT_SPECIAL_T( JsonReflector, Array<T> )
+REFLECT_SPECIAL_RWT( JsonReflector, Array<T> )
 {
     STATIC_IF( r.IsWriting )
     {
