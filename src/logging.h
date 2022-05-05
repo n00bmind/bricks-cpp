@@ -7,7 +7,6 @@ namespace Logging
     x(Info,    "INFO ") \
     x(Warning, "WARN ") \
     x(Error,   "ERROR") \
-    x(Fatal,   "FATAL") \
 
 ENUM_STRUCT_WITH_NAMES(Volume, VOLUME_ITEMS);
 
@@ -68,7 +67,6 @@ ENUM_STRUCT_WITH_NAMES(Volume, VOLUME_ITEMS);
 #define LogI( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Info,      __FILE__, __LINE__, msg, ##__VA_ARGS__ )
 #define LogW( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Warning,   __FILE__, __LINE__, msg, ##__VA_ARGS__ )
 #define LogE( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Error,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
-#define LogF( channel, msg, ... )    Logging::LogInternal( channel, Logging::Volume::Fatal,     __FILE__, __LINE__, msg, ##__VA_ARGS__ )
     void LogInternal( char const* channelName, Volume volume, char const* file, int line, char const* msg, ... );
     void LogInternalVA( char const* channelName, Volume volume, char const* file, int line, char const* msg, va_list args );
 } // namespace Logging

@@ -98,25 +98,25 @@ namespace Win32
                     }
                     else
                     {
-                        globalPlatform.Error( "ReadFile failed for '%s'", filename );
+                        LogE( "Platform", "ReadFile failed for '%s'", filename );
                         resultData = 0;
                     }
                 }
                 else
                 {
-                    globalPlatform.Error( "Couldn't allocate buffer for file contents" );
+                    LogE( "Platform", "Couldn't allocate buffer for file contents" );
                 }
             }
             else
             {
-                globalPlatform.Error( "Failed querying file size for '%s'", filename );
+                LogE( "Platform", "Failed querying file size for '%s'", filename );
             }
 
             CloseHandle( fileHandle );
         }
         else
         {
-            globalPlatform.Error( "Failed opening file '%s' for reading", filename );
+            LogE( "Platform", "Failed opening file '%s' for reading", filename );
         }
 
         return { resultData, resultLength };
@@ -132,7 +132,7 @@ namespace Win32
                                     creationMode, FILE_ATTRIBUTE_NORMAL, NULL ); 
         if( outFile == INVALID_HANDLE_VALUE )
         {
-            globalPlatform.Error( "Could not open '%s' for writing", filename );
+            LogE( "Platform", "Could not open '%s' for writing", filename );
             return false;
         }
 
@@ -145,7 +145,7 @@ namespace Win32
             DWORD bytesWritten;
             if( !WriteFile( outFile, chunk.data, U32( chunk.length ), &bytesWritten, NULL ) )
             {
-                globalPlatform.Error( "Failed writing %d bytes to '%s'", chunk.length, filename );
+                LogE( "Platform", "Failed writing %d bytes to '%s'", chunk.length, filename );
                 error = true;
                 break;
             }
@@ -341,8 +341,8 @@ namespace Win32
         if( pipe == NULL )
         {
             _strerror_s( outBuffer, Size( ARRAYCOUNT(outBuffer) ), "Error executing compiler command" );
-            globalPlatform.Error( outBuffer );
-            globalPlatform.Error( "\n" );
+            LogE( "Platform", outBuffer );
+            LogE( "Platform", "\n" );
         }
         else
         {
@@ -353,7 +353,7 @@ namespace Win32
                 exitCode = _pclose( pipe );
             else
             {
-                globalPlatform.Error( "Failed reading compiler pipe to the end\n" );
+                LogE( "Platform", "Failed reading compiler pipe to the end\n" );
             }
         }
 
@@ -420,7 +420,7 @@ namespace Win32
                 }
 
             if( !result_string )
-                Error( "ERROR [%08x] : %s\n", result, out );
+                LogE( "Platform", "ERROR [%08x] : %s\n", result, out );
         }
 
         return result;
@@ -560,8 +560,8 @@ namespace Win32
         char callstack[16384];
         DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 8 );
 
-        Error( "### UNHANDLED EXCEPTION ###\n" );
-        Error( "%s", callstack );
+        LogE( "Platform", "### UNHANDLED EXCEPTION ###\n" );
+        LogE( "Platform", "%s", callstack );
 
         return EXCEPTION_EXECUTE_HANDLER;
     }
@@ -576,12 +576,12 @@ namespace Win32
         vsnprintf( buffer, ASSERT_SIZE( ARRAYCOUNT(buffer) ), msg, args );
         va_end( args );
 
-        Error( "ASSERTION FAILED! :: \"%s\" (%s@%d)\n", buffer, file, line );
+        LogE( "Platform", "ASSERTION FAILED! :: \"%s\" (%s@%d)\n", buffer, file, line );
 
         char callstack[16384];
         DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 2 );
 
-        Error( "%s", callstack );
+        LogE( "Platform", "%s", callstack );
     }
 
 }

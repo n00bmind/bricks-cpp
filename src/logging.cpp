@@ -121,7 +121,7 @@ namespace Logging
     void Init( State* state, Buffer<ChannelDecl> channels )
     {
         // Init everything from the main thread's arena
-        INIT( state->channels )( I32(channels.length) );
+        INIT( state->channels )( I32(channels.length) + 1 );
         INIT( state->endpoints )( 8 );
         INIT( state->msgBuffer )( 64 * 1024 );
         INIT( state->entryQueue )( 1024 );
@@ -131,6 +131,8 @@ namespace Logging
         InitArena( &state->threadArena );
         InitArena( &state->threadTmpArena );
 
+        // Always add a 'Platform' channel
+        /*Channel* c = */state->channels.PutEmpty( "Platform" );
         for( ChannelDecl const& cd : channels )
         {
             Channel* c = state->channels.PutEmpty( cd.name );
