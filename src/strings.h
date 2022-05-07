@@ -912,7 +912,16 @@ struct StaticString : public String
         : String( flags_ & ~Owned )
     {
         data = s;
-        // Array for includes the null terminator, so dont count it
+        // Size of string literal includes the null terminator, so dont count it
+        length = (int)N - 1;
+    }
+    // TODO Check we can replace (& delete) the above with:
+    template <size_t N>
+    constexpr StaticString( char (&&s)[N], u32 flags_ = 0 )
+        : String( flags_ & ~Owned )
+    {
+        data = s;
+        // Size of string literal includes the null terminator, so dont count it
         length = (int)N - 1;
     }
 
@@ -962,6 +971,13 @@ struct StaticStringHash : public StaticString
         : StaticString( s, flags_ )
         , hash( CompileTimeHash64( s ) )
     {}
+    // TODO Check we can replace (& delete) the above with:
+    template <size_t N>
+    constexpr StaticStringHash( char (&&s)[N], u32 flags_ = 0 )
+        : StaticString( s, flags_ )
+        , hash( CompileTimeHash64( s ) )
+    {}
+
     // for non-const char arrays like buffers
     template<size_t N> StaticStringHash( char (&)[N] ) = delete;
 
@@ -995,6 +1011,14 @@ struct StringBuilder
         buckets.Push( str, length );
     }
 
+    // TODO No way to use this as it will always prefer the above!
+    template <size_t N>
+    void Append( char (&&str)[N] )
+    {
+        // Not including null terminator
+        buckets.Push( str, N - 1 );
+    }
+
     void AppendFormat( char const* fmt, ... )
     {
         va_list args;
@@ -1021,6 +1045,10 @@ struct StringBuilder
     {
         buckets.Push( '\0' );
         return String::CloneTmp( buckets );
+    }
+    char const* ToCStringTmp()
+    {
+        return ToStringTmp().c();
     }
 };
 

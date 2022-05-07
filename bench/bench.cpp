@@ -154,7 +154,7 @@ int main(int argc, char** argv)
         { "Platform" },
         { "Net" },
     };
-    InitGlobalPlatform( channels );
+    Win32::InitGlobalPlatform( channels );
 
     ::benchmark::Initialize(&argc, argv);
     if (::benchmark::ReportUnrecognizedArguments(argc, argv))

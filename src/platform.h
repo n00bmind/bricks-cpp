@@ -210,3 +210,11 @@ struct PlatformAPI
 };
 extern PlatformAPI globalPlatform;
 
+
+namespace Platform
+{
+    void InitContextStack( Context const& baseContext );
+
+    //void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::ChannelDecl> logChannels );
+    void TickGlobalPlatform();
+}

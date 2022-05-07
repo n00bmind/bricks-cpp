@@ -1,6 +1,6 @@
 #pragma once
 
-#define DEBUG_REFLECTION 1
+#define DEBUG_IMGUI_REFLECTION 0
 
 struct ImGuiReflector : public Reflector<true>
 {
@@ -34,26 +34,30 @@ struct ImGuiReflector : public Reflector<true>
 
     }
 
+#if DEBUG_IMGUI_REFLECTION
+#define DEBUG_TXT( msg, ... )   ImGui::TextColored( { 1.f, 1.f, 1.f, 0.5f }, msg, ##__VA_ARGS__ )
+#else
+#define DEBUG_TXT( msg, ... )   
+#endif
+
     bool ObjectTreeNode()
     {
         while( objectDepth < stack.count )
         {
-            ImGuiReflector::StackEntry const& e = stack[ objectDepth ];
+            ImGuiReflector::StackEntry& e = stack[ objectDepth ];
 
             int flags = ImGuiTreeNodeFlags_Framed | ImGuiTreeNodeFlags_NoTreePushOnOpen;
             if( e.flags & ImGuiReflector::ArrayItem )
                 flags &= ~ImGuiTreeNodeFlags_Framed;
 
+            DEBUG_TXT( "--- Do TreeNode for depth %d / %d ('%s')", objectDepth, stack.count, e.name );
+
             bool nodeOpen = ImGui::TreeNodeEx( e.name, flags );
             objectDepth++;
 
-#if DEBUG_REFLECTION
-            ImGui::TextColored( { 1.f, 1.f, 1.f, 0.5f }, "--- Go to depth %d", objectDepth );
-#endif
-
             if( !nodeOpen )
             {
-                //e.flags &= NodeCollapsed;
+                e.flags |= NodeCollapsed;
                 return false;
             }
         }
@@ -64,24 +68,39 @@ struct ImGuiReflector : public Reflector<true>
     bool PushObject( char const* name, u32 flags )
     {
         if( !ObjectTreeNode() )
+        {
+            DEBUG_TXT( "--- DONT Push '%s' (TreeNode is collapsed)", name );
             return false;
-
-#if DEBUG_REFLECTION
-        ImGui::TextColored( { 1.f, 1.f, 1.f, 0.5f }, "--- Start %s", name );
-#endif
+        }
 
         if( head )
         {
             // Parent node is collapsed
-            //if( head->flags & ImGuiReflector::NodeCollapsed )
-            //return false;
+            if( head->flags & ImGuiReflector::NodeCollapsed )
+            {
+                DEBUG_TXT( "--- DONT Push '%s' (NodeCollapsed)", name );
+                return false;
+            }
 
             ImGui::Indent( 20 );
         }
 
+        StackEntry* parent = head;
+
         // Add new node
         head = stack.Push( { name, flags } );
         ImGui::PushID( name );
+
+#if DEBUG_IMGUI_REFLECTION
+        StringBuilder nameBuffer;
+        for( StackEntry const& e : stack )
+        {
+            nameBuffer.Append( e.name );
+            if( &e != &stack.Last() )
+                nameBuffer.Append( "/" );
+        }
+        DEBUG_TXT( "--- Push '%s' (stack depth is now %d)", nameBuffer.ToCStringTmp(), stack.count );
+#endif
 
         return true;
     }
@@ -103,9 +122,7 @@ struct ImGuiReflector : public Reflector<true>
         }
 
         objectDepth = stack.count;
-#if DEBUG_REFLECTION
-        ImGui::TextColored( { 1.f, 1.f, 1.f, 0.5f }, "--- End %s (back at depth %d)", name, objectDepth );
-#endif
+        DEBUG_TXT( "--- Pop '%s' (back at depth %d)", name, objectDepth );
     }
 };
 

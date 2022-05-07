@@ -584,43 +584,42 @@ namespace Win32
         LogE( "Platform", "%s", callstack );
     }
 
-}
 
 
+    void InitGlobalPlatform( Buffer<Logging::ChannelDecl> const& logChannels )
+    {
+        PlatformAPI win32API = {};
+        win32API.Alloc                = Alloc;
+        win32API.Free                 = Free;
+        win32API.GetContext           = Platform::GetContext;
+        win32API.PushContext          = Platform::PushContext;
+        win32API.PopContext           = Platform::PopContext;
+        win32API.ReadEntireFile       = ReadEntireFile;
+        win32API.WriteEntireFile      = WriteEntireFile;
+        win32API.CreateThread         = CreateThread;
+        win32API.JoinThread           = JoinThread;
+        win32API.GetThreadId          = GetThreadId;
+        win32API.IsMainThread         = IsMainThread;
+        win32API.CreateSemaphore      = CreateSemaphore;
+        win32API.DestroySemaphore     = DestroySemaphore;
+        win32API.WaitSemaphore        = WaitSemaphore;
+        win32API.SignalSemaphore      = SignalSemaphore;
+        win32API.CreateMutex          = CreateMutex;
+        win32API.DestroyMutex         = DestroyMutex;
+        win32API.LockMutex            = LockMutex;
+        win32API.UnlockMutex          = UnlockMutex;
+        win32API.ElapsedTimeMillis    = ElapsedTimeMillis;
+        win32API.ShellExecute         = ShellExecute;
+        win32API.Print                = Print;
+        win32API.Error                = Error;
+        win32API.PrintVA              = PrintVA;
+        win32API.ErrorVA              = ErrorVA;
+        win32API.DefaultAssertHandler = DefaultAssertHandler;
 
-void InitGlobalPlatform( Buffer<Logging::ChannelDecl> const& logChannels )
-{
-    PlatformAPI win32API = {};
-    win32API.Alloc = Win32::Alloc;
-    win32API.Free = Win32::Free;
-    win32API.GetContext = Platform::GetContext;
-    win32API.PushContext = Platform::PushContext;
-    win32API.PopContext = Platform::PopContext;
-    win32API.ReadEntireFile = Win32::ReadEntireFile;
-    win32API.WriteEntireFile = Win32::WriteEntireFile;
-    win32API.CreateThread = Win32::CreateThread;
-    win32API.JoinThread = Win32::JoinThread;
-    win32API.GetThreadId = Win32::GetThreadId;
-    win32API.IsMainThread = Win32::IsMainThread;
-    win32API.CreateSemaphore = Win32::CreateSemaphore;
-    win32API.DestroySemaphore = Win32::DestroySemaphore;
-    win32API.WaitSemaphore = Win32:: WaitSemaphore;
-    win32API.SignalSemaphore = Win32::SignalSemaphore;
-    win32API.CreateMutex = Win32::CreateMutex;
-    win32API.DestroyMutex = Win32::DestroyMutex;
-    win32API.LockMutex = Win32::LockMutex;
-    win32API.UnlockMutex = Win32::UnlockMutex;
-    win32API.ElapsedTimeMillis = Win32::ElapsedTimeMillis;
-    win32API.ShellExecute = Win32::ShellExecute;
-    win32API.Print = Win32::Print;
-    win32API.Error = Win32::Error;
-    win32API.PrintVA = Win32::PrintVA;
-    win32API.ErrorVA = Win32::ErrorVA;
-    win32API.DefaultAssertHandler = Win32::DefaultAssertHandler;
+        Platform::InitGlobalPlatform( win32API, logChannels );
 
-    Platform::InitGlobalPlatform( win32API, logChannels );
-
-    // TODO At the moment, InitGlobalPlatform above needs the win32 platform ready to be able to create a thread,
-    // while InitState here relies on the globalPlatform being already set up. Clarify this!!
-    Win32::InitState( &Win32::platformState );
+        // TODO At the moment, Platform::InitGlobalPlatform above needs the win32 platform ready to be able to create a thread,
+        // while InitState here relies on the globalPlatform being already set up. Clarify this!!
+        InitState( &platformState );
+    }
 }

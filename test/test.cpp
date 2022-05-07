@@ -641,7 +641,7 @@ GTEST_API_ int main(int argc, char **argv)
         { "Platform" },
         { "Net" },
     };
-    InitGlobalPlatform( channels );
+    Win32::InitGlobalPlatform( channels );
 
     bool result = Http::Init( &globalState.http );
     ASSERT_EQ( result, true ) << "Http::Init failed";

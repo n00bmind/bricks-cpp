@@ -68,5 +68,10 @@ void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::Channel
     Logging::Init( GetGlobalLoggingState(), logChannels );
 }
 
+void TickGlobalPlatform()
+{
+    ClearArena( &globalTmpArena );
+}
+
 } // namespace Platform
 
