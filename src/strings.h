@@ -708,7 +708,7 @@ public:
 
         String line = String::Ref( data, I32(atNL - data) );
 
-        data = onePastNL;
+        data = onePastNL ? onePastNL : data + lineLen;
         length -= lineLen;
 
         return line;

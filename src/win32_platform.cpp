@@ -588,7 +588,7 @@ namespace Win32
 
 
 
-void InitGlobalPlatform( Buffer<Logging::ChannelDecl> logChannels )
+void InitGlobalPlatform( Buffer<Logging::ChannelDecl> const& logChannels )
 {
     PlatformAPI win32API = {};
     win32API.Alloc = Win32::Alloc;

@@ -66,6 +66,16 @@ struct Array
         data = ALLOC_ARRAY( allocator, T, capacity, memParams );
     }
 
+    // Initializing from a temporary array needs to allocate and copy
+    // TODO For some reason, passing an array with a single int will always match the above constructor instead!
+    template <size_t N>
+    explicit Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+        : Array( (int)N, allocator_, params )
+    {
+        ResizeToCapacity();
+        COPYP( data_, data, capacity * SIZEOF(T) );
+    }
+
     // NOTE Arrays initialized from a buffer have count set equal to their capacity by default
     Array( T* buffer, i32 bufferLen, i32 initialCount = -1 )
         : data( buffer )
@@ -77,6 +87,17 @@ struct Array
         ASSERT( count >= 0 && count <= capacity );
     }
 
+    // Initialize from a Buffer of the same type (same as above)
+    Array( Buffer<T> const& buffer )
+        : Array( buffer.data, (int)buffer.length, (int)buffer.length )
+    {}
+
+    // Initialize from an l-value array of the same type (same as above)
+    template <size_t N>
+    explicit Array( T (&data_)[N] )
+        : Array( data_, (int)N, (int)N )
+    {}
+
     // Convert from any static array of a compatible type
     // NOTE The array itself must be an lvalue, so passing an array literal directly as the constructor argument wont work!
     // TODO can we do a const version that does it?
@@ -86,10 +107,6 @@ struct Array
         : Array( data_, (int)N, (int)N )
         {}
 #endif
-
-    Array( Buffer<T> buffer )
-        : Array( buffer.data, (int)buffer.length, (int)buffer.length )
-    {}
 
     ~Array()
     {
@@ -380,6 +397,8 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 // Items are always kept compact, so iteration remains really fast. Since bucket sizes are Po2, it can be iterated using a normal integer index
 // or with the provided iterator (for new-style 'for each').
 
+// TODO Benchmark this against std::vector and the compact_vector proposed in https://www.sebastiansylvan.com/post/space-efficient-rresizable-arrays/
+// (the twitter thread https://twitter.com/andy_kelley/status/1516949533413892096?t=vEW63veywf4fqhfBfPRQSA&s=03 is quite interesting)
 template <typename T, typename AllocType = Allocator>
 struct BucketArray
 {

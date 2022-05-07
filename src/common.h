@@ -36,7 +36,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
 // TODO Some POSIX version of this
-#define HALT() ((IsDebuggerPresent() && (__debugbreak(), 1)) || (exit(1), 1))
+#define TRAP __debugbreak()
 
 #if CONFIG_RELEASE
 #define ASSERT(expr, ...) ((void)0)
@@ -44,7 +44,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define ASSERT(expr, ...) \
     ((void)( !(expr) \
              && (GetGlobalAssertHandler()( __FILE__, __LINE__, IF_ELSE( HAS_ARGS(__VA_ARGS__) )( __VA_ARGS__ )( #expr ) ), 1) \
-             && HALT() ))
+             && (TRAP, 1) ))
 #endif
 
 #define ASSERT_HANDLER(name) void name( const char* file, int line, const char* msg, ... )
@@ -314,7 +314,6 @@ Size( sz value )
     return (size_t)value;
 }
 
-
 /////     BUFFER VIEW    /////
 
 template <typename T = void>
@@ -335,8 +334,7 @@ public:
     {}
 
     // Convert from any static array of a compatible type
-    // NOTE The array itself must be an lvalue, so passing an array literal directly as the constructor argument wont work!
-    // TODO can we do a const version that does it?
+    // NOTE The array itself must be an lvalue, since by definition Buffers only reference data
     template <typename SrcT, size_t N>
     Buffer( SrcT (&data_)[N] )
         : data( data_ )
