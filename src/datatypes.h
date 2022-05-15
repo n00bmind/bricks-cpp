@@ -68,8 +68,9 @@ struct Array
 
     // Initializing from a temporary array needs to allocate and copy
     // TODO For some reason, passing an array with a single int will always match the above constructor instead!
+    // TODO This still doesnt work when we're inside a struct and trying to initialize with an 'initializer list'
     template <size_t N>
-    explicit Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
         : Array( (int)N, allocator_, params )
     {
         ResizeToCapacity();

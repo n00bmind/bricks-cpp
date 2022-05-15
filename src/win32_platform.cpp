@@ -563,6 +563,8 @@ namespace Win32
         LogE( "Platform", "### UNHANDLED EXCEPTION ###\n" );
         LogE( "Platform", "%s", callstack );
 
+        // TODO Write minidump
+
         return EXCEPTION_EXECUTE_HANDLER;
     }
 

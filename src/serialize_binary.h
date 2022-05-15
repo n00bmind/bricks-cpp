@@ -11,6 +11,7 @@ struct BinaryReflector : public Reflector<RW>
     BinaryReflector( BucketArray<u8>* b, Allocator* allocator = CTX_TMPALLOC )
         : Reflector( allocator )
         , buffer( b )
+        , bufferHead( 0 )
     {}
 };
 
@@ -131,8 +132,9 @@ template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* 
     if ( info->fieldCount++ == 0 )
         info->firstFieldOffset = r.buffer->count;
 
-    r.buffer->Push( (u8*)fieldId, sizeof(u8) );
-    r.buffer->Push( (u8*)0ULL, sizeof(u32) );
+    r.buffer->Push( (u8*)&fieldId, sizeof(u8) );
+    i32 size = 0;
+    r.buffer->Push( (u8*)&size, sizeof(u32) );
 
     return true;
 }
@@ -241,12 +243,109 @@ ReflectResult ReflectBytes( R& r, T& d )
         if( r.bufferHead + SIZEOF(T) > r.buffer->count )
             return { ReflectResult::BufferOverflow };
 
-        r.buffer->CopyTo( (u8*)&d, sizeof(T) );
+        // TODO Abstract these two into a single op so we never forget
+        r.buffer->CopyTo( (u8*)&d, sizeof(T), r.bufferHead );
+        r.bufferHead += sizeof(T);
     }
     return ReflectOk;
 }
 
-REFLECT_SPECIAL_RW( BinaryReflector, int )
+template <typename R>
+ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
+{
+    STATIC_IF( r.IsWriting )
+    {
+        r.buffer->Push( (u8*)buffer, sizeBytes );
+    }
+    else
+    {
+        if( r.bufferHead + sizeBytes > r.buffer->count )
+            return { ReflectResult::BufferOverflow };
+
+        r.buffer->CopyTo( (u8*)buffer, sizeBytes, r.bufferHead );
+        r.bufferHead += sizeBytes;
+    }
+    return ReflectOk;
+}
+
+template <typename R, typename T>
+ReflectResult ReflectBytes( R& r, T* buffer, int bufferLen )
+{
+    return ReflectBytesRaw( r, (void*)buffer, bufferLen * sizeof(T) );
+}
+
+REFLECT( i32 )
 {
     return ReflectBytes( r, d );
 }
+
+REFLECT( u32 )
+{
+    return ReflectBytes( r, d );
+}
+
+REFLECT( String )
+{
+    i32 length = d.length;
+    Reflect( r, length );
+
+    u32 flags = d.flags;
+    Reflect( r, flags );
+
+    STATIC_IF( r.IsReading )
+        d.Reset( length, flags );
+
+    return ReflectBytes( r, d.data, length );
+}
+
+REFLECT_T( Array<T> )
+{
+    i32 count = d.count;
+    Reflect( r, count );
+
+    STATIC_IF( r.IsReading )
+    {
+        d.Reset( count );
+        d.ResizeToCapacity();
+    }
+
+    ReflectResult result = ReflectOk;
+    for( int i = 0; i < count; ++i )
+    {
+        result = Reflect( r, d[i] );
+        if( !result )
+            break;
+    }
+    return result;
+}
+
+template <typename R, typename T>
+ReflectResult ReflectArrayPOD( R& r, T& d )
+{
+    i32 count = d.count;
+    Reflect( r, count );
+
+    STATIC_IF( r.IsReading )
+    {
+        d.Reset( count );
+        d.ResizeToCapacity();
+    }
+
+    return ReflectBytes( r, d.data, count );
+}
+
+// Faster path for arrays of simple types
+// TODO Keep adding suitable types here
+REFLECT( Array<bool> )      { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<char> )      { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<u8> )        { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<u16> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<u32> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<u64> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<i8> )        { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<i16> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<i32> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<i64> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<f32> )       { return ReflectArrayPOD( r, d ); }
+REFLECT( Array<f64> )       { return ReflectArrayPOD( r, d ); }
+

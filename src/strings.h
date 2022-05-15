@@ -443,10 +443,10 @@ struct String
         return *this;
     }
 
-private:
     // Length not counting the null terminator (which will be added)
-    explicit String( int len, u32 flags_ = 0 )
+    void Reset( int len, u32 flags_ = 0 )
     {
+        Clear();
         flags = flags_ | Owned;
         length = len;
 
@@ -454,6 +454,12 @@ private:
         data = ALLOC_ARRAY( allocator, char, len + 1 );
         // Null terminate it even if we expect we'll be writing to data later
         ((char*)data)[len] = 0;
+    }
+
+private:
+    explicit String( int len, u32 flags_ = 0 )
+    {
+        Reset( len, flags );
     }
 
     // Will copy len chars and append an extra null-terminator at the end

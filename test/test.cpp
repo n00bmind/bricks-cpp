@@ -70,6 +70,14 @@ struct
 #pragma warning( disable : 5219 )
 
 
+#define DEBUG_LOG 1
+#if DEBUG_LOG
+    #define LOG( m, ... ) printf( m "\n", ##__VA_ARGS__ );
+#else
+    #define LOG( ... )
+#endif
+
+
 // TODO Math tests
 
 //// Serialization
@@ -87,13 +95,6 @@ REFLECT( SerialTypeSimple )
     return ReflectOk;
 }
 
-struct SerialTypeComplex
-{
-    SerialTypeSimple simple;
-    Array<int> nums;
-    String str;
-};
-
 TEST( Serialization, SerializeSimpleType )
 {
     // Test a really small bucket size
@@ -103,12 +104,59 @@ TEST( Serialization, SerializeSimpleType )
     SerialTypeSimple before = { 42 };
     Reflect( w, before );
 
+    LOG( "Size of serialized SerialTypeSimple: %d", buffer.count );
+
     BinaryReader r( &buffer );
     SerialTypeSimple after;
     Reflect( r, after );
 
-    ASSERT_TRUE( memcmp( &before, &after, sizeof(before) ) == 0 );
+    ASSERT_TRUE( EQUAL( before, after ) );
 }
+
+struct SerialTypeComplex
+{
+    SerialTypeSimple simple;
+    Array<int> nums;
+    String str;
+
+    bool operator ==( SerialTypeComplex const& rhs )
+    {
+        return EQUAL( simple, rhs.simple )
+            && nums == rhs.nums
+            && str == rhs.str;
+    }
+};
+
+REFLECT( SerialTypeComplex )
+{
+    BEGIN_FIELDS;
+    FIELD( 1, simple );
+    FIELD( 2, nums );
+    FIELD( 3, str );
+
+    return ReflectOk;
+}
+
+TEST( Serialization, SerializeComplexType )
+{
+    BucketArray<u8> buffer( 128 );
+    BinaryWriter w( &buffer );
+
+    SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
+    INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
+    Reflect( w, before );
+
+    LOG( "Size of serialized SerialTypeComplex: %d", buffer.count );
+
+    BinaryReader r( &buffer );
+    SerialTypeComplex after;
+    Reflect( r, after );
+
+    ASSERT_TRUE( before == after );
+}
+
+// TODO Test removing / reordering attributes while loading
+
 
 //// Data types
 
@@ -679,6 +727,7 @@ TEST(HttpsToHttpRedirectTest3, SimpleInterface) {
 GTEST_API_ int main(int argc, char **argv)
 {
 #if 1
+    // TODO Doesnt seem to work at all inside Google Test
     SetUnhandledExceptionFilter( Win32::ExceptionHandler );
 #endif
 
