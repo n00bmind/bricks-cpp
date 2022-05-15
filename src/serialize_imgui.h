@@ -4,8 +4,8 @@
 
 struct ImGuiReflector : public Reflector<true>
 {
-    static constexpr bool IsReading = false;
-    static constexpr bool IsWriting = false;
+    static constexpr bool IsReading = true;
+    static constexpr bool IsWriting = true;
 
     enum Flags
     {
@@ -131,7 +131,7 @@ INLINE u32 ReflectFieldOffset( ImGuiReflector& r )
     return 0;
 }
 
-INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectFieldInfo<ImGuiReflector>* info, ImGuiReflector& r )
+INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectedTypeInfo<ImGuiReflector>* info, ImGuiReflector& r )
 {
     return r.PushObject( name, 0u );
 }

@@ -41,6 +41,8 @@
 #include "strings.h"
 #include "logging.h"
 #include "http.h"
+#include "serialization.h"
+#include "serialize_binary.h"
 
 #include "common.cpp"
 #include "logging.cpp"
@@ -69,6 +71,46 @@ struct
 
 
 // TODO Math tests
+
+//// Serialization
+
+struct SerialTypeSimple
+{
+    int num;
+};
+
+REFLECT( SerialTypeSimple )
+{
+    BEGIN_FIELDS;
+    FIELD( 1, num );
+
+    return ReflectOk;
+}
+
+struct SerialTypeComplex
+{
+    SerialTypeSimple simple;
+    Array<int> nums;
+    String str;
+};
+
+TEST( Serialization, SerializeSimpleType )
+{
+    // Test a really small bucket size
+    BucketArray<u8> buffer( 8 );
+    BinaryWriter w( &buffer );
+
+    SerialTypeSimple before = { 42 };
+    Reflect( w, before );
+
+    BinaryReader r( &buffer );
+    SerialTypeSimple after;
+    Reflect( r, after );
+
+    ASSERT_TRUE( memcmp( &before, &after, sizeof(before) ) == 0 );
+}
+
+//// Data types
 
 class DatatypesTest : public testing::Test
 {
@@ -169,6 +211,8 @@ TEST_F( DatatypesTest, SyncQueuePushPop )
 }
 
 
+//// Threading
+
 template <typename T>
 PLATFORM_THREAD_FUNC(MutexTesterThread);
 template <typename T>
@@ -225,6 +269,8 @@ TEST( Threading, MutexTest )
     MutexTester<RecursiveBenaphore<Semaphore>>( 4, 100000 ).Test();
 }
 
+
+//// Http
 
 // TODO Only do http tests if we detect we're connected. Otherwise show a warning
 class HttpTest : public testing::Test

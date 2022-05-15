@@ -99,7 +99,7 @@ INLINE u32 ReflectFieldOffset( JsonReflector<RW>& r )
 }
 
 template <bool RW>
-INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectFieldInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
+INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectedTypeInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
 {
     // NOTE Use if constexpr when available to obliterate the check and not-taken branch even in Debug
     STATIC_IF( r.IsWriting )

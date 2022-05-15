@@ -455,7 +455,7 @@ struct BucketArray
         bucketBuffer = ALLOC_ARRAY( allocator, Bucket, bucketBufferCapacity, memParams );
 
         // We need a minimum size to be able to chain it in the freelist when retiring
-        ASSERT( bucketSize * sizeof(T) > sizeof(T*), "Bucket size too small" );
+        ASSERT( bucketSize * sizeof(T) >= sizeof(T*), "Bucket size too small" );
         // Allocate a single initial bucket
         AllocBucket();
     }
@@ -490,18 +490,24 @@ struct BucketArray
     bool        Empty() const   { return count == 0; }
 
 
+    INLINE void FindBucket( sz index, int* bucketIndex, int* indexInBucket ) const
+    {
+        const int bucketShift = Log2( bucketCapacity );
+        *bucketIndex   = (int)(index >> bucketShift);
+        *indexInBucket = (int)(index & (bucketCapacity - 1));
+    }
+
     // Same as an Array, we don't allow gaps in between elements, so the given index acts as a mask of the bucket index + index in the bucket
-    INLINE T& operator []( int index )
+    INLINE T& operator []( sz index )
     { 
         ASSERT( index >= 0 && index < count, "BucketArray[%d] out of bounds (%d)", index, count );
 
-        const int bucketShift = Log2( bucketCapacity );
-        const int bucketIndex = index >> bucketShift;
-        const int indexInBucket = index & (bucketCapacity - 1);
+        int bucketIndex, indexInBucket;
+        FindBucket( index, &bucketIndex, &indexInBucket );
 
         return bucketBuffer[ bucketIndex ].data[ indexInBucket ];
     }
-    INLINE T const& operator []( int index ) const    
+    INLINE T const& operator []( sz index ) const    
     { 
         return (*(BucketArray<T, AllocType>*)this)[ index ];
     }
@@ -518,6 +524,18 @@ struct BucketArray
             INIT( *result );
 
         count++;
+        return result;
+    }
+    T* PushEmpty( int itemCount, bool clear = true )
+    {
+        T* result = nullptr;
+        for( int i = 0; i < itemCount; ++i )
+        {
+            T* it = PushEmpty( clear );
+            if( i == 0 )
+                result = it;
+        }
+
         return result;
     }
 
@@ -603,6 +621,25 @@ struct BucketArray
             Bucket const& b = bucketBuffer[i];
             COPYP( b.data, buffer, b.count * SIZEOF(T) );
             buffer += b.count;
+        }
+    }
+
+    void CopyTo( T* buffer, int itemCount, sz sourceOffset ) const
+    {
+        ASSERT( sourceOffset + itemCount <= count );
+
+        int bucketIndex, indexInBucket;
+        FindBucket( sourceOffset, &bucketIndex, &indexInBucket );
+
+        int copied = 0;
+        while( copied < itemCount )
+        {
+            Bucket const& b = bucketBuffer[bucketIndex++];
+
+            int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
+            COPYP( b.data + indexInBucket, buffer + copied, itemsToCopy * SIZEOF(T) );
+            copied += itemsToCopy;
+            indexInBucket = 0;
         }
     }
 

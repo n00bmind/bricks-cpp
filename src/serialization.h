@@ -83,16 +83,12 @@ protected:
 
 
 template <typename R>
-struct ReflectFieldInfo
+struct ReflectedTypeInfo
 {
     R* reflector;
 
-    ReflectFieldInfo( R* r )
+    ReflectedTypeInfo( R* r )
         : reflector( r )
-    {
-    }
-
-    ~ReflectFieldInfo()
     {
     }
 };
@@ -112,7 +108,7 @@ struct ReflectFieldInfo
 
 // Nasty trick to allow using anything as template param when R is not defined
 #define BEGIN_FIELDS \
-    ReflectFieldInfo<R> _reflectInfo( &r );
+    ReflectedTypeInfo<R> _reflectInfo( &r );
 
 // TODO Can we remove either pair of ReflectFieldStart/End or ReflectFieldPush/Pop?
 // (try to put all functionality in either of those!)
@@ -121,9 +117,9 @@ struct ReflectFieldInfo
 
 // TODO Compare timings against the macro version below
 // FIXME Setting attributes on the reflector like this means they're not correctly set/unset across a hierarchy
-// We'd need a stack of them. We could maybe put ReflectFieldInfo there ?, along with any other stuff (json stack) too!
+// We'd need a stack of them. We could maybe put ReflectedTypeInfo there ?, along with any other stuff (json stack) too!
 template <typename R, typename F>
-INLINE ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, F& f, StaticString const& name, FieldAttributes const& attribs )
+INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name, FieldAttributes const& attribs )
 {                                                         
     const u32 fieldOffset = ReflectFieldOffset( r );      
     if( ReflectFieldStart( id, name, &info, r ) ) 
@@ -144,7 +140,7 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, 
     return ReflectOk;
 }
 template <typename R, typename F>
-ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, F& f, StaticString const& name )
+ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name )
 {
     return ReflectFieldBody( r, info, id, f, name, {} );
 }
@@ -152,7 +148,7 @@ ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, F& f, S
 #define FIELD_NAMED( id, f, name, ... )     ReflectFieldBody( r, _reflectInfo, id, d.f, name,   ##__VA_ARGS__ )
 #define FIELD_LOCAL( id, f, ... )           ReflectFieldBody( r, _reflectInfo, id, f,   #f,     ##__VA_ARGS__ )
 
-#else
+#else // DEBUG_FIELD_BODY
 
 #define _FIELD_BODY( id, f, name, ... )                   \
 {                                                         \
@@ -177,7 +173,7 @@ ReflectResult ReflectFieldBody( R& r, ReflectFieldInfo<R>& info, u16 id, F& f, S
 #define FIELD_NAMED( id, f, name, ... )     _FIELD_BODY( id, d.f, name, ##__VA_ARGS__ )
 #define FIELD_LOCAL( id, f, ... )           _FIELD_BODY( id, f,   #f, ##__VA_ARGS__ )
 
-#endif
+#endif // DEBUG_FIELD_BODY
 
 
 
