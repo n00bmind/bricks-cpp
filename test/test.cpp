@@ -155,7 +155,82 @@ TEST( Serialization, SerializeComplexType )
     ASSERT_TRUE( before == after );
 }
 
-// TODO Test removing / reordering attributes while loading
+struct SerialTypeComplex2
+{
+    SerialTypeSimple simple;
+    Array<int> nums;
+    String str;
+
+    bool operator ==( SerialTypeComplex const& rhs )
+    {
+        return EQUAL( simple, rhs.simple )
+            && nums == rhs.nums
+            && str == rhs.str;
+    }
+};
+
+REFLECT( SerialTypeComplex2 )
+{
+    BEGIN_FIELDS;
+    FIELD( 1, simple );
+    FIELD( 3, str );
+    FIELD( 2, nums );
+
+    return ReflectOk;
+}
+
+TEST( Serialization, SerializeReorderedAttribute )
+{
+    BucketArray<u8> buffer( 128 );
+    BinaryWriter w( &buffer );
+
+    SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
+    INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
+    Reflect( w, before );
+
+    BinaryReader r( &buffer );
+    SerialTypeComplex2 after;
+    Reflect( r, after );
+
+    ASSERT_TRUE( after == before );
+}
+
+struct SerialTypeComplex3
+{
+    SerialTypeSimple simple;
+    String str;
+
+    bool operator ==( SerialTypeComplex const& rhs )
+    {
+        return EQUAL( simple, rhs.simple )
+            && str == rhs.str;
+    }
+};
+
+REFLECT( SerialTypeComplex3 )
+{
+    BEGIN_FIELDS;
+    FIELD( 1, simple );
+    FIELD( 3, str );
+
+    return ReflectOk;
+}
+
+TEST( Serialization, SerializeRemovedAttribute )
+{
+    BucketArray<u8> buffer( 128 );
+    BinaryWriter w( &buffer );
+
+    SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
+    INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
+    Reflect( w, before );
+
+    BinaryReader r( &buffer );
+    SerialTypeComplex3 after;
+    Reflect( r, after );
+
+    ASSERT_TRUE( after == before );
+}
 
 
 //// Data types

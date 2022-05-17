@@ -17,13 +17,14 @@ struct JsonReflector : public Reflector<RW>
     StackEntry* head;
 
     // TODO How do we conditionally define specific members based on RW (a union is one way ofc)
+    // Another is something like: std::conditional_t< RW, ReaderImpl, WriterImpl > impl;
     StringBuilder* builder;
     char const* debugJsonString;
 
     // Stupid SFINAE crap to allow different constructor signatures specific to readers & writers
 
     // JsonWriter
-    template <bool RW_ = RW, std::enable_if_t< RW == RW_ && !RW >* = nullptr>
+    template <bool _RW = RW, std::enable_if_t< _RW == RW && !RW >* = nullptr>
     JsonReflector( StringBuilder* sb, Allocator* allocator = CTX_TMPALLOC )
         : JsonReflector( allocator )
     {
@@ -40,7 +41,7 @@ struct JsonReflector : public Reflector<RW>
     }
 
     // JsonReader
-    template <bool RW_ = RW, std::enable_if_t< RW == RW_ && RW >* = nullptr>
+    template <bool _RW = RW, std::enable_if_t< _RW == RW && RW >* = nullptr>
     JsonReflector( json_value_s* root, Allocator* allocator = CTX_TMPALLOC )
         : JsonReflector( allocator )
     {

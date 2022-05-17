@@ -1,14 +1,16 @@
 #pragma once
 
-// NOTE Uses temporary memory by default!
-template <bool RW>
+// TODO How do we control allocations in the buffer without being super sneaky!?
+// TODO Should we have an alternative version of this that creates the buffer in-line instead of having it passed in?
+// TIL about template template parameters ..
+// https://stackoverflow.com/questions/38200959/template-template-parameters-without-specifying-inner-type
+template <bool RW, template <typename...> typename BufferType = BucketArray>
 struct BinaryReflector : public Reflector<RW>
 {
-    // FIXME We'd just want an Array for the loader
-    BucketArray<u8>* buffer;
+    BufferType<u8>* buffer;
     i32 bufferHead;
 
-    BinaryReflector( BucketArray<u8>* b, Allocator* allocator = CTX_TMPALLOC )
+    BinaryReflector( BufferType<u8>* b, Allocator* allocator = CTX_TMPALLOC )
         : Reflector( allocator )
         , buffer( b )
         , bufferHead( 0 )
@@ -250,6 +252,19 @@ ReflectResult ReflectBytes( R& r, T& d )
     return ReflectOk;
 }
 
+REFLECT( bool )         { return ReflectBytes( r, d ); }
+REFLECT( char )         { return ReflectBytes( r, d ); }
+REFLECT( i8 )           { return ReflectBytes( r, d ); }
+REFLECT( i16 )          { return ReflectBytes( r, d ); }
+REFLECT( i32 )          { return ReflectBytes( r, d ); }
+REFLECT( i64 )          { return ReflectBytes( r, d ); }
+REFLECT( u8 )           { return ReflectBytes( r, d ); }
+REFLECT( u16 )          { return ReflectBytes( r, d ); }
+REFLECT( u32 )          { return ReflectBytes( r, d ); }
+REFLECT( u64 )          { return ReflectBytes( r, d ); }
+REFLECT( f32 )          { return ReflectBytes( r, d ); }
+REFLECT( f64 )          { return ReflectBytes( r, d ); }
+
 template <typename R>
 ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
 {
@@ -272,16 +287,6 @@ template <typename R, typename T>
 ReflectResult ReflectBytes( R& r, T* buffer, int bufferLen )
 {
     return ReflectBytesRaw( r, (void*)buffer, bufferLen * sizeof(T) );
-}
-
-REFLECT( i32 )
-{
-    return ReflectBytes( r, d );
-}
-
-REFLECT( u32 )
-{
-    return ReflectBytes( r, d );
 }
 
 REFLECT( String )
