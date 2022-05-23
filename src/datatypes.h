@@ -659,6 +659,25 @@ struct BucketArray
         }
     }
 
+    void CopyFrom( T* buffer, int itemCount, sz targetOffset )
+    {
+        ASSERT( targetOffset + itemCount <= count );
+
+        int bucketIndex, indexInBucket;
+        FindBucket( targetOffset, &bucketIndex, &indexInBucket );
+
+        int copied = 0;
+        while( copied < itemCount )
+        {
+            Bucket const& b = bucketBuffer[bucketIndex++];
+
+            int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
+            COPYP( buffer + copied, b.data + indexInBucket, itemsToCopy * SIZEOF(T) );
+            copied += itemsToCopy;
+            indexInBucket = 0;
+        }
+    }
+
 
 private:
     Bucket* AllocBucket()

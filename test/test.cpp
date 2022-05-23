@@ -98,7 +98,7 @@ REFLECT( SerialTypeSimple )
 TEST( Serialization, SerializeSimpleType )
 {
     // Test a really small bucket size
-    BucketArray<u8> buffer( 8 );
+    BucketArray<u8> buffer( 8, CTX_TMPALLOC );
     BinaryWriter w( &buffer );
 
     SerialTypeSimple before = { 42 };
@@ -139,7 +139,7 @@ REFLECT( SerialTypeComplex )
 
 TEST( Serialization, SerializeComplexType )
 {
-    BucketArray<u8> buffer( 128 );
+    BucketArray<u8> buffer( 128, CTX_TMPALLOC );
     BinaryWriter w( &buffer );
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
@@ -181,7 +181,7 @@ REFLECT( SerialTypeComplex2 )
 
 TEST( Serialization, SerializeReorderedAttribute )
 {
-    BucketArray<u8> buffer( 128 );
+    BucketArray<u8> buffer( 128, CTX_TMPALLOC );
     BinaryWriter w( &buffer );
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
@@ -218,7 +218,7 @@ REFLECT( SerialTypeComplex3 )
 
 TEST( Serialization, SerializeRemovedAttribute )
 {
-    BucketArray<u8> buffer( 128 );
+    BucketArray<u8> buffer( 128, CTX_TMPALLOC );
     BinaryWriter w( &buffer );
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };

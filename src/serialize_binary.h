@@ -1,7 +1,5 @@
 #pragma once
 
-// TODO How do we control allocations in the buffer without being super sneaky!?
-// TODO Should we have an alternative version of this that creates the buffer in-line instead of having it passed in?
 // TIL about template template parameters ..
 // https://stackoverflow.com/questions/38200959/template-template-parameters-without-specifying-inner-type
 template <bool RW, template <typename...> typename BufferType = BucketArray>
@@ -14,7 +12,11 @@ struct BinaryReflector : public Reflector<RW>
         : Reflector( allocator )
         , buffer( b )
         , bufferHead( 0 )
-    {}
+    {
+        // TODO How do we control allocations in the buffer (make them use the same allocator this uses) without being super sneaky!?
+        // TODO Maybe writers should just include the buffer inline?
+        ASSERT( RW || b->allocator == allocator, "Buffer and reflector have different allocators" );
+    }
 };
 
 using BinaryReader = BinaryReflector<true>;
@@ -28,13 +30,8 @@ INLINE void BinaryFieldEncodeLarge( BucketArray<u8>* buffer, int offset, i32 fie
     ASSERT( fieldId < U8MAX, "Id cannot exceed 255 per element" );
     ASSERT( size >= 0 );
 
-    ASSERT( offset < buffer->count - binaryFieldSize );
-    // We cannot just memcpy, so for simplicity put the bytes in there one by one
-    (*buffer)[ offset++ ] = (u8)fieldId;
-    (*buffer)[ offset++ ] = (u8)(((u32)size >>  0) & 0xFF);
-    (*buffer)[ offset++ ] = (u8)(((u32)size >>  8) & 0xFF);
-    (*buffer)[ offset++ ] = (u8)(((u32)size >> 16) & 0xFF);
-    (*buffer)[ offset++ ] = (u8)(((u32)size >> 24) & 0xFF);
+    buffer->CopyFrom( (u8*)fieldId, 1, offset );
+    buffer->CopyFrom( (u8*)size,    4, offset + 1 );
 }
 INLINE void BinaryFieldDecodeLarge( BucketArray<u8> const& buffer, int offset, i32* fieldIdOut, i32* sizeOut )
 {
