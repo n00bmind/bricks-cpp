@@ -14,31 +14,48 @@ struct BinaryReflector : public Reflector<RW>
         , bufferHead( 0 )
     {
         // TODO How do we control allocations in the buffer (make them use the same allocator this uses) without being super sneaky!?
-        // TODO Maybe writers should just include the buffer inline?
         ASSERT( RW || b->allocator == allocator, "Buffer and reflector have different allocators" );
+    }
+
+    static constexpr sz binaryFieldSize = 5;
+
+    INLINE void ReadAndAdvance( u8* out, int size )
+    {
+        buffer->CopyTo( out, size, bufferHead );
+        bufferHead += size;
+    }
+
+    INLINE void ReadField( int offset, i32* fieldIdOut, i32* sizeOut )
+    {
+        *fieldIdOut = 0;
+        buffer->CopyTo( (u8*)fieldIdOut, 1, offset );
+        buffer->CopyTo( (u8*)sizeOut,    4, offset + 1 );
+
+        // These must match
+        static_assert( binaryFieldSize == 5, "Field size mismatch" );
+    }
+
+    INLINE void ReadFieldAndAdvance( int offset, i32* fieldIdOut, i32* sizeOut )
+    {
+        ReadField( offset, fieldIdOut, sizeOut );
+        bufferHead += binaryFieldSize;
+    }
+
+    INLINE void WriteField( int offset, i32 fieldId, i32 size )
+    {
+        ASSERT( !RW, "Can't modify a reader's stream" );
+
+        ASSERT( fieldId <= U8MAX, "Id cannot exceed 255 per element" );
+        ASSERT( size >= 0 );
+
+        buffer->CopyFrom( (u8*)&fieldId, 1, offset );
+        buffer->CopyFrom( (u8*)&size,    4, offset + 1 );
     }
 };
 
 using BinaryReader = BinaryReflector<true>;
 using BinaryWriter = BinaryReflector<false>;
 
-
-constexpr sz binaryFieldSize = 5;
-
-INLINE void BinaryFieldEncodeLarge( BucketArray<u8>* buffer, int offset, i32 fieldId, i32 size )
-{
-    ASSERT( fieldId < U8MAX, "Id cannot exceed 255 per element" );
-    ASSERT( size >= 0 );
-
-    buffer->CopyFrom( (u8*)fieldId, 1, offset );
-    buffer->CopyFrom( (u8*)size,    4, offset + 1 );
-}
-INLINE void BinaryFieldDecodeLarge( BucketArray<u8> const& buffer, int offset, i32* fieldIdOut, i32* sizeOut )
-{
-    *fieldIdOut = 0;
-    buffer.CopyTo( (u8*)fieldIdOut, 1, offset );
-    buffer.CopyTo( (u8*)sizeOut,    4, offset + 1 );
-}
 
 
 template <bool RW>
@@ -68,19 +85,17 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
         {
             startOffset = reflector->buffer->count;
             // make space to write it back later
-            reflector->buffer->PushEmpty( binaryFieldSize + sizeof( size ), false );
+            reflector->buffer->PushEmpty( r->binaryFieldSize + sizeof( size ), false );
         }
         else
         {
             startOffset = reflector->bufferHead;
 
             // decode the total field count and the jump we need to get to the first field
-            BinaryFieldDecodeLarge( *reflector->buffer, startOffset, &fieldCount, &firstFieldOffset );
-            reflector->bufferHead += binaryFieldSize;
+            reflector->ReadFieldAndAdvance( startOffset, &fieldCount, &firstFieldOffset );
 
             // decode end field too
-            reflector->buffer->CopyTo( (u8*)&size, sizeof(size), reflector->bufferHead );
-            reflector->bufferHead += sizeof(size);
+            reflector->ReadAndAdvance( (u8*)&size, sizeof(size) );
         }
     }
 
@@ -94,15 +109,12 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
 
             // X bytes of field information
             int bufferOffset = startOffset;
-            BinaryFieldEncodeLarge( reflector->buffer, bufferOffset, fieldCount, offset );
-            bufferOffset += binaryFieldSize;
+            reflector->WriteField( bufferOffset, fieldCount, offset );
+            bufferOffset += reflector->binaryFieldSize;
 
             // 4 bytes: end point to jump to
             size = reflector->buffer->count - startOffset;
-            (*reflector->buffer)[ bufferOffset++ ] = (u8)(((u32)size >>  0) & 0xFF);
-            (*reflector->buffer)[ bufferOffset++ ] = (u8)(((u32)size >>  8) & 0xFF);
-            (*reflector->buffer)[ bufferOffset++ ] = (u8)(((u32)size >> 16) & 0xFF);
-            (*reflector->buffer)[ bufferOffset++ ] = (u8)(((u32)size >> 24) & 0xFF);
+            reflector->buffer->CopyFrom( (u8*)&size, 4, bufferOffset );
         }
         else
         {
@@ -144,18 +156,18 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
     i32 decodedFieldId = 0, decodedFieldSize = 0;
     // If we're still inside the current bounds for the type, decode normally. Otherwise, it's missing
     if( r.bufferHead < info->startOffset + info->size )
-        BinaryFieldDecodeLarge( *r.buffer, r.bufferHead, &decodedFieldId, &decodedFieldSize );
+        r.ReadField( r.bufferHead, &decodedFieldId, &decodedFieldSize );
 
     if( decodedFieldId == fieldId )
     {
-        int new_head = r.bufferHead + binaryFieldSize;
+        int new_head = r.bufferHead + r.binaryFieldSize;
         if( new_head > r.buffer->count )
         {
             // TODO Signal error in the reflector or something
             printf( "Serialise: ID %d requests out-of-bounds offset of %d\n", fieldId, new_head );
             return false;
         }
-        r.bufferHead += binaryFieldSize;
+        r.bufferHead += r.binaryFieldSize;
         return true;
     }
     else
@@ -168,11 +180,11 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
 
         for( int i=0; i < info->fieldCount; ++i )
         {
-            BinaryFieldDecodeLarge( *r.buffer, fieldStartOffset, &decodedFieldId, &decodedFieldSize );
+            r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
 
             if( decodedFieldId == fieldId )
             {
-                int new_head = fieldStartOffset + binaryFieldSize;
+                int new_head = fieldStartOffset + r.binaryFieldSize;
                 if( new_head > r.buffer->count )
                 {
                     // TODO Signal error
@@ -209,20 +221,20 @@ INLINE void ReflectFieldEnd( int fieldStartOffset, BinaryReflector<RW>& r )
     {
         // get the existing entry
         i32 decodedFieldId = 0, decodedFieldSize = 0;
-        BinaryFieldDecodeLarge( *r.buffer, fieldStartOffset, &decodedFieldId, &decodedFieldSize );
+        r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
 
         // existing entry should be only an id in the high byte
         ASSERT( decodedFieldSize == 0, "bad entry" );
 
         // the size includes the 4 byte field entry
         int finalSize = r.buffer->count - fieldStartOffset;
-        BinaryFieldEncodeLarge( r.buffer, fieldStartOffset, decodedFieldId, finalSize );
+        r.WriteField( fieldStartOffset, decodedFieldId, finalSize );
     }
     else 
     {
         // get the existing entry
         i32 decodedFieldId = 0, decodedFieldSize = 0;
-        BinaryFieldDecodeLarge( *r.buffer, fieldStartOffset, &decodedFieldId, &decodedFieldSize );
+        r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
 
         // set the read head to ensure it's correct
         r.bufferHead = fieldStartOffset + decodedFieldSize;
@@ -242,9 +254,7 @@ ReflectResult ReflectBytes( R& r, T& d )
         if( r.bufferHead + SIZEOF(T) > r.buffer->count )
             return { ReflectResult::BufferOverflow };
 
-        // TODO Abstract these two into a single op so we never forget
-        r.buffer->CopyTo( (u8*)&d, sizeof(T), r.bufferHead );
-        r.bufferHead += sizeof(T);
+        r.ReadAndAdvance( (u8*)&d, sizeof(T) );
     }
     return ReflectOk;
 }
@@ -274,8 +284,7 @@ ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
         if( r.bufferHead + sizeBytes > r.buffer->count )
             return { ReflectResult::BufferOverflow };
 
-        r.buffer->CopyTo( (u8*)buffer, sizeBytes, r.bufferHead );
-        r.bufferHead += sizeBytes;
+        r.ReadAndAdvance( (u8*)buffer, sizeBytes );
     }
     return ReflectOk;
 }
