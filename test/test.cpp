@@ -1,7 +1,10 @@
 
 #include "win32.h"
 #include <winsock2.h>
+#include <wininet.h>
 #include <DbgHelp.h>
+
+#pragma comment(lib, "wininet")
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -50,6 +53,7 @@
 #include "platform.cpp"
 #include "win32_platform.cpp"
 
+#include "test.h"
 
 struct
 {
@@ -82,19 +86,6 @@ struct
 
 //// Serialization
 
-struct SerialTypeSimple
-{
-    int num;
-};
-
-REFLECT( SerialTypeSimple )
-{
-    BEGIN_FIELDS;
-    FIELD( 1, num );
-
-    return ReflectOk;
-}
-
 TEST( Serialization, SerializeSimpleType )
 {
     // Test a really small bucket size
@@ -111,30 +102,6 @@ TEST( Serialization, SerializeSimpleType )
     Reflect( r, after );
 
     ASSERT_TRUE( EQUAL( before, after ) );
-}
-
-struct SerialTypeComplex
-{
-    SerialTypeSimple simple;
-    Array<int> nums;
-    String str;
-
-    bool operator ==( SerialTypeComplex const& rhs )
-    {
-        return EQUAL( simple, rhs.simple )
-            && nums == rhs.nums
-            && str == rhs.str;
-    }
-};
-
-REFLECT( SerialTypeComplex )
-{
-    BEGIN_FIELDS;
-    FIELD( 1, simple );
-    FIELD( 2, nums );
-    FIELD( 3, str );
-
-    return ReflectOk;
 }
 
 TEST( Serialization, SerializeComplexType )
@@ -155,30 +122,6 @@ TEST( Serialization, SerializeComplexType )
     ASSERT_TRUE( before == after );
 }
 
-struct SerialTypeComplex2
-{
-    SerialTypeSimple simple;
-    Array<int> nums;
-    String str;
-
-    bool operator ==( SerialTypeComplex const& rhs )
-    {
-        return EQUAL( simple, rhs.simple )
-            && nums == rhs.nums
-            && str == rhs.str;
-    }
-};
-
-REFLECT( SerialTypeComplex2 )
-{
-    BEGIN_FIELDS;
-    FIELD( 1, simple );
-    FIELD( 3, str );
-    FIELD( 2, nums );
-
-    return ReflectOk;
-}
-
 TEST( Serialization, SerializeReorderedAttribute )
 {
     BucketArray<u8> buffer( 128, CTX_TMPALLOC );
@@ -193,27 +136,6 @@ TEST( Serialization, SerializeReorderedAttribute )
     Reflect( r, after );
 
     ASSERT_TRUE( after == before );
-}
-
-struct SerialTypeComplex3
-{
-    SerialTypeSimple simple;
-    String str;
-
-    bool operator ==( SerialTypeComplex const& rhs )
-    {
-        return EQUAL( simple, rhs.simple )
-            && str == rhs.str;
-    }
-};
-
-REFLECT( SerialTypeComplex3 )
-{
-    BEGIN_FIELDS;
-    FIELD( 1, simple );
-    FIELD( 3, str );
-
-    return ReflectOk;
 }
 
 TEST( Serialization, SerializeRemovedAttribute )
@@ -812,6 +734,14 @@ GTEST_API_ int main(int argc, char **argv)
         { "Net" },
     };
     Win32::InitGlobalPlatform( channels );
+
+    if( !globalPlatform.TestConnectivity() )
+    {
+        LogI( "Platform", "NOTE No internet connection available. Some tests have been skipped." );
+        // Exclude online tests if we're not connected
+        testing::GTEST_FLAG(filter) = "-HttpTest.*";
+    }
+
 
     bool result = Http::Init( &globalState.http );
     ASSERT_EQ( result, true ) << "Http::Init failed";

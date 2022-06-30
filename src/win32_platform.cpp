@@ -360,6 +360,21 @@ namespace Win32
         return exitCode;
     }
 
+    PLATFORM_TEST_CONNECTIVITY(TestConnectivity)
+    {
+        // https://docs.microsoft.com/en-us/windows/win32/api/wininet/nf-wininet-internetgetconnectedstateex
+        DWORD flags;
+        TCHAR name[ 512 ];
+
+        if( InternetGetConnectedStateEx( &flags, name, (DWORD)ARRAYCOUNT( name ), 0 ) )
+        {
+            if( !(flags & INTERNET_CONNECTION_OFFLINE) )
+                return true;
+        }
+
+        return false;
+    }
+
 
     PLATFORM_PRINT(Print)
     {
@@ -612,6 +627,7 @@ namespace Win32
         win32API.UnlockMutex          = UnlockMutex;
         win32API.ElapsedTimeMillis    = ElapsedTimeMillis;
         win32API.ShellExecute         = ShellExecute;
+        win32API.TestConnectivity     = TestConnectivity;
         win32API.Print                = Print;
         win32API.Error                = Error;
         win32API.PrintVA              = PrintVA;

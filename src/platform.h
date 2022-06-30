@@ -134,6 +134,9 @@ typedef PLATFORM_ELAPSED_TIME_MILLIS(ElapsedTimeMillisFunc);
 #define PLATFORM_SHELL_EXECUTE(x)       int x( char const* cmdLine )
 typedef PLATFORM_SHELL_EXECUTE(ShellExecuteFunc);
 
+#define PLATFORM_TEST_CONNECTIVITY(x)   bool x()
+typedef PLATFORM_TEST_CONNECTIVITY(TestConnectivityFunc);
+
 #define PLATFORM_PRINT(x)               void x( const char *fmt, ... )
 typedef PLATFORM_PRINT(PrintFunc);
 #define PLATFORM_PRINT_VA(x)            void x( const char *fmt, va_list args )
@@ -180,6 +183,7 @@ struct PlatformAPI
     // Misc
     Platform::ElapsedTimeMillisFunc*            ElapsedTimeMillis;
     Platform::ShellExecuteFunc*                 ShellExecute;
+    Platform::TestConnectivityFunc*             TestConnectivity;
 
     Platform::PrintFunc*                        Print;
     Platform::PrintFunc*                        Error;

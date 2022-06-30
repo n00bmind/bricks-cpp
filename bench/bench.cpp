@@ -1,10 +1,12 @@
 
 #include <mutex>
 #include "win32.h"
+#include <wininet.h>
 #include <DbgHelp.h>
 
 #include "benchmark/benchmark.h"
 
+#pragma comment(lib, "wininet")
 #if CONFIG_RELEASE
 #pragma comment(lib, "Release/benchmark.lib")
 #else
