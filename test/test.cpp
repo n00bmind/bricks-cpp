@@ -154,6 +154,27 @@ TEST( Serialization, SerializeRemovedAttribute )
     ASSERT_TRUE( after == before );
 }
 
+TEST( Serialization, SerializeChunkyType )
+{
+    BucketArray<u8> buffer( 2048, CTX_TMPALLOC );
+    BinaryWriter w( &buffer );
+
+    SerialTypeComplex cmp = { { 42 }, {}, "Hello sailor" };
+    INIT( cmp.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
+    SerialTypeDeeper deeper = { { cmp, 666  }, "Apartense vacas, que la vida es corta" };
+
+    SerialTypeChunky before;
+    before.deeper.Reset( 8000 );
+    for( int i = 0; i < before.deeper.capacity; ++i )
+        before.deeper.Push( deeper );
+    Reflect( w, before );
+
+    BinaryReader r( &buffer );
+    SerialTypeChunky after;
+    Reflect( r, after );
+
+    ASSERT_TRUE( after == before );
+}
 
 //// Data types
 

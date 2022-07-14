@@ -138,12 +138,6 @@ struct Array
 
     bool        Empty() const   { return count == 0; }
 
-    template <typename AllocType2 = Allocator>
-    bool operator ==( Array<T, AllocType2> const& other ) const
-    {
-        return count == other.count && EQUALP( data, other.data, count * SIZEOF(T) );
-    }
-
     explicit operator bool() const
     {
         return data != nullptr && count != 0;
@@ -335,18 +329,18 @@ struct Array
 
     // Deep copy
     template <typename AllocType2 = Allocator>
-    Array<T, AllocType2> Clone( AllocType2* allocator = nullptr ) const
+    Array<T, AllocType2> Clone( AllocType2* allocator_ = nullptr ) const
     {
-        Array<T, AllocType2> result( count, allocator ? allocator : CTX_ALLOC );
+        Array<T, AllocType2> result( count, allocator_ ? allocator_ : CTX_ALLOC );
         result.ResizeToCapacity();
         COPYP( data, result.data, count * SIZEOF(T) );
         return result;
     }
 
     template <typename AllocType2 = Allocator>
-    static Array<T, AllocType2> Clone( Array<T, AllocType2> const& other, AllocType2* allocator = nullptr )
+    static Array<T, AllocType2> Clone( Array<T, AllocType2> const& other, AllocType2* allocator_ = nullptr )
     {
-        Array<T, AllocType2> result( other.capacity, allocator ? allocator : CTX_ALLOC );
+        Array<T, AllocType2> result( other.capacity, allocator_ ? allocator_ : CTX_ALLOC );
         result.count = other.count;
         COPYP( other.data, result.data, result.count * SIZEOF(T) );
         return result;
