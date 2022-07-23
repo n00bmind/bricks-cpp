@@ -26,6 +26,10 @@
 #include "clock.h"
 #include "strings.h"
 #include "logging.h"
+#include "serialization.h"
+#include "serialize_binary.h"
+
+#include "../test/test.h"
 
 #include "common.cpp"
 #include "logging.cpp"
@@ -46,17 +50,17 @@ struct MutexTester
     T mutex;
     const int iterationCount;
     const int threadCount;
-    i64 value;
+    i64 sharedValue;
 
     MutexTester( int threadCount_, int iterationCount_ )
         : iterationCount( iterationCount_ )
         , threadCount( threadCount_ )
-        , value( 0 )
+        , sharedValue( 0 )
     {}
 
     bool Test()
     {
-        value = 0;
+        sharedValue = 0;
 
         Array<Platform::ThreadHandle> threads( threadCount );
         for (int i = 0; i < threadCount; i++)
@@ -64,7 +68,7 @@ struct MutexTester
         for( Platform::ThreadHandle& t : threads )
             Core::JoinThread( t );
 
-        return( value == iterationCount );
+        return( sharedValue == iterationCount );
     }
 };
 template <typename T>
@@ -78,7 +82,7 @@ PLATFORM_THREAD_FUNC(MutexTesterThread)
     for( int i = 0; i < threadIterationCount; i++ )
     {
         tester->mutex.Lock();
-        DoNotOptimize( tester->value++ );
+        DoNotOptimize( tester->sharedValue++ );
         ClobberMemory();
         tester->mutex.Unlock();
     }
@@ -133,6 +137,7 @@ static void TestMutex( benchmark::State& state )
         ->Unit(benchmark::kMillisecond) \
         ->MeasureProcessCPUTime();
 
+#if 0
 // TODO Would be interesting to give the threads a more 'realistic' workload, to see if the differences remain that big
 TEST_MUTEX(Mutex);
 TEST_MUTEX(RecursiveMutex);
@@ -146,6 +151,38 @@ TEST_MUTEX(RecursiveBenaphore<PreshingSemaphore>);
 TEST_MUTEX(RecursiveBenaphore<Semaphore>);
 
 TEST_MUTEX(SpinLockMutex);
+#endif
+
+
+static void TestBinarySerializer( benchmark::State& state )
+{
+    BucketArray<u8> buffer( 2048 * 1024, CTX_TMPALLOC );
+    BinaryWriter w( &buffer );
+
+    SerialTypeComplex cmp = { { 42 }, {}, "Hello sailor" };
+    INIT( cmp.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
+    SerialTypeDeeper deeper = { { cmp, 666  }, "Apartense vacas, que la vida es corta" };
+
+    SerialTypeChunky before;
+    before.deeper.Reset( 8000 );
+    for( int i = 0; i < before.deeper.capacity; ++i )
+        before.deeper.Push( deeper );
+
+
+    for( auto _ : state )
+    {
+        buffer.Clear();
+        Reflect( w, before );
+
+        BinaryReader r( &buffer );
+        SerialTypeChunky after;
+        Reflect( r, after );
+    }
+}
+
+BENCHMARK(TestBinarySerializer)
+    ->Unit(benchmark::kMicrosecond)
+    ->MeasureProcessCPUTime();
 
 
 int main(int argc, char** argv)

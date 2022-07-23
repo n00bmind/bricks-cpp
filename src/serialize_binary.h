@@ -131,7 +131,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
 };
 
 template <bool RW>
-INLINE u32 ReflectFieldOffset( BinaryReflector<RW>& r )
+INLINE int ReflectFieldOffset( BinaryReflector<RW>& r )
 {
     STATIC_IF( r.IsWriting )
         return r.buffer->count;
@@ -304,7 +304,7 @@ ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
 template <typename R, typename T>
 ReflectResult ReflectBytes( R& r, T* buffer, int bufferLen )
 {
-    return ReflectBytesRaw( r, (void*)buffer, bufferLen * sizeof(T) );
+    return ReflectBytesRaw( r, (void*)buffer, bufferLen * SIZEOF(T) );
 }
 
 REFLECT( String )

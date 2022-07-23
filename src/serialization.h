@@ -121,7 +121,7 @@ struct ReflectedTypeInfo
 template <typename R, typename F>
 INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name, FieldAttributes const& attribs )
 {                                                         
-    const u32 fieldOffset = ReflectFieldOffset( r );      
+    const int fieldOffset = ReflectFieldOffset( r );      
     if( ReflectFieldStart( id, name, &info, r ) ) 
     {                                                     
         ReflectResult ret = { ReflectResult::Ok };        

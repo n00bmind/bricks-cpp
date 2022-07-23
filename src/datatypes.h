@@ -521,6 +521,7 @@ struct BucketArray
         count++;
         return result;
     }
+    // TODO Do this better
     T* PushEmpty( int itemCount, bool clear = true )
     {
         T* result = nullptr;
@@ -601,6 +602,7 @@ struct BucketArray
             RetireBucket( bucketBuffer + i );
 
         bucketBuffer[0].count = 0;
+        count = 0;
     }
 
 
@@ -667,6 +669,7 @@ struct BucketArray
 
             int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
             COPYP( buffer + copied, b.data + indexInBucket, itemsToCopy * SIZEOF(T) );
+
             copied += itemsToCopy;
             indexInBucket = 0;
         }

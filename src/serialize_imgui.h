@@ -126,7 +126,7 @@ struct ImGuiReflector : public Reflector<true>
     }
 };
 
-INLINE u32 ReflectFieldOffset( ImGuiReflector& r )
+INLINE int ReflectFieldOffset( ImGuiReflector& r )
 {
     return 0;
 }

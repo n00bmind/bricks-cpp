@@ -94,7 +94,7 @@ using JsonWriter = JsonReflector<false>;
 
 
 template <bool RW>
-INLINE u32 ReflectFieldOffset( JsonReflector<RW>& r )
+INLINE int ReflectFieldOffset( JsonReflector<RW>& r )
 {
     return 0;
 }

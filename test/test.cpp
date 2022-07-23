@@ -169,6 +169,8 @@ TEST( Serialization, SerializeChunkyType )
         before.deeper.Push( deeper );
     Reflect( w, before );
 
+    LOG( "Size of serialized SerialTypeChunky: %d", buffer.count );
+
     BinaryReader r( &buffer );
     SerialTypeChunky after;
     Reflect( r, after );
