@@ -1,0 +1,5 @@
+
+                                            DESKTOP                     LAPTOP
+Starting point:
+1480018 x2 bytes (2.8229103 Mb) in          7986 us = 353.4 Mb/sec      ?
+

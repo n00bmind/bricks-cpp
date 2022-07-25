@@ -112,10 +112,6 @@ struct ReflectedTypeInfo
 
 // TODO Can we remove either pair of ReflectFieldStart/End or ReflectFieldPush/Pop?
 // (try to put all functionality in either of those!)
-#define DEBUG_FIELD_BODY 1
-#if DEBUG_FIELD_BODY
-
-// TODO Compare timings against the macro version below
 // FIXME Setting attributes on the reflector like this means they're not correctly set/unset across a hierarchy
 // We'd need a stack of them. We could maybe put ReflectedTypeInfo there ?, along with any other stuff (json stack) too!
 template <typename R, typename F>
@@ -147,33 +143,6 @@ ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, 
 #define FIELD( id, f, ... )                 ReflectFieldBody( r, _reflectInfo, id, d.f, #f,     ##__VA_ARGS__ )
 #define FIELD_NAMED( id, f, name, ... )     ReflectFieldBody( r, _reflectInfo, id, d.f, name,   ##__VA_ARGS__ )
 #define FIELD_LOCAL( id, f, ... )           ReflectFieldBody( r, _reflectInfo, id, f,   #f,     ##__VA_ARGS__ )
-
-#else // DEBUG_FIELD_BODY
-
-#define _FIELD_BODY( id, f, name, ... )                   \
-{                                                         \
-    const u32 fieldOffset = ReflectFieldOffset( r );      \
-    if( ReflectFieldStart( id, name, &_reflectInfo, r ) ) \
-    {                                                     \
-        ReflectResult ret = { ReflectResult::Ok };        \
-        if( ReflectFieldPush( id, name, r ) )             \
-        {                                                 \
-            r.attribs = { __VA_ARGS__ };                  \
-            ret = Reflect( r, f );                        \
-            r.attribs = {};                               \
-            ReflectFieldPop( r );                         \
-        }                                                 \
-        if( ret.code != ReflectResult::Ok )               \
-            return ret;                                   \
-                                                          \
-        ReflectFieldEnd( fieldOffset, r );                \
-    }                                                     \
-}
-#define FIELD( id, f, ... )                 _FIELD_BODY( id, d.f, #f, ##__VA_ARGS__ )
-#define FIELD_NAMED( id, f, name, ... )     _FIELD_BODY( id, d.f, name, ##__VA_ARGS__ )
-#define FIELD_LOCAL( id, f, ... )           _FIELD_BODY( id, f,   #f, ##__VA_ARGS__ )
-
-#endif // DEBUG_FIELD_BODY
 
 
 

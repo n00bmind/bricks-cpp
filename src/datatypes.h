@@ -621,12 +621,13 @@ struct BucketArray
         }
     }
 
-    void CopyTo( T* buffer, int itemCount, sz sourceOffset ) const
+    // TODO Optimize
+    void CopyTo( T* buffer, int itemCount, sz startOffset ) const
     {
-        ASSERT( sourceOffset + itemCount <= count );
+        ASSERT( startOffset + itemCount <= count );
 
         int bucketIndex, indexInBucket;
-        FindBucket( sourceOffset, &bucketIndex, &indexInBucket );
+        FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
         int copied = 0;
         while( copied < itemCount )
@@ -635,6 +636,7 @@ struct BucketArray
 
             int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
             COPYP( b.data + indexInBucket, buffer + copied, itemsToCopy * SIZEOF(T) );
+
             copied += itemsToCopy;
             indexInBucket = 0;
         }
@@ -655,12 +657,13 @@ struct BucketArray
         }
     }
 
-    void CopyFrom( T* buffer, int itemCount, sz targetOffset )
+    // TODO Optimize
+    void CopyFrom( T* buffer, int itemCount, sz startOffset )
     {
-        ASSERT( targetOffset + itemCount <= count );
+        ASSERT( startOffset + itemCount <= count );
 
         int bucketIndex, indexInBucket;
-        FindBucket( targetOffset, &bucketIndex, &indexInBucket );
+        FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
         int copied = 0;
         while( copied < itemCount )

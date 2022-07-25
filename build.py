@@ -97,8 +97,8 @@ config_win_develop = Config(
         name           = 'Develop',
         platform       = platform_win,
         cmdline_opts   = ['dev', 'develop'],
-        compiler_flags = ['-DCONFIG_DEVELOP=1', '-Z7', '-MTd', '-O2',],
-        linker_flags   = ['/debug:full']
+        compiler_flags = ['-DCONFIG_DEVELOP=1', '-Z7', '-MT', '-O2', '-GL'],
+        linker_flags   = ['/debug:full', '/LTCG']
 )
 config_win_release = Config(
         name           = 'Release',

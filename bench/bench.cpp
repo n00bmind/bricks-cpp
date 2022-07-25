@@ -7,11 +7,10 @@
 #include "benchmark/benchmark.h"
 
 #pragma comment(lib, "wininet")
-#if CONFIG_RELEASE
-#pragma comment(lib, "Release/benchmark.lib")
-#else
-// NOTE 'Dev' config will use the debug benchmark lib
+#if CONFIG_DEBUG
 #pragma comment(lib, "Debug/benchmark.lib")
+#else
+#pragma comment(lib, "Release/benchmark.lib")
 #endif
 
 #include "magic.h"
@@ -182,6 +181,7 @@ static void TestBinarySerializer( benchmark::State& state )
 
 BENCHMARK(TestBinarySerializer)
     ->Unit(benchmark::kMicrosecond)
+    //->Iterations(1)
     ->MeasureProcessCPUTime();
 
 
