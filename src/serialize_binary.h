@@ -140,7 +140,6 @@ INLINE int ReflectFieldOffset( BinaryReflector<RW>& r )
 }
 
 // write an initial entry with an empty size
-// TODO Optimize
 template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* info, int fieldId )
 {
     ASSERT( fieldId <= U8MAX, "Id cannot exceed 255 per element" );
@@ -149,19 +148,10 @@ template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* 
     if ( info->fieldCount++ == 0 )
         info->firstFieldOffset = r.buffer->count;
 
-#if 1
     r.buffer->Push( (u8*)&fieldId, sizeof(u8) );
     // Actual size will be computed at the end
     i32 size = 0;
     r.buffer->Push( (u8*)&size, sizeof(u32) );
-#else
-    r.buffer->Push( (u8)fieldId );
-    // Placeholder for 4-bytes 0 size (will be computed at the end)
-    r.buffer->Push( 0 );
-    r.buffer->Push( 0 );
-    r.buffer->Push( 0 );
-    r.buffer->Push( 0 );
-#endif
 
     return true;
 }

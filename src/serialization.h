@@ -93,25 +93,11 @@ struct ReflectedTypeInfo
     }
 };
 
-#define ReflectFieldPush(...) true
-//bool ReflectFieldPush( ... )
-//{
-    //return true;
-//}
-
-#define ReflectFieldPop(...)
-//void ReflectFieldPop( ... )
-//{
-
-//}
-
 
 // Nasty trick to allow using anything as template param when R is not defined
 #define BEGIN_FIELDS \
     ReflectedTypeInfo<R> _reflectInfo( &r );
 
-// TODO Can we remove either pair of ReflectFieldStart/End or ReflectFieldPush/Pop?
-// (try to put all functionality in either of those!)
 // FIXME Setting attributes on the reflector like this means they're not correctly set/unset across a hierarchy
 // We'd need a stack of them. We could maybe put ReflectedTypeInfo there ?, along with any other stuff (json stack) too!
 template <typename R, typename F>
@@ -120,13 +106,12 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id,
     const int fieldOffset = ReflectFieldOffset( r );      
     if( ReflectFieldStart( id, name, &info, r ) ) 
     {                                                     
-        ReflectResult ret = { ReflectResult::Ok };        
-        if( ReflectFieldPush( id, name, r ) )             
+        ReflectResult ret = ReflectOk;
+
         {                                                 
             r.attribs = attribs;
             ret = Reflect( r, f );                        
             r.attribs = {};                               
-            ReflectFieldPop( r );                         
         }                                                 
         if( ret.code != ReflectResult::Ok )               
             return ret;                                   
