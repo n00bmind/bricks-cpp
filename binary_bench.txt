@@ -1,6 +1,19 @@
 
-                                            DESKTOP                     LAPTOP
-Starting point:
-1480018 x2 bytes (2.8229103 Mb) in          7986 us = 353.4 Mb/sec      9792 us = 288.2 Mb/sec
+CPU time (DEV)                              DESKTOP                     LAPTOP
 
-Remove Push/Pop:                            ?                           9583 us = 294.5 Mb/sec
+Starting point:
+1480018 x2 bytes (2.8229103 Mb) in          7986 us = 353.4 Mb/s        9792 us = 288.2 Mb/s
+
+· Remove ReflectFieldPush/Pop:              7986 us = 353.4 Mb/s        9583 us = 294.5 Mb/s
+· INLINE alt. ReflectFieldBody (!)          7639 us  
+· Actually use MSVC intrinsic for Log2      6417 us  
+· Improve CopyTo                            5720 us  
+· Improve CopyFrom                          5625 us  
+· Improve Push                              5441 us  
+· Bundle attrs into BinaryField             4849 us = 595.8 Mb/s
+· Don't clear containers' allocs            4614 us
+· Pack ReflectedTypeInfo header             3997 us = 706.2 Mb/s
+
+
+
+RELEASE time:                               3676 us = 767.9 Mb/s

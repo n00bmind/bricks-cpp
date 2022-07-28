@@ -1,5 +1,16 @@
 #pragma once
 
+#pragma pack(push, 1)
+struct BinaryField
+{
+    i32 size;
+    u8 id;
+};
+#pragma pack(pop)
+
+constexpr sz binaryFieldSize = sizeof(BinaryField);
+static_assert( binaryFieldSize == 5, "Wrong field size" );
+
 // TIL about template template parameters ..
 // https://stackoverflow.com/questions/38200959/template-template-parameters-without-specifying-inner-type
 template <bool RW, template <typename...> typename BufferType = BucketArray>
@@ -17,39 +28,27 @@ struct BinaryReflector : public Reflector<RW>
         ASSERT( RW || b->allocator == allocator, "Buffer and reflector have different allocators" );
     }
 
-    static constexpr sz binaryFieldSize = 5;
-
     INLINE void ReadAndAdvance( u8* out, int size )
     {
         buffer->CopyTo( out, size, bufferHead );
         bufferHead += size;
     }
 
-    INLINE void ReadField( int offset, i32* fieldIdOut, i32* sizeOut )
+    INLINE void ReadField( int offset, BinaryField* fieldOut )
     {
-        *fieldIdOut = 0;
-        buffer->CopyTo( (u8*)fieldIdOut, 1, offset );
-        buffer->CopyTo( (u8*)sizeOut,    4, offset + 1 );
-
-        // These must match
-        static_assert( binaryFieldSize == 5, "Field size mismatch" );
+        buffer->CopyTo( (u8*)fieldOut, binaryFieldSize, offset );
     }
 
-    INLINE void ReadFieldAndAdvance( int offset, i32* fieldIdOut, i32* sizeOut )
+    INLINE void ReadFieldAndAdvance( int offset, BinaryField* fieldOut )
     {
-        ReadField( offset, fieldIdOut, sizeOut );
+        ReadField( offset, fieldOut );
         bufferHead += binaryFieldSize;
     }
 
-    INLINE void WriteField( int offset, i32 fieldId, i32 size )
+    INLINE void WriteField( int offset, BinaryField const& field )
     {
-        ASSERT( !RW, "Can't modify a reader's stream" );
-
-        ASSERT( fieldId <= U8MAX, "Id cannot exceed 255 per element" );
-        ASSERT( size >= 0 );
-
-        buffer->CopyFrom( (u8*)&fieldId, 1, offset );
-        buffer->CopyFrom( (u8*)&size,    4, offset + 1 );
+        ASSERT( field.size >= 0 );
+        buffer->CopyFrom( (u8*)&field, binaryFieldSize, offset );
     }
 };
 
@@ -68,39 +67,36 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
     //u64* fieldInfo;
 
     i32  startOffset;
-    // Total size in bytes of this type, including all metadata
-    // move to this point at the end to correct the buffer
-    i32  totalSize;
 
-    // on save, count the number of fields we're accumulating
-    i32  fieldCount;
-    i32  firstFieldOffset;
-
-    // check against version of saved file - if it's too old, don't attempt to load fields
-    //bool versionCheckOk;
+#pragma pack(push, 1)
+    struct Header
+    {
+        // Total size in bytes of this type, including all metadata
+        // move to this point at the end to correct the buffer
+        i32  totalSize;
+        // on save, count the number of fields we're accumulating
+        i32  firstFieldOffset;
+        u8   fieldCount;
+    } header;
+#pragma pack(pop)
+    static_assert( sizeof(Header) == 9, "Wrong header size" );
 
     ReflectedTypeInfo( BinaryReflector<RW>* r )
         : reflector( r )
         , startOffset( 0 )
-        , totalSize( 0 )
-        , fieldCount( 0 )
-        , firstFieldOffset( 0 )
+        , header{}
     {
         STATIC_IF( r->IsWriting )
         {
             startOffset = reflector->buffer->count;
             // make space to write it back later
-            reflector->buffer->PushEmpty( r->binaryFieldSize + sizeof( totalSize ), false );
+            reflector->buffer->PushEmpty( sizeof(Header), false );
         }
         else
         {
             startOffset = reflector->bufferHead;
-
-            // decode the total field count and the jump we need to get to the first field
-            reflector->ReadFieldAndAdvance( startOffset, &fieldCount, &firstFieldOffset );
-
-            // decode end field too
-            reflector->ReadAndAdvance( (u8*)&totalSize, sizeof(totalSize) );
+            // decode header
+            reflector->ReadAndAdvance( (u8*)&header, sizeof(Header) );
         }
     }
 
@@ -109,23 +105,19 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
         // save how far to jump to find the first field - if the field follows on directly it'll be 4 bytes
         STATIC_IF( reflector->IsWriting )
         {
-            ASSERT( fieldCount == 0 || firstFieldOffset > startOffset, "Bad field offset" );
-            i32 offset = fieldCount > 0 ? firstFieldOffset - startOffset : 0;
+            ASSERT( header.fieldCount == 0 || header.firstFieldOffset > startOffset, "Bad field offset" );
 
-            // X bytes of field field count + first offset
-            int writeOffset = startOffset;
-            reflector->WriteField( writeOffset, fieldCount, offset );
-            writeOffset += reflector->binaryFieldSize;
+            header.firstFieldOffset = header.fieldCount > 0 ? header.firstFieldOffset - startOffset : 0;
+            header.totalSize = reflector->buffer->count - startOffset;
 
             // 4 bytes: end point to jump to
-            totalSize = reflector->buffer->count - startOffset;
-            reflector->buffer->CopyFrom( (u8*)&totalSize, 4, writeOffset );
+            reflector->buffer->CopyFrom( (u8*)&header, sizeof(Header), startOffset );
         }
         else
         {
             // can fix ourselves
-            if( totalSize != 0 )
-                reflector->bufferHead = startOffset + totalSize;
+            if( header.totalSize != 0 )
+                reflector->bufferHead = startOffset + header.totalSize;
         }
     }
 };
@@ -145,13 +137,12 @@ template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* 
     ASSERT( fieldId <= U8MAX, "Id cannot exceed 255 per element" );
 
     // store info to reconstruct the first field
-    if ( info->fieldCount++ == 0 )
-        info->firstFieldOffset = r.buffer->count;
+    if ( info->header.fieldCount++ == 0 )
+        info->header.firstFieldOffset = r.buffer->count;
 
-    r.buffer->Push( (u8*)&fieldId, sizeof(u8) );
     // Actual size will be computed at the end
-    i32 size = 0;
-    r.buffer->Push( (u8*)&size, sizeof(u32) );
+    BinaryField newField = { 0, (u8)fieldId };
+    r.buffer->Push( (u8*)&newField, binaryFieldSize );
 
     return true;
 }
@@ -159,27 +150,27 @@ template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* 
 // Read the next field, or if the id doesn't match, find it in the type's field table
 template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* info, int fieldId )
 {
-    i32 decodedFieldId = 0, decodedFieldSize = 0;
+    BinaryField decodedField;
     // If we're still inside the current bounds for the type, decode normally. Otherwise, it's missing
-    if( r.bufferHead < info->startOffset + info->totalSize )
-        r.ReadField( r.bufferHead, &decodedFieldId, &decodedFieldSize );
+    if( r.bufferHead < info->startOffset + info->header.totalSize )
+        r.ReadField( r.bufferHead, &decodedField );
     else
     {
         // TODO Signal error in the reflector or something
-        printf( "Serialise: buffer head at %d overflowed the end of the current type (%d)\n", r.bufferHead, info->startOffset + info->totalSize );
+        printf( "Serialise: buffer head at %d overflowed the end of the current type (%d)\n", r.bufferHead, info->startOffset + info->header.totalSize );
         return false;
     }
 
-    if( decodedFieldId == fieldId )
+    if( decodedField.id == fieldId )
     {
-        int new_head = r.bufferHead + r.binaryFieldSize;
+        int new_head = r.bufferHead + binaryFieldSize;
         if( new_head > r.buffer->count )
         {
             // TODO Signal error in the reflector or something
             printf( "Serialise: ID %d requests out-of-bounds offset of %d\n", fieldId, new_head );
             return false;
         }
-        r.bufferHead += r.binaryFieldSize;
+        r.bufferHead += binaryFieldSize;
         return true;
     }
     else
@@ -188,15 +179,15 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
         // use the info to return to the start, and loop through all available fields to find the correct one
         // FIXME Write all per-field info in a footer at the end, and load it into a 256-entry table at the start of each type so we dont have to chase anything
 
-        int fieldStartOffset = info->startOffset + info->firstFieldOffset;
+        int fieldStartOffset = info->startOffset + info->header.firstFieldOffset;
 
-        for( int i=0; i < info->fieldCount; ++i )
+        for( int i=0; i < info->header.fieldCount; ++i )
         {
-            r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
+            r.ReadField( fieldStartOffset, &decodedField );
 
-            if( decodedFieldId == fieldId )
+            if( decodedField.id == fieldId )
             {
-                int new_head = fieldStartOffset + r.binaryFieldSize;
+                int new_head = fieldStartOffset + binaryFieldSize;
                 if( new_head > r.buffer->count )
                 {
                     // TODO Signal error
@@ -209,7 +200,7 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
             }
 
             // move to next field
-            fieldStartOffset += decodedFieldSize;
+            fieldStartOffset += decodedField.size;
         }
     }
 
@@ -229,27 +220,23 @@ INLINE bool ReflectFieldStart( int fieldId, StaticString const& name, ReflectedT
 template <bool RW>
 INLINE void ReflectFieldEnd( int fieldStartOffset, BinaryReflector<RW>& r )
 {
+    BinaryField decodedField;
+
     STATIC_IF( r.IsWriting )
     {
-        // get the existing entry
-        i32 decodedFieldId = 0, decodedFieldSize = 0;
-        r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
+        r.ReadField( fieldStartOffset, &decodedField );
 
         // existing entry should just have a placeholder size
-        ASSERT( decodedFieldSize == 0, "bad entry" );
-
-        // the size includes the field metadata
+        ASSERT( decodedField.size == 0, "bad entry" );
+        // final size includes the field metadata
         int finalSize = r.buffer->count - fieldStartOffset;
-        r.WriteField( fieldStartOffset, decodedFieldId, finalSize );
+        r.WriteField( fieldStartOffset, { finalSize, decodedField.id } );
     }
     else 
     {
-        // get the existing entry
-        i32 decodedFieldId = 0, decodedFieldSize = 0;
-        r.ReadField( fieldStartOffset, &decodedFieldId, &decodedFieldSize );
-
+        r.ReadField( fieldStartOffset, &decodedField );
         // set the read head to ensure it's correct
-        r.bufferHead = fieldStartOffset + decodedFieldSize;
+        r.bufferHead = fieldStartOffset + decodedField.size;
     }
 }
 

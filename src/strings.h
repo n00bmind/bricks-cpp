@@ -451,7 +451,7 @@ struct String
         length = len;
 
         Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-        data = ALLOC_ARRAY( allocator, char, len + 1 );
+        data = ALLOC_ARRAY( allocator, char, len + 1, Memory::NoClear() );
         // Null terminate it even if we expect we'll be writing to data later
         ((char*)data)[len] = 0;
     }
@@ -472,7 +472,7 @@ private:
         if( new_len )
         {
             Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-            char* dst = ALLOC_ARRAY( allocator, char, new_len + 1 );
+            char* dst = ALLOC_ARRAY( allocator, char, new_len + 1, Memory::NoClear() );
 
             COPYP( src, dst, new_len );
             dst[new_len] = 0;
@@ -1031,7 +1031,7 @@ struct StringBuilder
         va_start( args, fmt );
 
         int n = 1 + vsnprintf( nullptr, 0, fmt, args );
-        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n );
+        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n, Memory::NoClear() );
 
         // TODO Does this work??
         vsnprintf( buf, Size( n ), fmt, args );

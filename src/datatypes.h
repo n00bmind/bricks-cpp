@@ -56,7 +56,7 @@ struct Array
 
     // NOTE All newly allocated arrays start empty
     // NOTE You cannot specify an AllocType for the instance and then not provide an allocator
-    explicit Array( i32 capacity_, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    explicit Array( i32 capacity_, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : count( 0 )
         , capacity( capacity_ )
         , allocator( allocator_ )
@@ -70,7 +70,7 @@ struct Array
     // TODO For some reason, passing an array with a single int will always match the above constructor instead!
     // TODO This still doesnt work when we're inside a struct and trying to initialize with an 'initializer list'
     template <size_t N>
-    Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : Array( (int)N, allocator_, params )
     {
         ResizeToCapacity();
@@ -164,7 +164,7 @@ struct Array
         return capacity - count;
     }
 
-    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = {} )
+    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = Memory::NoClear() )
     {
         ASSERT( new_allocator );
         T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
@@ -436,7 +436,7 @@ struct BucketArray
         ZEROP( this, sizeof(*this) );
     }
 
-    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : firstFree( nullptr )
         , bucketBufferCount( 0 )
         , bucketCapacity( bucketSize )
@@ -522,17 +522,12 @@ struct BucketArray
         return result;
     }
     // TODO Do this better
-    T* PushEmpty( int itemCount, bool clear = true )
+    void PushEmpty( int itemCount, bool clear = true )
     {
-        T* result = nullptr;
         for( int i = 0; i < itemCount; ++i )
         {
-            T* it = PushEmpty( clear );
-            if( i == 0 )
-                result = it;
+            PushEmpty( clear );
         }
-
-        return result;
     }
 
     T* Push( const T& item )
@@ -558,19 +553,21 @@ struct BucketArray
         return slot;
     }
 
-    void Push( T const* buffer, int bufferLen )
+    INLINE void Push( T const* buffer, int bufferLen )
     {
-        int off = 0;
         Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
 
-        while( off < bufferLen )
+        int remaining = bufferLen, itemsToCopy = 0;
+        while( remaining > 0 )
         {
-            int remaining = Min( bufferLen - off, lastBucket->capacity - lastBucket->count );
-            COPYP( buffer + off, lastBucket->data + lastBucket->count, remaining );
-            lastBucket->count += remaining;
+            itemsToCopy = Min( remaining, lastBucket->capacity - lastBucket->count );
+            COPYP( buffer, lastBucket->data + lastBucket->count, itemsToCopy * SIZEOF(T) );
 
-            off += remaining;
-            if( off < bufferLen )
+            lastBucket->count += itemsToCopy;
+            buffer += itemsToCopy;
+            remaining -= itemsToCopy;
+
+            if( remaining )
                 lastBucket = AllocBucket();
         }
 
@@ -621,24 +618,24 @@ struct BucketArray
         }
     }
 
-    // TODO Optimize
-    void CopyTo( T* buffer, int itemCount, sz startOffset ) const
+    INLINE void CopyTo( T* buffer, int itemCount, sz startOffset ) const
     {
         ASSERT( startOffset + itemCount <= count );
 
         int bucketIndex, indexInBucket;
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
-        int copied = 0;
-        while( copied < itemCount )
+        Bucket const* b = bucketBuffer + bucketIndex;
+        int remaining = itemCount, itemsToCopy = 0;
+        while( remaining > 0 )
         {
-            Bucket const& b = bucketBuffer[bucketIndex++];
-
-            int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
-            COPYP( b.data + indexInBucket, buffer + copied, itemsToCopy * SIZEOF(T) );
-
-            copied += itemsToCopy;
+            itemsToCopy = Min( bucketCapacity - indexInBucket, remaining );
+            COPYP( b->data + indexInBucket, buffer, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
+
+            buffer += itemsToCopy;
+            remaining -= itemsToCopy;
+            ++b;
         }
     }
 
@@ -657,24 +654,24 @@ struct BucketArray
         }
     }
 
-    // TODO Optimize
-    void CopyFrom( T* buffer, int itemCount, sz startOffset )
+    INLINE void CopyFrom( T* buffer, int itemCount, sz startOffset )
     {
         ASSERT( startOffset + itemCount <= count );
 
         int bucketIndex, indexInBucket;
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
-        int copied = 0;
-        while( copied < itemCount )
+        Bucket const* b = bucketBuffer + bucketIndex;
+        int remaining = itemCount, itemsToCopy = 0;
+        while( remaining > 0 )
         {
-            Bucket const& b = bucketBuffer[bucketIndex++];
-
-            int itemsToCopy = Min( bucketCapacity - indexInBucket, itemCount - copied );
-            COPYP( buffer + copied, b.data + indexInBucket, itemsToCopy * SIZEOF(T) );
-
-            copied += itemsToCopy;
+            itemsToCopy = Min( bucketCapacity - indexInBucket, remaining );
+            COPYP( buffer, b->data + indexInBucket, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
+
+            buffer += itemsToCopy;
+            remaining -= itemsToCopy;
+            ++b;
         }
     }
 
@@ -888,7 +885,7 @@ struct OldBucketArray
         , count( 0 )
     {}
 
-    explicit OldBucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = {} )
+    explicit OldBucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : first( bucketSize, allocator_, params )
         , last( &first )
         , firstFree( nullptr )
@@ -1612,7 +1609,7 @@ private:
         capacity = newCapacity;
 
         // TODO Check generated code for instances with different allocator types is still being inlined
-        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), { Memory::NoClear } );
+        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), Memory::NoClear() );
         keys   = (K*)newMemory;
         values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
 
@@ -1653,7 +1650,7 @@ struct RingBuffer
     RingBuffer()
     {}
 
-    RingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
+    RingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : buffer( capacity, allocator, params )
         , onePastHeadIndex( 0 )
         , count( 0 )
@@ -1854,7 +1851,7 @@ struct SyncRingBuffer
         _CheckLayout();
     }
 
-    SyncRingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = {} )
+    SyncRingBuffer( i32 capacity, AllocType* allocator = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : buffer( capacity, allocator, params )
         , indexData( 0 )
     {

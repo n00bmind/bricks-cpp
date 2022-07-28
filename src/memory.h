@@ -39,7 +39,7 @@ namespace Memory
     enum Flags : u8
     {
         None = 0,
-        NoClear = 0x1,              // Don't zero memory upon allocation
+        MF_NoClear = 0x1,              // Don't zero memory upon allocation
     };
 
     struct Params
@@ -57,15 +57,9 @@ namespace Memory
         bool IsSet( Flags flag ) const { return (flags & flag) == flag; }
     };
 
-    inline Params
-    Default()
-    {
-        Params result;
-        return result;
-    }
-
-    inline Params
-    Aligned( u16 alignment )
+    INLINE Params Default() { return Params(); }
+    INLINE Params NoClear() { return Params( MF_NoClear ); }
+    INLINE Params Aligned( u16 alignment )
     {
         Params result;
         result.alignment = alignment;
@@ -185,7 +179,7 @@ ALLOC_FUNC( LazyAllocator )
     
     void* result = malloc( Size( sizeBytes ) );
 
-    if( !params.IsSet( Memory::NoClear ) )
+    if( !params.IsSet( Memory::MF_NoClear ) )
         ZEROP( result, sizeBytes );
 
     return result;
@@ -352,7 +346,7 @@ _PushSize( MemoryArena *arena, sz size, sz minAlignment, MemoryParams params = {
     arena->used += alignedSize;
 
     // Have already moved up the block's pointer, so just clear the requested size
-    if( !(params.flags & Memory::NoClear) )
+    if( !(params.flags & Memory::MF_NoClear) )
         ZEROP( result, size );
 
     return result;

@@ -121,7 +121,7 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id,
     return ReflectOk;
 }
 template <typename R, typename F>
-ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name )
+INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name )
 {
     return ReflectFieldBody( r, info, id, f, name, {} );
 }

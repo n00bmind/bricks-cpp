@@ -35,6 +35,56 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define persistent static
 
 
+//
+// Compiler stuff
+//
+
+#if defined(__clang__) || defined(__GNUC__)   // Put this first so we account for clang-cl too
+
+#define COMPILER_LLVM 1
+
+#if defined(__amd64__) || defined(__x86_64__)
+    #define ARCH_X64 1
+#elif defined(__arm__)
+    #define ARCH_ARM 1
+#endif
+
+#elif _MSC_VER
+
+#define COMPILER_MSVC 1
+
+#if defined(_M_X64) || defined(_M_AMD64)
+    #define ARCH_X64 1
+#elif defined(_M_ARM)
+    #define ARCH_ARM 1
+#endif
+
+#else
+
+#error Compiler not supported!
+
+#endif //__clang__
+
+
+#if COMPILER_MSVC
+#define LIB_EXPORT extern "C" __declspec(dllexport)
+#else
+#define LIB_EXPORT extern "C" __attribute__((visibility("default")))
+#endif
+
+#if COMPILER_MSVC
+    #define INLINE __forceinline
+    #if __cplusplus > 201703L || _MSVC_LANG > 201703L
+        #define INLINE_LAMBDA [[msvc::forceinline]]
+    #else
+        #define INLINE_LAMBDA 
+    #endif
+#else
+    #define INLINE inline __attribute__((always_inline))
+    #define INLINE_LAMBDA __attribute__((always_inline))
+#endif
+
+
 // TODO Some POSIX version of this
 #define TRAP __debugbreak()
 
@@ -110,18 +160,6 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 // NOTE May cause trouble for stuff used at global scope!
 #define UNIQUE(x) CONCAT(x, __LINE__)
 
-
-#if defined(_MSC_VER)
-    #define INLINE __forceinline
-    #if __cplusplus > 201703L || _MSVC_LANG > 201703L
-        #define INLINE_LAMBDA [[msvc::forceinline]]
-    #else
-        #define INLINE_LAMBDA 
-    #endif
-#else
-    #define INLINE inline __attribute__((always_inline))
-    #define INLINE_LAMBDA __attribute__((always_inline))
-#endif
 
 // Force actual compile time execution of a constexpr function (similar to 'consteval')
 // USE SPARINGLY

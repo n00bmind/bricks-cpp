@@ -533,7 +533,7 @@ namespace Http
                                             if( body.length > 0 && body != LINE_END )
                                             {
                                                 // TODO Trailer
-                                                NOT_IMPLEMENTED;
+                                                //NOT_IMPLEMENTED;
                                             }
 
                                             response->body = String::Clone( chunks );
@@ -550,7 +550,7 @@ namespace Http
                                 else
                                 {
                                     // TODO Implement "gzip"
-                                    NOT_IMPLEMENTED;
+                                    //NOT_IMPLEMENTED;
                                 }
 
                                 if( encodingTypes && encodingTypes[0] == ',' )
