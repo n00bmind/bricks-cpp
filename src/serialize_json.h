@@ -172,7 +172,7 @@ void JsonWriteString( JsonWriter& r, bool pretty = true )
 }
 
 template <bool RW>
-INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, JsonReflector<RW>& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
 {
     r.Pop();
     

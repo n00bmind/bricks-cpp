@@ -116,7 +116,7 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fie
         if( ret.code != ReflectResult::Ok )               
             return ret;                                   
                                                           
-        ReflectFieldEnd( fieldId, fieldOffset, r );                
+        ReflectFieldEnd( fieldId, fieldOffset, &info, r );                
     }
     return ReflectOk;
 }

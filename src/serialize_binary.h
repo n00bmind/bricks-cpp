@@ -36,12 +36,6 @@ struct BinaryReflector : public Reflector<RW>
         buffer->CopyTo( (u8*)fieldOut, BinaryFieldSize, offset );
     }
 
-    INLINE void ReadFieldAndAdvance( sz offset, BinaryField* fieldOut )
-    {
-        ReadField( offset, fieldOut );
-        bufferHead += BinaryFieldSize;
-    }
-
     INLINE void WriteField( sz offset, BinaryField const& field )
     {
         buffer->CopyFrom( (u8*)&field, BinaryFieldSize, offset );
@@ -71,14 +65,8 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
     static constexpr sz HeaderSize = offsetof(Header, _padding);
     static_assert( HeaderSize == 5, "Wrong header size" );
 
-    struct FieldInfo
-    {
-        u32 fieldStartOffset;
-        u8 fieldId;
-    };
-    //FieldInfo* fieldInfo;
-
-    u32  startOffset;
+    u32 startOffset;
+    u32 currentFieldSize;
 
 
     ReflectedTypeInfo( BinaryReflector<RW>* r )
@@ -96,6 +84,14 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
             startOffset = U32(reflector->bufferHead);
             // decode header
             reflector->ReadAndAdvance( (u8*)&header, HeaderSize );
+
+            sz endOffset = startOffset + header.totalSize;
+            if( endOffset > r->buffer->count || header.totalSize < HeaderSize )
+            {
+                // FIXME Signal hard error in the reflector and stop
+                LogE( "Core", "Serialised type at %u has an invalid size %u (buffer is %I64d bytes)",
+                      startOffset, header.totalSize, r->buffer->count );
+            }
         }
     }
 
@@ -140,68 +136,88 @@ template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* 
     return true;
 }
 
-// Read the next field, or if the id doesn't match, find it in the type's field table
+// Read the next field, or if the id doesn't match, skip around until we find it
 template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* info, u32 fieldId )
 {
     BinaryField decodedField;
 
-    // TODO Review how much sense these bounds checks make
-
-    // If we're still inside the current bounds for the type, decode normally. Otherwise, it's missing
-    if( r.bufferHead < info->startOffset + info->header.totalSize )
-        r.ReadField( r.bufferHead, &decodedField );
-    else
-    {
-        // TODO Signal error in the reflector or something
-        printf( "Serialise: buffer head at %I64d overflowed the end of the current type (%d)\n", r.bufferHead, info->startOffset + info->header.totalSize );
+    // If we're past the current bounds for the type, it's missing (not an error)
+    const u32 endOffset = info->startOffset + info->header.totalSize;
+    if( r.bufferHead >= endOffset )
         return false;
-    }
+
+    r.ReadField( r.bufferHead, &decodedField );
 
     if( decodedField.id == fieldId )
     {
-        sz new_head = r.bufferHead + BinaryFieldSize;
-        if( new_head > r.buffer->count )
-        {
-            // TODO Signal error in the reflector or something
-            printf( "Serialise: ID %u requests out-of-bounds offset of %I64d\n", fieldId, new_head );
-            return false;
-        }
-        r.bufferHead += BinaryFieldSize;
-        return true;
+        // We're good to go
     }
     else
     {
         // Fields have different order
-        // use the info to return to the start, and loop through all available fields to find the correct one
-        // FIXME Write all per-field info in a footer at the end, and load it into a 256-entry table at the start of each type so we dont have to chase anything
+        // Now, the only sensible use case is to use up field ids as needed in an increasing consecutive order, so:
+        // · if the decoded field's id is bigger, assume the field we want has been removed, so keep skipping _forward_ until we find it
+        // · if the decoded id is smaller, we've probably been reordered, so use the info to return to the start, and loop through
+        //   all available fields to find the correct one
 
-        sz fieldStartOffset = info->startOffset + ReflectedTypeInfo<R>::HeaderSize;
+        // TODO We could additionally cache all fields we already read so we don't have to read them again
+        sz prevFieldOffset = r.bufferHead;
 
+        sz curFieldOffset = (decodedField.id > fieldId)
+            ? r.bufferHead + decodedField.size
+            : info->startOffset + ReflectedTypeInfo<R>::HeaderSize;
+
+        bool found = false;
         for( int i=0; i < info->header.fieldCount; ++i )
         {
-            r.ReadField( fieldStartOffset, &decodedField );
+            // If we're right at the end of the type, then we've validly read the last field, so start over from the first one
+            if( curFieldOffset == endOffset )
+                curFieldOffset = info->startOffset + ReflectedTypeInfo<R>::HeaderSize;
+
+            // Ensure we don't read past the end
+            if( curFieldOffset >= endOffset || decodedField.size < BinaryFieldSize )
+            {
+                // This should only happen when reading the first field from the start (which should be covered by the early out above)
+                ASSERT( prevFieldOffset, "We should have read at least one field by now" );
+
+                // FIXME Signal hard error in the reflector and stop
+                LogE( "Core", "Serialised field at %u has an invalid size %u (type ends at offset %u)",
+                      prevFieldOffset, decodedField.size, endOffset );
+                break;
+            }
+
+            r.ReadField( curFieldOffset, &decodedField );
 
             if( decodedField.id == fieldId )
             {
-                sz new_head = fieldStartOffset + BinaryFieldSize;
-                if( new_head > r.buffer->count )
-                {
-                    // TODO Signal error
-                    printf( "Serialise: Out-of-order ID %u requests out-of-bounds offset of %I64d\n", fieldId, new_head );
-                    return false;
-                }
-
-                r.bufferHead = new_head;
-                return true;
+                r.bufferHead = curFieldOffset;
+                found = true;
+                break;
             }
 
             // move to next field
-            fieldStartOffset += decodedField.size;
+            prevFieldOffset = curFieldOffset;
+            curFieldOffset += decodedField.size;
+        }
+        if( !found )
+        {
+            // this element is missing, so skip past it
+            return false;
         }
     }
 
-    // this element is missing, so skip past it
-    return false;
+    // Finally check the field we're about to read has valid bounds
+    if( r.bufferHead + decodedField.size > endOffset || decodedField.size < BinaryFieldSize )
+    {
+        // FIXME Signal hard error in the reflector and stop
+        LogE( "Core", "Serialised field at %u has an invalid size %u (type ends at offset %u)",
+              r.bufferHead, decodedField.size, endOffset );
+        return false;
+    }
+
+    r.bufferHead += BinaryFieldSize;
+    info->currentFieldSize = decodedField.size;
+    return true;
 }
 
 template <bool RW>
@@ -214,21 +230,19 @@ INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedT
 }
 
 template <bool RW>
-INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, BinaryReflector<RW>& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
 {
     STATIC_IF( r.IsWriting )
     {
+        // Fix up field size
         // final size includes the field metadata
         u32 finalSize = U32(r.buffer->count - fieldStartOffset);
         r.WriteField( fieldStartOffset, { finalSize, (u8)fieldId } );
     }
     else 
     {
-        // TODO Could use the field-table info here instead of reading the field back
-        BinaryField decodedField;
-        r.ReadField( fieldStartOffset, &decodedField );
         // set the read head to ensure it's correct
-        r.bufferHead = fieldStartOffset + decodedField.size;
+        r.bufferHead = fieldStartOffset + info->currentFieldSize;
     }
 }
 

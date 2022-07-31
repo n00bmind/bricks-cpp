@@ -755,6 +755,7 @@ GTEST_API_ int main(int argc, char **argv)
     Logging::ChannelDecl channels[] =
     {
         { "Platform" },
+        { "Core" },
         { "Net" },
     };
     Win32::InitGlobalPlatform( channels );

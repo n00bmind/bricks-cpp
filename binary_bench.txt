@@ -24,8 +24,12 @@ Remove firstFieldOffset (SIZE CHANGE)
 · Remove BinaryField pragma pack (keep size)    3526 us
 · Make sizes u32 (& adapt surrounds)            3400 us
 
+Write field table with jump offsets (SIZE CHANGE)
+1896027 bytes .. REVERT
+
+· Don't jump back to read field size at the end 3209 us = 803.6 Mb/s
+· Harden error checking in the reader           3370 us
 
 
-
-RELEASE time:                               3139 us = 899.3 Mb/s
+RELEASE time:                                   3301 us = 781.2 Mb/s
 

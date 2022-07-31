@@ -136,7 +136,7 @@ INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedT
     return r.PushObject( name, 0u );
 }
 
-INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ImGuiReflector& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<ImGuiReflector<RW>>* info, ImGuiReflector& r )
 {
     r.PopObject();
 }
