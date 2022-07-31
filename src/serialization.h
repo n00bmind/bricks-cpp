@@ -101,10 +101,10 @@ struct ReflectedTypeInfo
 // FIXME Setting attributes on the reflector like this means they're not correctly set/unset across a hierarchy
 // We'd need a stack of them. We could maybe put ReflectedTypeInfo there ?, along with any other stuff (json stack) too!
 template <typename R, typename F>
-INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name, FieldAttributes const& attribs )
+INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fieldId, F& f, StaticString const& name, FieldAttributes const& attribs )
 {                                                         
-    const int fieldOffset = ReflectFieldOffset( r );      
-    if( ReflectFieldStart( id, name, &info, r ) ) 
+    const sz fieldOffset = ReflectFieldOffset( r );      
+    if( ReflectFieldStart( fieldId, name, &info, r ) ) 
     {                                                     
         ReflectResult ret = ReflectOk;
 
@@ -116,14 +116,14 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id,
         if( ret.code != ReflectResult::Ok )               
             return ret;                                   
                                                           
-        ReflectFieldEnd( fieldOffset, r );                
+        ReflectFieldEnd( fieldId, fieldOffset, r );                
     }
     return ReflectOk;
 }
 template <typename R, typename F>
-INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u16 id, F& f, StaticString const& name )
+INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fieldId, F& f, StaticString const& name )
 {
-    return ReflectFieldBody( r, info, id, f, name, {} );
+    return ReflectFieldBody( r, info, fieldId, f, name, {} );
 }
 #define FIELD( id, f, ... )                 ReflectFieldBody( r, _reflectInfo, id, d.f, #f,     ##__VA_ARGS__ )
 #define FIELD_NAMED( id, f, name, ... )     ReflectFieldBody( r, _reflectInfo, id, d.f, name,   ##__VA_ARGS__ )

@@ -406,21 +406,22 @@ struct BucketArray
         i32 capacity;
     };
 
+    // TODO Pack this down
     Bucket* bucketBuffer;
-    T* firstFree;
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
-    i32 bucketCapacity;
+    sz count;
+    T* firstFree;
+    const i32 bucketCapacity;
 
     AllocType* allocator;
     MemoryParams memParams;
-    i32 count;
 
 
     struct Iterator
     {
         BucketArray<T, AllocType>* array;
-        i32 index;
+        sz index;
 
         INLINE T&           operator *()                                { return (*array)[index]; }
         INLINE T const&     operator *() const                          { return (*array)[index]; }
@@ -437,12 +438,12 @@ struct BucketArray
     }
 
     explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
-        : firstFree( nullptr )
-        , bucketBufferCount( 0 )
+        : bucketBufferCount( 0 )
+        , count( 0 )
+        , firstFree( nullptr )
         , bucketCapacity( bucketSize )
         , allocator( allocator_ )
         , memParams( params )
-        , count( 0 )
     {
         ASSERT( IsPowerOf2( bucketSize ) );
         // Allocate an initial array of buckets
@@ -521,13 +522,26 @@ struct BucketArray
         count++;
         return result;
     }
-    // TODO Do this better
+
     void PushEmpty( int itemCount, bool clear = true )
     {
-        for( int i = 0; i < itemCount; ++i )
+        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+
+        int remaining = itemCount, itemsToAdd = 0;
+        while( remaining > 0 )
         {
-            PushEmpty( clear );
+            itemsToAdd = Min( remaining, lastBucket->capacity - lastBucket->count );
+            if( clear )
+                ZEROP( lastBucket->data + lastBucket->count, itemsToAdd * SIZEOF(T) );
+
+            lastBucket->count += itemsToAdd;
+            remaining -= itemsToAdd;
+
+            if( remaining )
+                lastBucket = AllocBucket();
         }
+
+        count += itemCount;
     }
 
     T* Push( const T& item )
@@ -553,14 +567,14 @@ struct BucketArray
         return slot;
     }
 
-    INLINE void Push( T const* buffer, int bufferLen )
+    INLINE void Push( T const* buffer, sz bufferLen )
     {
         Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
 
-        int remaining = bufferLen, itemsToCopy = 0;
+        sz remaining = bufferLen; int itemsToCopy = 0;
         while( remaining > 0 )
         {
-            itemsToCopy = Min( remaining, lastBucket->capacity - lastBucket->count );
+            itemsToCopy = (int)Min( remaining, (sz)lastBucket->capacity - lastBucket->count );
             COPYP( buffer, lastBucket->data + lastBucket->count, itemsToCopy * SIZEOF(T) );
 
             lastBucket->count += itemsToCopy;
@@ -618,7 +632,7 @@ struct BucketArray
         }
     }
 
-    INLINE void CopyTo( T* buffer, int itemCount, sz startOffset ) const
+    INLINE void CopyTo( T* buffer, sz itemCount, sz startOffset ) const
     {
         ASSERT( startOffset + itemCount <= count );
 
@@ -626,10 +640,10 @@ struct BucketArray
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
         Bucket const* b = bucketBuffer + bucketIndex;
-        int remaining = itemCount, itemsToCopy = 0;
+        sz remaining = itemCount; int itemsToCopy = 0;
         while( remaining > 0 )
         {
-            itemsToCopy = Min( bucketCapacity - indexInBucket, remaining );
+            itemsToCopy = (int)Min( (sz)bucketCapacity - indexInBucket, remaining );
             COPYP( b->data + indexInBucket, buffer, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
 
@@ -654,7 +668,7 @@ struct BucketArray
         }
     }
 
-    INLINE void CopyFrom( T* buffer, int itemCount, sz startOffset )
+    INLINE void CopyFrom( T* buffer, sz itemCount, sz startOffset )
     {
         ASSERT( startOffset + itemCount <= count );
 
@@ -662,10 +676,10 @@ struct BucketArray
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
         Bucket const* b = bucketBuffer + bucketIndex;
-        int remaining = itemCount, itemsToCopy = 0;
+        sz remaining = itemCount; int itemsToCopy = 0;
         while( remaining > 0 )
         {
-            itemsToCopy = Min( bucketCapacity - indexInBucket, remaining );
+            itemsToCopy = (int)Min( (sz)bucketCapacity - indexInBucket, remaining );
             COPYP( buffer, b->data + indexInBucket, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
 

@@ -26,6 +26,7 @@
 #pragma warning( disable : 4774 )
 #pragma warning( disable : 4388 )
 
+// TODO Upgrade to v1.8.1 .. https://stackoverflow.com/questions/42847103/stdtr1-with-visual-studio-2017
 #include "gtest/gtest.h"
 
 #pragma warning( pop )
@@ -95,7 +96,7 @@ TEST( Serialization, SerializeSimpleType )
     SerialTypeSimple before = { 42 };
     Reflect( w, before );
 
-    LOG( "Size of serialized SerialTypeSimple: %d", buffer.count );
+    LOG( "Size of serialized SerialTypeSimple: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeSimple after;
@@ -113,7 +114,7 @@ TEST( Serialization, SerializeComplexType )
     INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
     Reflect( w, before );
 
-    LOG( "Size of serialized SerialTypeComplex: %d", buffer.count );
+    LOG( "Size of serialized SerialTypeComplex: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeComplex after;
@@ -169,7 +170,7 @@ TEST( Serialization, SerializeChunkyType )
         before.deeper.Push( deeper );
     Reflect( w, before );
 
-    LOG( "Size of serialized SerialTypeChunky: %d", buffer.count );
+    LOG( "Size of serialized SerialTypeChunky: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeChunky after;

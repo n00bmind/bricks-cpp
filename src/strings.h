@@ -589,7 +589,7 @@ public:
         bool terminated = src.Last() == 0;
 
         // Constructor already accounts for the terminator space
-        String result( terminated ? src.count - 1 : src.count );
+        String result( (int)(terminated ? src.count - 1 : src.count) );
         src.CopyTo( (char*)result.data, result.length + 1 );
 
         result.InPlaceModify()[result.length] = 0;

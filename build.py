@@ -34,8 +34,8 @@ platform_win = Platform(
         compiler              = 'cl.exe',
         toolset               = 'CL',
         common_compiler_flags = [
-            '-nologo', '-FC', '-Oi', '-GR-', '-EHa-', '-Wall', '-WX',
-            '-D_HAS_EXCEPTIONS=0', '-D_CRT_SECURE_NO_WARNINGS',
+            '-nologo', '-FC', '-Oi', '-GR-', '-EHa-', '-Wall', '-WX', '-std:c++17',
+            '-D_HAS_EXCEPTIONS=0', '-D_CRT_SECURE_NO_WARNINGS', '-D_HAS_TR1_NAMESPACE=1',
             '-wd4061',          # Unhandled enum case in switch
             '-wd4062',          # Unhandled enum case in switch
             '-wd4100',          # Unreferenced parameter

@@ -1,19 +1,31 @@
 
-CPU time (DEV)                              DESKTOP                     LAPTOP
+CPU time (DEV)                                  DESKTOP                     LAPTOP
 
 Starting point:
-1480018 x2 bytes (2.8229103 Mb) in          7986 us = 353.4 Mb/s        9792 us = 288.2 Mb/s
+1480018 x2 bytes (2.8229103 Mb) in              7986 us = 353.4 Mb/s        9792 us = 288.2 Mb/s
 
-· Remove ReflectFieldPush/Pop:              7986 us = 353.4 Mb/s        9583 us = 294.5 Mb/s
-· INLINE alt. ReflectFieldBody (!)          7639 us  
-· Actually use MSVC intrinsic for Log2      6417 us  
-· Improve CopyTo                            5720 us  
-· Improve CopyFrom                          5625 us  
-· Improve Push                              5441 us  
-· Bundle attrs into BinaryField             4849 us = 595.8 Mb/s
-· Don't clear containers' allocs            4614 us
-· Pack ReflectedTypeInfo header             3997 us = 706.2 Mb/s
+· Remove ReflectFieldPush/Pop:                  7986 us = 353.4 Mb/s        9583 us = 294.5 Mb/s
+· INLINE alt. ReflectFieldBody (!)              7639 us  
+· Actually use MSVC intrinsic for Log2          6417 us  
+· Improve CopyTo                                5720 us  
+· Improve CopyFrom                              5625 us  
+· Improve Push                                  5441 us  
+· Bundle attrs into BinaryField                 4849 us = 595.8 Mb/s
+· Don't clear containers' allocs                4614 us
+· Pack ReflectedTypeInfo header                 3997 us = 706.2 Mb/s
+· Inline common (POD) Reflect funcs.            3928 us
+· Improve PushEmpty                             3686 us
+· Simplify ReflectFieldEnd                      3526 us = 800.5 Mb/s
+
+
+Remove firstFieldOffset (SIZE CHANGE)
+1352014 x2 bytes (2.578762 Mb) in               3370 us = 765.2 Mb/s
+
+· Remove BinaryField pragma pack (keep size)    3526 us
+· Make sizes u32 (& adapt surrounds)            3400 us
 
 
 
-RELEASE time:                               3676 us = 767.9 Mb/s
+
+RELEASE time:                               3139 us = 899.3 Mb/s
+

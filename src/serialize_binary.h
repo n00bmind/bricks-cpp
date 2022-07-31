@@ -1,15 +1,15 @@
 #pragma once
 
-#pragma pack(push, 1)
 struct BinaryField
 {
-    i32 size;
+    u32 size;
     u8 id;
+    u8 _padding[3];
 };
-#pragma pack(pop)
+static_assert( sizeof(BinaryField) == 8, "Wrong field size" );
 
-constexpr sz binaryFieldSize = sizeof(BinaryField);
-static_assert( binaryFieldSize == 5, "Wrong field size" );
+inline constexpr sz BinaryFieldSize = offsetof(BinaryField, _padding);
+static_assert( BinaryFieldSize == 5, "Wrong field size" );
 
 // TIL about template template parameters ..
 // https://stackoverflow.com/questions/38200959/template-template-parameters-without-specifying-inner-type
@@ -17,38 +17,34 @@ template <bool RW, template <typename...> typename BufferType = BucketArray>
 struct BinaryReflector : public Reflector<RW>
 {
     BufferType<u8>* buffer;
-    i32 bufferHead;
+    sz bufferHead;
 
     BinaryReflector( BufferType<u8>* b, Allocator* allocator = CTX_TMPALLOC )
         : Reflector( allocator )
         , buffer( b )
         , bufferHead( 0 )
-    {
-        // TODO How do we control allocations in the buffer (make them use the same allocator this uses) without being super sneaky!?
-        ASSERT( RW || b->allocator == allocator, "Buffer and reflector have different allocators" );
-    }
+    {}
 
-    INLINE void ReadAndAdvance( u8* out, int size )
+    INLINE void ReadAndAdvance( u8* out, sz size )
     {
         buffer->CopyTo( out, size, bufferHead );
         bufferHead += size;
     }
 
-    INLINE void ReadField( int offset, BinaryField* fieldOut )
+    INLINE void ReadField( sz offset, BinaryField* fieldOut )
     {
-        buffer->CopyTo( (u8*)fieldOut, binaryFieldSize, offset );
+        buffer->CopyTo( (u8*)fieldOut, BinaryFieldSize, offset );
     }
 
-    INLINE void ReadFieldAndAdvance( int offset, BinaryField* fieldOut )
+    INLINE void ReadFieldAndAdvance( sz offset, BinaryField* fieldOut )
     {
         ReadField( offset, fieldOut );
-        bufferHead += binaryFieldSize;
+        bufferHead += BinaryFieldSize;
     }
 
-    INLINE void WriteField( int offset, BinaryField const& field )
+    INLINE void WriteField( sz offset, BinaryField const& field )
     {
-        ASSERT( field.size >= 0 );
-        buffer->CopyFrom( (u8*)&field, binaryFieldSize, offset );
+        buffer->CopyFrom( (u8*)&field, BinaryFieldSize, offset );
     }
 };
 
@@ -61,57 +57,56 @@ template <bool RW>
 struct ReflectedTypeInfo< BinaryReflector<RW> >
 {
     BinaryReflector<RW>*   reflector;
-    Allocator* allocator;
 
-    // TODO Make a bench so we can compare approaches!
-    //u64* fieldInfo;
-
-    i32  startOffset;
-
-#pragma pack(push, 1)
     struct Header
     {
         // Total size in bytes of this type, including all metadata
         // move to this point at the end to correct the buffer
-        i32  totalSize;
-        // on save, count the number of fields we're accumulating
-        i32  firstFieldOffset;
-        u8   fieldCount;
+        u32 totalSize;
+        u8  fieldCount;
+        u8  _padding[3];
     } header;
-#pragma pack(pop)
-    static_assert( sizeof(Header) == 9, "Wrong header size" );
+    static_assert( sizeof(Header) == 8, "Wrong header size" );
+
+    static constexpr sz HeaderSize = offsetof(Header, _padding);
+    static_assert( HeaderSize == 5, "Wrong header size" );
+
+    struct FieldInfo
+    {
+        u32 fieldStartOffset;
+        u8 fieldId;
+    };
+    //FieldInfo* fieldInfo;
+
+    u32  startOffset;
+
 
     ReflectedTypeInfo( BinaryReflector<RW>* r )
         : reflector( r )
-        , startOffset( 0 )
         , header{}
     {
         STATIC_IF( r->IsWriting )
         {
-            startOffset = reflector->buffer->count;
+            startOffset = U32(reflector->buffer->count);
             // make space to write it back later
-            reflector->buffer->PushEmpty( sizeof(Header), false );
+            reflector->buffer->PushEmpty( HeaderSize, false );
         }
         else
         {
-            startOffset = reflector->bufferHead;
+            startOffset = U32(reflector->bufferHead);
             // decode header
-            reflector->ReadAndAdvance( (u8*)&header, sizeof(Header) );
+            reflector->ReadAndAdvance( (u8*)&header, HeaderSize );
         }
     }
 
     ~ReflectedTypeInfo()
     {
-        // save how far to jump to find the first field - if the field follows on directly it'll be 4 bytes
         STATIC_IF( reflector->IsWriting )
         {
-            ASSERT( header.fieldCount == 0 || header.firstFieldOffset > startOffset, "Bad field offset" );
+            // Finish header
+            header.totalSize = U32(reflector->buffer->count - startOffset);
 
-            header.firstFieldOffset = header.fieldCount > 0 ? header.firstFieldOffset - startOffset : 0;
-            header.totalSize = reflector->buffer->count - startOffset;
-
-            // 4 bytes: end point to jump to
-            reflector->buffer->CopyFrom( (u8*)&header, sizeof(Header), startOffset );
+            reflector->buffer->CopyFrom( (u8*)&header, HeaderSize, startOffset );
         }
         else
         {
@@ -123,7 +118,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
 };
 
 template <bool RW>
-INLINE int ReflectFieldOffset( BinaryReflector<RW>& r )
+INLINE sz ReflectFieldOffset( BinaryReflector<RW>& r )
 {
     STATIC_IF( r.IsWriting )
         return r.buffer->count;
@@ -132,45 +127,46 @@ INLINE int ReflectFieldOffset( BinaryReflector<RW>& r )
 }
 
 // write an initial entry with an empty size
-template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* info, int fieldId )
+template< typename R > bool ReflectFieldStartWrite( R& r, ReflectedTypeInfo<R>* info, u32 fieldId )
 {
     ASSERT( fieldId <= U8MAX, "Id cannot exceed 255 per element" );
 
-    // store info to reconstruct the first field
-    if ( info->header.fieldCount++ == 0 )
-        info->header.firstFieldOffset = r.buffer->count;
+    info->header.fieldCount++;
 
     // Actual size will be computed at the end
     BinaryField newField = { 0, (u8)fieldId };
-    r.buffer->Push( (u8*)&newField, binaryFieldSize );
+    r.buffer->Push( (u8*)&newField, BinaryFieldSize );
 
     return true;
 }
 
 // Read the next field, or if the id doesn't match, find it in the type's field table
-template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* info, int fieldId )
+template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* info, u32 fieldId )
 {
     BinaryField decodedField;
+
+    // TODO Review how much sense these bounds checks make
+
     // If we're still inside the current bounds for the type, decode normally. Otherwise, it's missing
     if( r.bufferHead < info->startOffset + info->header.totalSize )
         r.ReadField( r.bufferHead, &decodedField );
     else
     {
         // TODO Signal error in the reflector or something
-        printf( "Serialise: buffer head at %d overflowed the end of the current type (%d)\n", r.bufferHead, info->startOffset + info->header.totalSize );
+        printf( "Serialise: buffer head at %I64d overflowed the end of the current type (%d)\n", r.bufferHead, info->startOffset + info->header.totalSize );
         return false;
     }
 
     if( decodedField.id == fieldId )
     {
-        int new_head = r.bufferHead + binaryFieldSize;
+        sz new_head = r.bufferHead + BinaryFieldSize;
         if( new_head > r.buffer->count )
         {
             // TODO Signal error in the reflector or something
-            printf( "Serialise: ID %d requests out-of-bounds offset of %d\n", fieldId, new_head );
+            printf( "Serialise: ID %u requests out-of-bounds offset of %I64d\n", fieldId, new_head );
             return false;
         }
-        r.bufferHead += binaryFieldSize;
+        r.bufferHead += BinaryFieldSize;
         return true;
     }
     else
@@ -179,7 +175,7 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
         // use the info to return to the start, and loop through all available fields to find the correct one
         // FIXME Write all per-field info in a footer at the end, and load it into a 256-entry table at the start of each type so we dont have to chase anything
 
-        int fieldStartOffset = info->startOffset + info->header.firstFieldOffset;
+        sz fieldStartOffset = info->startOffset + ReflectedTypeInfo<R>::HeaderSize;
 
         for( int i=0; i < info->header.fieldCount; ++i )
         {
@@ -187,11 +183,11 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
 
             if( decodedField.id == fieldId )
             {
-                int new_head = fieldStartOffset + binaryFieldSize;
+                sz new_head = fieldStartOffset + BinaryFieldSize;
                 if( new_head > r.buffer->count )
                 {
                     // TODO Signal error
-                    printf( "Serialise: Out-of-order ID %d requests out-of-bounds offset of %d\n", fieldId, new_head );
+                    printf( "Serialise: Out-of-order ID %u requests out-of-bounds offset of %I64d\n", fieldId, new_head );
                     return false;
                 }
 
@@ -209,7 +205,7 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
 }
 
 template <bool RW>
-INLINE bool ReflectFieldStart( int fieldId, StaticString const& name, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
+INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
 {
     STATIC_IF( r.IsWriting )
         return ReflectFieldStartWrite( r, info, fieldId );
@@ -218,22 +214,18 @@ INLINE bool ReflectFieldStart( int fieldId, StaticString const& name, ReflectedT
 }
 
 template <bool RW>
-INLINE void ReflectFieldEnd( int fieldStartOffset, BinaryReflector<RW>& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, BinaryReflector<RW>& r )
 {
-    BinaryField decodedField;
-
     STATIC_IF( r.IsWriting )
     {
-        r.ReadField( fieldStartOffset, &decodedField );
-
-        // existing entry should just have a placeholder size
-        ASSERT( decodedField.size == 0, "bad entry" );
         // final size includes the field metadata
-        int finalSize = r.buffer->count - fieldStartOffset;
-        r.WriteField( fieldStartOffset, { finalSize, decodedField.id } );
+        u32 finalSize = U32(r.buffer->count - fieldStartOffset);
+        r.WriteField( fieldStartOffset, { finalSize, (u8)fieldId } );
     }
     else 
     {
+        // TODO Could use the field-table info here instead of reading the field back
+        BinaryField decodedField;
         r.ReadField( fieldStartOffset, &decodedField );
         // set the read head to ensure it's correct
         r.bufferHead = fieldStartOffset + decodedField.size;
@@ -242,7 +234,7 @@ INLINE void ReflectFieldEnd( int fieldStartOffset, BinaryReflector<RW>& r )
 
 
 template <typename R, typename T>
-ReflectResult ReflectBytes( R& r, T& d )
+INLINE ReflectResult ReflectBytes( R& r, T& d )
 {
     STATIC_IF( r.IsWriting )
     {
@@ -258,21 +250,21 @@ ReflectResult ReflectBytes( R& r, T& d )
     return ReflectOk;
 }
 
-REFLECT( bool )         { return ReflectBytes( r, d ); }
-REFLECT( char )         { return ReflectBytes( r, d ); }
-REFLECT( i8 )           { return ReflectBytes( r, d ); }
-REFLECT( i16 )          { return ReflectBytes( r, d ); }
-REFLECT( i32 )          { return ReflectBytes( r, d ); }
-REFLECT( i64 )          { return ReflectBytes( r, d ); }
-REFLECT( u8 )           { return ReflectBytes( r, d ); }
-REFLECT( u16 )          { return ReflectBytes( r, d ); }
-REFLECT( u32 )          { return ReflectBytes( r, d ); }
-REFLECT( u64 )          { return ReflectBytes( r, d ); }
-REFLECT( f32 )          { return ReflectBytes( r, d ); }
-REFLECT( f64 )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, bool& d )         { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, char& d )         { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i8& d )           { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i16& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i32& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i64& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u8& d )           { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u16& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u32& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u64& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, f32& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, f64& d )          { return ReflectBytes( r, d ); }
 
 template <typename R>
-ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
+INLINE ReflectResult ReflectBytesRaw( R& r, void* buffer, sz sizeBytes )
 {
     STATIC_IF( r.IsWriting )
     {
@@ -289,23 +281,20 @@ ReflectResult ReflectBytesRaw( R& r, void* buffer, int sizeBytes )
 }
 
 template <typename R, typename T>
-ReflectResult ReflectBytes( R& r, T* buffer, int bufferLen )
+INLINE ReflectResult ReflectBytes( R& r, T* buffer, sz bufferLen )
 {
     return ReflectBytesRaw( r, (void*)buffer, bufferLen * SIZEOF(T) );
 }
 
 REFLECT( String )
 {
-    i32 length = d.length;
-    Reflect( r, length );
-
-    u32 flags = d.flags;
-    Reflect( r, flags );
+    Reflect( r, d.length );
+    Reflect( r, d.flags );
 
     STATIC_IF( r.IsReading )
-        d.Reset( length, flags );
+        d.Reset( d.length, d.flags );
 
-    return ReflectBytes( r, d.data, length );
+    return ReflectBytes( r, d.data, d.length );
 }
 
 REFLECT_T( Array<T> )

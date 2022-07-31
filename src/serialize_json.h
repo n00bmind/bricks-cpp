@@ -94,13 +94,13 @@ using JsonWriter = JsonReflector<false>;
 
 
 template <bool RW>
-INLINE int ReflectFieldOffset( JsonReflector<RW>& r )
+INLINE sz ReflectFieldOffset( JsonReflector<RW>& r )
 {
     return 0;
 }
 
 template <bool RW>
-INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectedTypeInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
+INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
 {
     // NOTE Use if constexpr when available to obliterate the check and not-taken branch even in Debug
     STATIC_IF( r.IsWriting )
@@ -172,7 +172,7 @@ void JsonWriteString( JsonWriter& r, bool pretty = true )
 }
 
 template <bool RW>
-INLINE void ReflectFieldEnd( u32 fieldOffset, JsonReflector<RW>& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, JsonReflector<RW>& r )
 {
     r.Pop();
     

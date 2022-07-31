@@ -126,17 +126,17 @@ struct ImGuiReflector : public Reflector<true>
     }
 };
 
-INLINE int ReflectFieldOffset( ImGuiReflector& r )
+INLINE sz ReflectFieldOffset( ImGuiReflector& r )
 {
     return 0;
 }
 
-INLINE bool ReflectFieldStart( u16 id, StaticString const& name, ReflectedTypeInfo<ImGuiReflector>* info, ImGuiReflector& r )
+INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<ImGuiReflector>* info, ImGuiReflector& r )
 {
     return r.PushObject( name, 0u );
 }
 
-INLINE void ReflectFieldEnd( u32 fieldOffset, ImGuiReflector& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ImGuiReflector& r )
 {
     r.PopObject();
 }
