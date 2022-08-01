@@ -22,7 +22,7 @@ struct SerialTypeComplex
     bool operator ==( SerialTypeComplex const& rhs )
     {
         return EQUAL( simple, rhs.simple )
-            && EQUALP( nums.data, rhs.nums.data, nums.count * SIZEOF(int) )
+            && nums.count == rhs.nums.count && EQUALP( nums.data, rhs.nums.data, nums.count * SIZEOF(int) )
             && str == rhs.str;
     }
 };
@@ -45,7 +45,7 @@ struct SerialTypeComplex2
     bool operator ==( SerialTypeComplex const& rhs )
     {
         return EQUAL( simple, rhs.simple )
-            && EQUALP( nums.data, rhs.nums.data, nums.count * SIZEOF(int) )
+            && nums.count == rhs.nums.count && EQUALP( nums.data, rhs.nums.data, nums.count * SIZEOF(int) )
             && str == rhs.str;
     }
 };
