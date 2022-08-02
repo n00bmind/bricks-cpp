@@ -29,7 +29,7 @@ Write field table with jump offsets (SIZE CHANGE)
 
 · Don't jump back to read field size at the end 3209 us = 803.6 Mb/s
 · Harden error checking in the reader           3370 us
+· Consistent error handling in the hierarchy    3526 us = 731.7 Mb/s
 
-
-RELEASE time:                                   3301 us = 781.2 Mb/s
+RELEASE time:                                   3446 us = 748.3 Mb/s
 

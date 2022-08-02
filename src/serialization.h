@@ -71,13 +71,19 @@ struct Reflector
 
     FieldAttributes attribs;
     Allocator* allocator;
+    ReflectResult error;
 
     bool FieldHasFlags( u32 flags ) const { return (attribs.flags & flags) == flags; }
+
+    bool HasError() const { return error.code != ReflectResult::Ok; }
+    void SetError( ReflectResult r ) { if( !HasError() ) error = r; }
+    void SetError( ReflectResult::Code e ) { if( !HasError() ) error = { e }; }
 
 protected:
     Reflector( Allocator* allocator_ )
         : attribs{}
         , allocator( allocator_ )
+        , error( ReflectOk )
     {}
 };
 
@@ -113,46 +119,45 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fie
             ret = Reflect( r, f );                        
             r.attribs = {};                               
         }                                                 
-        if( ret.code != ReflectResult::Ok )               
-            return ret;                                   
-                                                          
-        ReflectFieldEnd( fieldId, fieldOffset, &info, r );                
+
+        r.SetError( ret );
+        ReflectFieldEnd( fieldId, fieldOffset, &info, r );
     }
-    return ReflectOk;
+
+    return r.error;                                   
 }
 template <typename R, typename F>
 INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fieldId, F& f, StaticString const& name )
 {
     return ReflectFieldBody( r, info, fieldId, f, name, {} );
 }
-#define FIELD( id, f, ... )                 ReflectFieldBody( r, _reflectInfo, id, d.f, #f,     ##__VA_ARGS__ )
-#define FIELD_NAMED( id, f, name, ... )     ReflectFieldBody( r, _reflectInfo, id, d.f, name,   ##__VA_ARGS__ )
-#define FIELD_LOCAL( id, f, ... )           ReflectFieldBody( r, _reflectInfo, id, f,   #f,     ##__VA_ARGS__ )
+#define FIELD( id, f, ... )                 if( !ReflectFieldBody( r, _reflectInfo, id, d.f, #f,     ##__VA_ARGS__ ) ) return r.error;
+#define FIELD_NAMED( id, f, name, ... )     if( !ReflectFieldBody( r, _reflectInfo, id, d.f, name,   ##__VA_ARGS__ ) ) return r.error;
+#define FIELD_LOCAL( id, f, ... )           if( !ReflectFieldBody( r, _reflectInfo, id, f,   #f,     ##__VA_ARGS__ ) ) return r.error;
 
 
-
-#define REFLECT(...)      \
-    template <typename R> \
+#define REFLECT(...)                        \
+    template <typename R>                   \
     ReflectResult Reflect( R& r, __VA_ARGS__& d )
 
-#define REFLECT_T(...)      \
-    template <typename R, typename T> \
+#define REFLECT_T(...)                      \
+    template <typename R, typename T>       \
     ReflectResult Reflect( R& r, __VA_ARGS__& d )
 
 // These don't work with FIELDs
-#define REFLECT_SPECIAL_R(reflector, ...)      \
+#define REFLECT_SPECIAL_R(reflector, ...)   \
     ReflectResult Reflect( reflector& r, __VA_ARGS__& d )
 
-#define REFLECT_SPECIAL_RT(reflector, ...)      \
-    template <typename T> \
+#define REFLECT_SPECIAL_RT(reflector, ...)  \
+    template <typename T>                   \
     ReflectResult Reflect( reflector& r, __VA_ARGS__& d )
 
-#define REFLECT_SPECIAL_RW(reflector, ...)      \
-    template <bool RW> \
+#define REFLECT_SPECIAL_RW(reflector, ...)  \
+    template <bool RW>                      \
     ReflectResult Reflect( reflector<RW>& r, __VA_ARGS__& d )
 
-#define REFLECT_SPECIAL_RWT(reflector, ...)      \
-    template <bool RW, typename T> \
+#define REFLECT_SPECIAL_RWT(reflector, ...) \
+    template <bool RW, typename T>          \
     ReflectResult Reflect( reflector<RW>& r, __VA_ARGS__& d )
 
 

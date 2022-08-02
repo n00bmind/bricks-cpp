@@ -94,13 +94,15 @@ TEST( Serialization, SerializeSimpleType )
     BinaryWriter w( &buffer );
 
     SerialTypeSimple before = { 42 };
-    Reflect( w, before );
+    ReflectResult ret = Reflect( w, before );
+    ASSERT_TRUE( (bool)ret );
 
     LOG( "Size of serialized SerialTypeSimple: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeSimple after;
-    Reflect( r, after );
+    ret = Reflect( r, after );
+    ASSERT_TRUE( (bool)ret );
 
     ASSERT_TRUE( EQUAL( before, after ) );
 }
@@ -112,13 +114,15 @@ TEST( Serialization, SerializeComplexType )
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
     INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
-    Reflect( w, before );
+    ReflectResult ret = Reflect( w, before );
+    ASSERT_TRUE( (bool)ret );
 
     LOG( "Size of serialized SerialTypeComplex: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeComplex after;
-    Reflect( r, after );
+    ret = Reflect( r, after );
+    ASSERT_TRUE( (bool)ret );
 
     ASSERT_TRUE( before == after );
 }
@@ -130,11 +134,15 @@ TEST( Serialization, SerializeReorderedAttribute )
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
     INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
-    Reflect( w, before );
+
+    ReflectResult ret = Reflect( w, before );
+    ASSERT_TRUE( (bool)ret );
 
     BinaryReader r( &buffer );
     SerialTypeComplex2 after;
-    Reflect( r, after );
+
+    ret = Reflect( r, after );
+    ASSERT_TRUE( (bool)ret );
 
     ASSERT_TRUE( after == before );
 }
@@ -146,11 +154,13 @@ TEST( Serialization, SerializeRemovedAttribute )
 
     SerialTypeComplex before = { { 42 }, {}, "Hello sailor" };
     INIT( before.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
-    Reflect( w, before );
+    ReflectResult ret = Reflect( w, before );
+    ASSERT_TRUE( (bool)ret );
 
     BinaryReader r( &buffer );
     SerialTypeComplex3 after;
-    Reflect( r, after );
+    ret = Reflect( r, after );
+    ASSERT_TRUE( (bool)ret );
 
     ASSERT_TRUE( after == before );
 }
@@ -168,13 +178,15 @@ TEST( Serialization, SerializeChunkyType )
     before.deeper.Reset( 8000 );
     for( int i = 0; i < before.deeper.capacity; ++i )
         before.deeper.Push( deeper );
-    Reflect( w, before );
+    ReflectResult ret = Reflect( w, before );
+    ASSERT_TRUE( (bool)ret );
 
     LOG( "Size of serialized SerialTypeChunky: %I64d", buffer.count );
 
     BinaryReader r( &buffer );
     SerialTypeChunky after;
-    Reflect( r, after );
+    ret = Reflect( r, after );
+    ASSERT_TRUE( (bool)ret );
 
     ASSERT_TRUE( after == before );
 }

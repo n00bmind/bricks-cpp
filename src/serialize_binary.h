@@ -88,9 +88,9 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
             sz endOffset = startOffset + header.totalSize;
             if( endOffset > r->buffer->count || header.totalSize < HeaderSize )
             {
-                // FIXME Signal hard error in the reflector and stop
                 LogE( "Core", "Serialised type at %u has an invalid size %u (buffer is %I64d bytes)",
                       startOffset, header.totalSize, r->buffer->count );
+                reflector->SetError( ReflectResult::BadData );
             }
         }
     }
@@ -147,6 +147,8 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
         return false;
 
     r.ReadField( r.bufferHead, &decodedField );
+    // Mark the current bounds before potentially skipping around
+    info->currentFieldSize = decodedField.size;
 
     if( decodedField.id == fieldId )
     {
@@ -154,16 +156,16 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
     }
     else
     {
-        // Fields have different order
+        // Next field in the stream is not the one we want
         // Now, the only sensible use case is to use up field ids as needed in an increasing consecutive order, so:
-        // · if the decoded field's id is bigger, assume the field we want has been removed, so keep skipping _forward_ until we find it
-        // · if the decoded id is smaller, we've probably been reordered, so use the info to return to the start, and loop through
+        // · if the decoded field's id is smaller, assume it's a field that was removed, so keep skipping _forward_ until we find the one we want
+        // · if the decoded id is bigger, we've probably been reordered, so use the info to return to the start, and loop through
         //   all available fields to find the correct one
 
         // TODO We could additionally cache all fields we already read so we don't have to read them again
         sz prevFieldOffset = r.bufferHead;
 
-        sz curFieldOffset = (decodedField.id > fieldId)
+        sz curFieldOffset = (decodedField.id < fieldId)
             ? r.bufferHead + decodedField.size
             : info->startOffset + ReflectedTypeInfo<R>::HeaderSize;
 
@@ -180,9 +182,9 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
                 // This should only happen when reading the first field from the start (which should be covered by the early out above)
                 ASSERT( prevFieldOffset, "We should have read at least one field by now" );
 
-                // FIXME Signal hard error in the reflector and stop
                 LogE( "Core", "Serialised field at %u has an invalid size %u (type ends at offset %u)",
                       prevFieldOffset, decodedField.size, endOffset );
+                r.SetError( ReflectResult::BadData );
                 break;
             }
 
@@ -209,14 +211,13 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
     // Finally check the field we're about to read has valid bounds
     if( r.bufferHead + decodedField.size > endOffset || decodedField.size < BinaryFieldSize )
     {
-        // FIXME Signal hard error in the reflector and stop
         LogE( "Core", "Serialised field at %u has an invalid size %u (type ends at offset %u)",
               r.bufferHead, decodedField.size, endOffset );
+        r.SetError( ReflectResult::BadData );
         return false;
     }
 
     r.bufferHead += BinaryFieldSize;
-    info->currentFieldSize = decodedField.size;
     return true;
 }
 
