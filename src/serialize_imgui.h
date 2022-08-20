@@ -23,7 +23,7 @@ struct ImGuiReflector : public Reflector<true>
 
     BucketArray<StackEntry> stack;
     StackEntry* head;
-    i32 objectDepth;
+    sz objectDepth;
 
     ImGuiReflector( Allocator* allocator = CTX_TMPALLOC )
         : Reflector( allocator )
@@ -136,7 +136,7 @@ INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedT
     return r.PushObject( name, 0u );
 }
 
-INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<ImGuiReflector<RW>>* info, ImGuiReflector& r )
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<ImGuiReflector>* info, ImGuiReflector& r )
 {
     r.PopObject();
 }

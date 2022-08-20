@@ -6,7 +6,7 @@
 
 
 // NOTE Since this is only defined on the platform side, it needs to be passed manually to the app DLL
-PlatformAPI globalPlatform;
+Platform::API globalPlatform;
 
 
 // Global Context

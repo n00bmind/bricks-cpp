@@ -49,7 +49,7 @@ internal Logging::State* GetGlobalLoggingState()
     return &logState;
 }
 
-void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::ChannelDecl> logChannels )
+void InitGlobalPlatform( Platform::API const& platformAPI, Buffer<Logging::ChannelDecl> logChannels )
 {
     globalPlatform = platformAPI;
 
@@ -66,6 +66,12 @@ void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::Channel
 
     // Set up initial logging state (this requires a working Context & allocators)
     Logging::Init( GetGlobalLoggingState(), logChannels );
+}
+
+// Mainly for hot-reloading support
+void RestartGlobalPlatform()
+{
+    Logging::ResetEndpoints( GetGlobalLoggingState() );
 }
 
 void TickGlobalPlatform()

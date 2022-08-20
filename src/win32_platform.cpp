@@ -269,6 +269,11 @@ namespace Win32
         return globalThreadId == globalMainThreadId;
     }
 
+    int Utf8ToWideString( const char* in, wchar_t* out, sz outSize )
+    {
+        return MultiByteToWideChar( CP_UTF8, 0, in, -1, out, (int)(outSize / sizeof(wchar_t)) );
+    }
+
     PLATFORM_CREATE_SEMAPHORE(CreateSemaphore)
     {
         HANDLE h = ::CreateSemaphore( NULL, initialCount, MAXLONG, NULL );
@@ -605,7 +610,7 @@ namespace Win32
 
     void InitGlobalPlatform( Buffer<Logging::ChannelDecl> const& logChannels )
     {
-        PlatformAPI win32API = {};
+        Platform::API win32API = {};
         win32API.Alloc                = Alloc;
         win32API.Free                 = Free;
         win32API.GetContext           = Platform::GetContext;

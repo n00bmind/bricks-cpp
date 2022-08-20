@@ -3,9 +3,12 @@
 
 namespace Core
 {
+    inline thread_local char const* threadName = nullptr;
+
     inline Platform::ThreadHandle CreateThread( char const* name, Platform::ThreadFunc threadFunc, void* userdata = nullptr,
                                                 Context const& threadContext = {} )
     {
+        threadName = name;
         return globalPlatform.CreateThread( name, threadFunc, userdata, threadContext );
     }
 

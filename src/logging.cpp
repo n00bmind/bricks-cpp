@@ -66,9 +66,10 @@ namespace Logging
         LOG_ENDPOINT(RawFileLog);
     }
 
+    // FIXME Sync! The endpoints array is not threadsafe
+
     void AttachEndpoint( StaticStringHash name, EndpointFunc* endpoint, void* userdata /*= nullptr*/ )
     {
-        // FIXME Sync!
 
         u32 id = name.Hash32();
 
@@ -163,4 +164,17 @@ namespace Logging
 
         Core::JoinThread( thread );
     }
+
+    void ResetEndpoints( State* state )
+    {
+        // Clear all endpoints and readd the default one
+        // FIXME We need a mutex for this
+        state->endpoints.Clear();
+
+        // DefaultEndpoints
+        AttachEndpoint( "StandardOut", Endpoints::DebugLog );
+        // TODO File creation etc
+        //AttachEndpoint( "FileOut", Endpoints::RawFileLog );
+    }
+
 } // namespace Logging

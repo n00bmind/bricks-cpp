@@ -105,83 +105,81 @@ typedef PLATFORM_PRINT(PrintFunc);
 #define PLATFORM_PRINT_VA(x)            void x( const char *fmt, va_list args )
 typedef PLATFORM_PRINT_VA(PrintVAFunc);
 
-} // namespace Platform
-
 
 // TODO Shouldn't this be defined by the application really?
-struct PlatformAPI
+struct API
 {
     // Memory
-    Platform::AllocFunc*                        Alloc;
-    Platform::FreeFunc*                         Free;
+    AllocFunc*                        Alloc;
+    FreeFunc*                         Free;
 
     // Context
-    Platform::GetContextFunc*                   GetContext;
-    Platform::PushContextFunc*                  PushContext;
-    Platform::PopContextFunc*                   PopContext;
+    GetContextFunc*                   GetContext;
+    PushContextFunc*                  PushContext;
+    PopContextFunc*                   PopContext;
 
     // Filesystem
 #if 0
-    Platform::GetAbsolutePathFunc*              GetAbsolutePath;
+    GetAbsolutePathFunc*              GetAbsolutePath;
 #endif
 
-    Platform::ReadEntireFileFunc*               ReadEntireFile;
-    Platform::WriteEntireFileFunc*              WriteEntireFile;
+    ReadEntireFileFunc*               ReadEntireFile;
+    WriteEntireFileFunc*              WriteEntireFile;
 
     // Threading
-    Platform::CreateThreadFunc*                 CreateThread;
-    Platform::JoinThreadFunc*                   JoinThread;
-    Platform::GetThreadIdFunc*                  GetThreadId;
-    Platform::IsMainThreadFunc*                 IsMainThread;
+    CreateThreadFunc*                 CreateThread;
+    JoinThreadFunc*                   JoinThread;
+    GetThreadIdFunc*                  GetThreadId;
+    IsMainThreadFunc*                 IsMainThread;
 
-    Platform::CreateSemaphoreFunc*              CreateSemaphore;
-    Platform::DestroySemaphoreFunc*             DestroySemaphore;
-    Platform::WaitSemaphoreFunc*                WaitSemaphore;
-    Platform::SignalSemaphoreFunc*              SignalSemaphore;
-    Platform::CreateMutexFunc*                  CreateMutex;
-    Platform::DestroyMutexFunc*                 DestroyMutex;
-    Platform::LockMutexFunc*                    LockMutex;
-    Platform::UnlockMutexFunc*                  UnlockMutex;
+    CreateSemaphoreFunc*              CreateSemaphore;
+    DestroySemaphoreFunc*             DestroySemaphore;
+    WaitSemaphoreFunc*                WaitSemaphore;
+    SignalSemaphoreFunc*              SignalSemaphore;
+    CreateMutexFunc*                  CreateMutex;
+    DestroyMutexFunc*                 DestroyMutex;
+    LockMutexFunc*                    LockMutex;
+    UnlockMutexFunc*                  UnlockMutex;
 
     // Misc
-    Platform::ElapsedTimeMillisFunc*            ElapsedTimeMillis;
-    Platform::ShellExecuteFunc*                 ShellExecute;
-    Platform::TestConnectivityFunc*             TestConnectivity;
+    ElapsedTimeMillisFunc*            ElapsedTimeMillis;
+    ShellExecuteFunc*                 ShellExecute;
+    TestConnectivityFunc*             TestConnectivity;
 
-    Platform::PrintFunc*                        Print;
-    Platform::PrintFunc*                        Error;
-    Platform::PrintVAFunc*                      PrintVA;
-    Platform::PrintVAFunc*                      ErrorVA;
+    PrintFunc*                        Print;
+    PrintFunc*                        Error;
+    PrintVAFunc*                      PrintVA;
+    PrintVAFunc*                      ErrorVA;
     AssertHandlerFunc*                          DefaultAssertHandler;
 
 #if 0
 #if !CONFIG_RELEASE
-    Platform::DebugFreeFileMemoryFunc*          DEBUGFreeFileMemory;
-    Platform::DebugListAllAssetsFunc*           DEBUGListAllAssets;
-    Platform::DebugJoinPathsFunc*               DEBUGJoinPaths;
-    Platform::DebugGetParentPathFunc*           DEBUGGetParentPath;
+    DebugFreeFileMemoryFunc*          DEBUGFreeFileMemory;
+    DebugListAllAssetsFunc*           DEBUGListAllAssets;
+    DebugJoinPathsFunc*               DEBUGJoinPaths;
+    DebugGetParentPathFunc*           DEBUGGetParentPath;
 
     bool DEBUGquit;
 #endif
 
-    Platform::AddNewJobFunc*                    AddNewJob;
-    Platform::CompleteAllJobsFunc*              CompleteAllJobs;
-    Platform::JobQueue*                         hiPriorityQueue;
+    AddNewJobFunc*                    AddNewJob;
+    CompleteAllJobsFunc*              CompleteAllJobs;
+    JobQueue*                         hiPriorityQueue;
     //JobQueue* loPriorityQueue;
     // NOTE Includes the main thread! (0)
     i32 coreThreadsCount;
 
-    Platform::AllocateOrUpdateTextureFunc*      AllocateOrUpdateTexture;
-    Platform::DeallocateTextureFunc*            DeallocateTexture;
+    AllocateOrUpdateTextureFunc*      AllocateOrUpdateTexture;
+    DeallocateTextureFunc*            DeallocateTexture;
 #endif
 };
-extern PlatformAPI globalPlatform;
+
+} // namespace Platform
+
+extern Platform::API globalPlatform;
 
 
 namespace Platform
 {
     void InitContextStack( Context const& baseContext );
-
-    //void InitGlobalPlatform( PlatformAPI const& platformAPI, Buffer<Logging::ChannelDecl> logChannels );
-    void TickGlobalPlatform();
 }
