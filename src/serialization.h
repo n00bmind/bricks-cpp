@@ -161,15 +161,23 @@ INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fie
     ReflectResult Reflect( reflector<RW>& r, __VA_ARGS__& d )
 
 
-#define DEFINE_ADAPTER(name)         \
-    template <typename I, typename O>  \
-    struct name                        \
-    {                                  \
-        I& in;                         \
-        O out;                         \
-                                       \
-        name( I& d ) : in( d ) , out{} \
-        {}                             \
+// Generic type converter for insertion in the serialization chain of any attribute
+// The struct attribute to convert is the 'source' and gets passed on construction
+// The actual value that gets serialized out is the 'target'. Hence:
+// - A writer converts the source value to the target value, and writes the target
+// - A reader reads from the target, and converts the target value to the source value
+
+// TODO We want this to be applicable to any conversion scenarios, while at the same time be able to restrict its action
+// only to specific Reflectors (or just apply to all). 
+#define DEFINE_ADAPTER(name)              \
+    template <typename Src, typename Tgt> \
+    struct name                           \
+    {                                     \
+        Src& src;                         \
+        Tgt tgt;                          \
+                                          \
+        name( Src& d ) : src( d ) , tgt{} \
+        {}                                \
     };
 
 
