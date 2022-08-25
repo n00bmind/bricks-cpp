@@ -1,5 +1,5 @@
 
-CPU time (DEV)                                  DESKTOP                     LAPTOP
+CPU time (DEV)                                  DESKTOP                     LAPTOP                      OFFICE DESK
 
 Starting point:
 1480018 x2 bytes (2.8229103 Mb) in              7986 us = 353.4 Mb/s        9792 us = 288.2 Mb/s
@@ -31,5 +31,4 @@ Write field table with jump offsets (SIZE CHANGE)
 · Harden error checking in the reader           3370 us
 · Consistent error handling in the hierarchy    3526 us = 731.7 Mb/s
 
-RELEASE time:                                   3446 us = 748.3 Mb/s
-
+RELEASE time:                                   3446 us = 748.3 Mb/s                                    2824 us = 913.1 Mb/s

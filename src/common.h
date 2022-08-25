@@ -124,11 +124,11 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 #define OFFSETOF(type, member) Sz( (uintptr_t)&(((type *)0)->member) )
 #define ARRAYCOUNT(array) Sz( sizeof(array) / sizeof((array)[0]) )
 
-// Quickly check size of a struct at compile time
-// TODO This has the usual problem with templated structs with comma separated args
-#define CHECKSIZE( t ) \
-    template<int s> struct Size; \
-    Size<sizeof( t )> size_of_##t;
+// Quickly check size of a struct at compile time by forcing an error msg that includes it
+// NOTE Must be placed at global / namespace scope
+#define CHECKSIZE( ... ) \
+    template<int> struct CompileTimeSize; \
+    CompileTimeSize<sizeof( __VA_ARGS__ )> _;
 
 #if 0
 #define STR(s) _STR(s)
@@ -163,6 +163,7 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 
 // Force actual compile time execution of a constexpr function (similar to 'consteval')
 // USE SPARINGLY
+#if 0
 template <typename T, T F>
 struct ForceCompileTime
 {
@@ -170,6 +171,14 @@ struct ForceCompileTime
 };
 #define CONSTEVAL(type, funcCall) \
     ForceCompileTime<type, funcCall>::value
+#else
+// C++17 version that doesnt introduce any symbols
+// See https://artificial-mind.net/blog/2020/11/14/cpp17-consteval
+// Usage: int result = CONSTEVAL<ConstexprLog2( 32 )>;
+// TODO Test using the string hash tests!
+template <auto F>
+static constexpr auto CONSTEVAL = F;
+#endif
 
 // Marker for a compile-time if, in case we either decide to go full nuts and use c++17, or find a decent substitute
 // NOTE msvc has an outstanding bug going on for a decade which causes the __cplusplus macro to always return a really old value
