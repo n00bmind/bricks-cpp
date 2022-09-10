@@ -456,6 +456,15 @@ struct String
         ((char*)data)[len] = 0;
     }
 
+    // Turn a Ref string into a owned one by allocating and copying
+    void MakeOwned()
+    {
+        if( flags & Owned )
+            return;
+
+        InternalClone( data, length );
+    }
+
 private:
     explicit String( int len, u32 flags_ = 0 )
     {
