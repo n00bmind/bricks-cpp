@@ -34,6 +34,12 @@ INLINE T Max( T a, T b )
     return a > b ? a : b;
 }
 
+template <typename T>
+INLINE T Clamp( T v, T min, T max )
+{
+    return Min( max, Max( min, v ) );
+}
+
 INLINE sz
 AlignUp( sz size, sz alignment )
 {
