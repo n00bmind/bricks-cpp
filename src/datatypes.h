@@ -69,6 +69,7 @@ struct Array
     // Initializing from a temporary array needs to allocate and copy
     // TODO For some reason, passing an array with a single int will always match the above constructor instead!
     // TODO This still doesnt work when we're inside a struct and trying to initialize with an 'initializer list'
+    // Maybe try some of the stuff in https://www.foonathan.net/2016/12/fixing-initializer-list/
     template <size_t N>
     Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : Array( (int)N, allocator_, params )
@@ -99,9 +100,7 @@ struct Array
         : Array( data_, (int)N, (int)N )
     {}
 
-    // Convert from any static array of a compatible type
-    // NOTE The array itself must be an lvalue, so passing an array literal directly as the constructor argument wont work!
-    // TODO can we do a const version that does it?
+    // Convert from an lvalue static array of a compatible type
 #if 0
     template <typename SrcT, size_t N>
         Array( SrcT (&data_)[N] )

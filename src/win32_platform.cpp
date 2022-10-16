@@ -407,190 +407,240 @@ namespace Win32
         vfprintf( stderr, fmt, args );
     }
 
-    DWORD GetLastError( char* result_string = nullptr, sz result_string_len = 0 )
+    DWORD GetLastError( char* resultString = nullptr, sz resultStringLen = 0 )
     {
-        DWORD result = ::GetLastError();
+        ASSERT( !resultString || resultStringLen );
 
+        DWORD result = ::GetLastError();
         if( result == 0 )
         {
-            if( result_string && result_string_len )
-                *result_string = 0;
+            if( resultString && resultStringLen )
+                *resultString = 0;
             return result;
         }
 
-        CHAR msg_buffer[2048] = {};
-        CHAR* out = result_string ? result_string : msg_buffer;
-        DWORD max_out_len = ASSERT_U32( result_string ? result_string_len : ARRAYCOUNT(msg_buffer) );
+        CHAR msgBuffer[2048] = {};
+        CHAR* out = resultString ? resultString : msgBuffer;
+        DWORD maxOutLen = ASSERT_U32( resultString ? resultStringLen : ARRAYCOUNT(msgBuffer) );
 
-        DWORD msg_size = FormatMessageA( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
-                                         NULL,
-                                         result,
-                                         MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
-                                         out,
-                                         max_out_len,
-                                         NULL );
-        if( msg_size )
+        DWORD msgSize = FormatMessageA( FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+                                        NULL,
+                                        result,
+                                        MAKELANGID( LANG_NEUTRAL, SUBLANG_DEFAULT ),
+                                        out,
+                                        maxOutLen,
+                                        NULL );
+        if( msgSize )
         {
             // Remove trailing newline
             for( int i = 0; i < 2; ++i )
-                if( out[msg_size - 1] == '\n' || out[msg_size - 1] == '\r' )
+                if( out[msgSize - 1] == '\n' || out[msgSize - 1] == '\r' )
                 {
-                    msg_size--;
-                    out[msg_size] = 0;
+                    msgSize--;
+                    out[msgSize] = 0;
                 }
 
-            if( !result_string )
+            if( !resultString )
                 LogE( "Platform", "ERROR [%08x] : %s\n", result, out );
         }
 
         return result;
     }
 
-    // Leave at least one byte for the terminator
-    // TODO This is buggy! Check latest version in KoM
-#define APPEND_TO_BUFFER( fmt, ... ) { int msg_len = snprintf( buffer, ASSERT_SIZE( buffer_end - buffer - 1 ), fmt, ##__VA_ARGS__ ); buffer += msg_len; }
-
-    void DumpCallstackToBuffer( char* buffer, sz buffer_length, int ignore_number_of_frames = 0 )
+    int CaptureCallstack( void* framesOut[], sz framesOutLen, int framesIgnoredCount = 0 )
     {
-        char* buffer_end = buffer + buffer_length;
+        int frameCount = CaptureStackBackTrace( (DWORD)framesIgnoredCount, (DWORD)framesOutLen, framesOut, NULL );
+        return frameCount;
+    }
+
+    sz ResolveCallstack( void* const frames[], int framesLen, char* bufferOut, sz bufferOutLen, char const* lineSeparator = nullptr )
+    {
+        if( !lineSeparator )
+            lineSeparator = "\n";
 
         HANDLE hProcess = GetCurrentProcess();
+        char const* const bufferStart = bufferOut;
+        char const* const bufferEnd = bufferOut + bufferOutLen;
 
-        char exe_path[MAX_PATH];
+        char exePath[MAX_PATH];
         {
-            if( GetModuleFileName(NULL, exe_path, MAX_PATH) )
+            if( GetModuleFileNameA( NULL, exePath, MAX_PATH ) )
             {
-                char* p_scan = exe_path;
-                char* last_sep = nullptr;
-                while( *p_scan != 0 )
+                char* pScan = exePath;
+                char* lastSep = nullptr;
+                while( *pScan != 0 )
                 {
-                    if( (*p_scan == '\\' || *p_scan == '/') && last_sep != p_scan - 1 )
-                        last_sep = p_scan;
-                    ++p_scan;
+                    if( (*pScan == '\\' || *pScan == '/') && lastSep != pScan - 1 )
+                        lastSep = pScan;
+                    ++pScan;
                 }
-                if( last_sep )
-                    *last_sep = 0;
+                if( lastSep )
+                    *lastSep = 0;
 
-#if 0
-                APPEND_TO_BUFFER( "Path for symbols is '%s'\n", exe_path );
-#endif
+                StringAppendToBuffer( bufferOut, bufferEnd, "Path for symbols is '%s'%s", exePath, lineSeparator );
             }
             else
             {
-                char error_msg[2048] = {};
-                u32 error_code = GetLastError( error_msg, ARRAYCOUNT( error_msg ) );
-
-                APPEND_TO_BUFFER( "<<< GetModuleFileName failed with error 0x%08x ('%s') >>>\n", error_code, error_msg );
+                char errorMsg[1024];
+                u32 errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+                StringAppendToBuffer( bufferOut, bufferEnd, "<<< GetModuleFileName failed with error 0x%08x ('%s') >>>%s", errorCode, errorMsg, lineSeparator );
             }
         }
 
-        if (!SymInitialize(hProcess, exe_path, TRUE))
+        if( !SymInitialize( hProcess, exePath, TRUE ) )
         {
-            char error_msg[2048] = {};
-            u32 error_code = GetLastError( error_msg, ARRAYCOUNT( error_msg ) );
-
-            APPEND_TO_BUFFER( "<<< SymInitialize failed with error 0x%08x ('%s') >>>\n\n", error_code, error_msg );
+            char errorMsg[1024];
+            u32 errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+            StringAppendToBuffer( bufferOut, bufferEnd, "<<< SymInitialize failed with error 0x%08x ('%s') >>>%s%s", errorCode, errorMsg, lineSeparator, lineSeparator);
         }
 
-        char pwd[MAX_PATH] = {};
-        GetCurrentDirectory( ASSERT_U32( ARRAYCOUNT(pwd) ), pwd );
-        int pwd_len = StringLength( pwd );
+#if 0
+        // TODO Do we need this?
+        char cwd[MAX_PATH];
+        StringCopy( cwd, sizeof(cwd), File::GetBasePath() );
+        File::UnfixSlashes( cwd );
+        ToLowercase( cwd );
+#endif
 
-        //File::UnfixSlashes( pwd );
-        StringToLowercase( pwd );
-
-        void* stacktrace_addresses[32]{};
-        CaptureStackBackTrace( ASSERT_U32( ignore_number_of_frames ), 32, stacktrace_addresses, NULL);
-
-        int trace_index = 0;
-        char frame_desc_buffer[256];
-        while (stacktrace_addresses[trace_index] != nullptr)
+        char frameDescBuffer[256];
+        for( int frameIdx = 0; frameIdx < framesLen; ++frameIdx )
         {
-            frame_desc_buffer[0] = '\0';
+            if( frames[frameIdx] == nullptr )
+                continue;
+
+            frameDescBuffer[0] = '\0';
 
             // Resolve source filename & line
             DWORD lineDisplacement = 0;
             IMAGEHLP_LINE64 lineInfo;
-            ZeroMemory(&lineInfo, sizeof(lineInfo));
+            ZeroMemory( &lineInfo, sizeof(lineInfo) );
             lineInfo.SizeOfStruct = sizeof(lineInfo);
 
-            if (SymGetLineFromAddr64(hProcess, (DWORD64)stacktrace_addresses[trace_index], &lineDisplacement, &lineInfo))
+            if( SymGetLineFromAddr64( hProcess, (DWORD64)frames[frameIdx], &lineDisplacement, &lineInfo ) )
             {
-                char const* file_path = lineInfo.FileName;
+                char const* filePath = lineInfo.FileName;
 
-                // Try to convert to relative path using current dir
-                StringToLowercase( (char*)lineInfo.FileName );
+#if 0
+                // Try to convert to relative path using the project's base path
+                ToLowercase( (char*)lineInfo.FileName );
+                int idx = StringFind( filePath, cwd );
 
-                if( StringStartsWith( file_path, pwd ) )
-                    file_path += pwd_len;
-                if( file_path[0] == '\\' || file_path[0] == '/' )
-                    file_path++;
+                if( idx != -1 )
+                    filePath += idx + strlen( cwd );
+                if( filePath[0] == '\\' || filePath[0] == '/' )
+                    filePath++;
+#endif
 
-                snprintf( frame_desc_buffer, ASSERT_SIZE( ARRAYCOUNT(frame_desc_buffer) ), "%s (%u)", file_path, (u32)lineInfo.LineNumber );
+                snprintf( frameDescBuffer, sizeof(frameDescBuffer), "%s (%lu)", filePath, lineInfo.LineNumber );
             }
             else
             {
-                char error_msg[2048] = {};
-                DWORD error_code = GetLastError( error_msg, ARRAYCOUNT( error_msg ) );
-
-                snprintf(frame_desc_buffer, ASSERT_SIZE( ARRAYCOUNT(frame_desc_buffer) ), "[SymGetLineFromAddr64 failed: %s]", error_msg );
+                char errorMsg[1024];
+                u32 errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+                snprintf( frameDescBuffer, sizeof(frameDescBuffer), "[SymGetLineFromAddr64 failed: %s]", errorMsg );
             }
 
             // Resolve symbol name
-            const u32 sym_name_len = 256;
-            char sym_name_buffer[sym_name_len];
+            char symNameBuffer[256];
+            const int symNameLen = sizeof(symNameBuffer);
             {
                 DWORD64 dwDisplacement = 0;
 
-                char sym_buffer[sizeof(IMAGEHLP_SYMBOL64) + sym_name_len];
-                ZeroMemory( &sym_buffer, ASSERT_SIZE( ARRAYCOUNT(sym_buffer) ) );
+                char symBuffer[sizeof(IMAGEHLP_SYMBOL64) + symNameLen];
+                ZeroMemory( &symBuffer, sizeof(symBuffer) );
 
-                IMAGEHLP_SYMBOL64* symbol = (IMAGEHLP_SYMBOL64*)sym_buffer;
+                IMAGEHLP_SYMBOL64* symbol = (IMAGEHLP_SYMBOL64*)symBuffer;
                 symbol->SizeOfStruct = sizeof(IMAGEHLP_SYMBOL64);
-                symbol->MaxNameLength = sym_name_len - 1;
+                symbol->MaxNameLength = symNameLen - 1;
 
-                if (SymGetSymFromAddr64(hProcess, (DWORD64)stacktrace_addresses[trace_index], &dwDisplacement, symbol))
+                if( SymGetSymFromAddr64( hProcess, (DWORD64)frames[frameIdx], &dwDisplacement, symbol ) )
                 {
-                    SymUnDName64( symbol, sym_name_buffer, ASSERT_U32( ARRAYCOUNT(sym_name_buffer) ) );
+                    SymUnDName64( symbol, symNameBuffer, symNameLen );
                 }
                 else
                 {
-                    char error_msg[2048] = {};
-                    DWORD error_code = GetLastError( error_msg, ARRAYCOUNT( error_msg ) );
-                    snprintf( sym_name_buffer, ASSERT_SIZE( ARRAYCOUNT(sym_name_buffer) ), "[SymGetSymFromAddr64 failed: %s]", error_msg );
+                    char errorMsg[1024];
+                    u32 errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+                    snprintf( symNameBuffer, symNameLen, "[SymGetSymFromAddr64 failed: %s]", errorMsg );
                 }
             }
 
-            APPEND_TO_BUFFER( "[%2d] %s\n" "\t0x%016llx %s\n", trace_index, sym_name_buffer,
-                              (DWORD64)stacktrace_addresses[trace_index], frame_desc_buffer );
+            bool appended = StringAppendToBuffer( bufferOut, bufferEnd, "[%2d] %s%s" "\t0x%016llx %s%s", frameIdx, symNameBuffer, lineSeparator,
+                                                  (DWORD64)frames[frameIdx], frameDescBuffer, lineSeparator );
 
             // bail when we hit the application entry-point, don't care much about beyond this level
-            if (strstr(sym_name_buffer, "main") != nullptr)
+            if( !appended
+                || strstr(symNameBuffer, "EntryPoint::") != nullptr
+                || strstr(symNameBuffer, "main") != nullptr
+                || strstr(symNameBuffer, "wWinMain") != nullptr )
                 break;
-
-            trace_index++;
         }
 
-        *buffer = 0;
+        *bufferOut++ = 0;
+        return bufferOut - bufferStart;
     }
-#undef APPEND_TO_BUFFER
 
-    internal LONG WINAPI ExceptionHandler( LPEXCEPTION_POINTERS exception_pointers )
+    int DumpCallstackToBuffer( char* bufferOut, sz bufferLen, int framesIgnoredCount = 0, char const* lineSeparator = nullptr )
+    {
+        void* addresses[64]{};
+        int frameCount = CaptureCallstack( addresses, ARRAYCOUNT(addresses), framesIgnoredCount );
+
+        ResolveCallstack( addresses, frameCount, bufferOut, bufferLen, lineSeparator );
+        return frameCount;
+    }
+
+
+    internal LONG WINAPI ExceptionHandler( LPEXCEPTION_POINTERS exceptionPointers )
     {
         char callstack[16384];
         DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 8 );
 
-        LogE( "Platform", "### UNHANDLED EXCEPTION ###\n" );
-        LogE( "Platform", "%s", callstack );
+        LogE( "Platform", "### UNHANDLED EXCEPTION ###\n%s", callstack );
 
-        // TODO Write minidump
+        // Write minidump
+        u32 errorCode = 0;
+        char errorMsg[1024] = {};
+        bool minidumpWritten = false;
+        static constexpr char const* filename = "minidump.dmp";
+
+        HANDLE hFile = CreateFileA( filename, GENERIC_READ | GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL );
+        if( hFile != NULL && hFile != INVALID_HANDLE_VALUE )
+        {
+            MINIDUMP_EXCEPTION_INFORMATION mdei;
+
+            mdei.ThreadId = GetCurrentThreadId();
+            mdei.ExceptionPointers = exceptionPointers;
+            mdei.ClientPointers = FALSE;
+
+            // NOTE Never needed this
+            static constexpr bool full_mem = false;
+
+            MINIDUMP_TYPE mdt = (MINIDUMP_TYPE)(
+                                    full_mem
+                                    ? (MiniDumpWithFullMemory | MiniDumpIgnoreInaccessibleMemory | MiniDumpWithThreadInfo)
+                                    : (MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithDataSegs | MiniDumpWithThreadInfo)
+                                    );
+
+            if( MiniDumpWriteDump( GetCurrentProcess(), GetCurrentProcessId(), hFile, mdt, &mdei, 0, 0 ) )
+                minidumpWritten = true;
+            else
+                errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+
+            CloseHandle(hFile);
+        }
+        else
+            errorCode = GetLastError( errorMsg, ARRAYCOUNT(errorMsg) );
+
+        if( minidumpWritten )
+            LogI( "Platform", "Minidump written to %s", filename );
+        else
+            LogE( "Platform", "Failed to write minidump with error 0x%08x ('%s')", errorCode, errorMsg );
 
         return EXCEPTION_EXECUTE_HANDLER;
     }
 
     ASSERT_HANDLER(DefaultAssertHandler)
     {
-        // TODO Logging
         char buffer[256] = {};
 
         va_list args;
@@ -607,6 +657,10 @@ namespace Win32
     }
 
 
+    void InstallDefaultCrashHandler()
+    {
+        SetUnhandledExceptionFilter( ExceptionHandler );
+    }
 
     void InitGlobalPlatform( Buffer<Logging::ChannelDecl> const& logChannels )
     {

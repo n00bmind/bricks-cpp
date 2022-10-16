@@ -309,6 +309,33 @@ inline bool StringToBool( char const* str, bool* output )
     return result;
 }
 
+// Return whether the full message was appended or we reached the end of the buffer first
+inline bool StringAppendToBuffer( char*& buffer, char const* bufferEnd, char const* msg, ... )
+{
+    if( buffer >= bufferEnd )
+        return false;
+
+    // Leave at least one byte for the terminator
+    sz remaining = bufferEnd - buffer - 1;
+    if( remaining > 0 )
+    {
+        va_list args;
+        va_start( args, msg );
+        int msgLen = vsnprintf( buffer, (size_t)remaining, msg, args );
+        va_end( args );
+
+        buffer += msgLen;
+        if( buffer < bufferEnd )
+            return true;
+        else
+        {
+            buffer = (char*)bufferEnd;
+            return false;
+        }
+    }
+    return false;
+}
+
 
 // Specialised hash & equality implementations for char* strings
 template <>

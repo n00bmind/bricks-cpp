@@ -131,27 +131,6 @@ static void TestMutex( benchmark::State& state )
     }
 }
 
-#define TEST_MUTEX(T)                   \
-    BENCHMARK_TEMPLATE(TestMutex, T)    \
-        ->Unit(benchmark::kMillisecond) \
-        ->MeasureProcessCPUTime();
-
-#if 0
-// TODO Would be interesting to give the threads a more 'realistic' workload, to see if the differences remain that big
-TEST_MUTEX(Mutex);
-TEST_MUTEX(RecursiveMutex);
-TEST_MUTEX(PlatformMutex);
-
-//TEST_MUTEX(Benaphore<PlatformSemaphore>);
-TEST_MUTEX(Benaphore<PreshingSemaphore>);
-TEST_MUTEX(Benaphore<Semaphore>);
-//TEST_MUTEX(RecursiveBenaphore<PlatformSemaphore>);
-TEST_MUTEX(RecursiveBenaphore<PreshingSemaphore>);
-TEST_MUTEX(RecursiveBenaphore<Semaphore>);
-
-TEST_MUTEX(SpinLockMutex);
-#endif
-
 
 static void TestBinarySerializer( benchmark::State& state )
 {
@@ -179,10 +158,84 @@ static void TestBinarySerializer( benchmark::State& state )
     }
 }
 
+
+using HashFunc = u64( void const*, sz );
+
+template <HashFunc* F>
+static void TestHashFunctionSmall( benchmark::State& state )
+{
+    static u8 buffer[24];
+
+    srand( (u32)time( NULL ) );
+    for( int i = 0; i < sizeof(buffer); ++i )
+        buffer[i] = (u8)rand();
+
+    u64 h;
+    for( auto _ : state )
+    {
+        DoNotOptimize( h = F( buffer, sizeof(buffer) ) );
+    }
+}
+
+template <HashFunc* F>
+static void TestHashFunctionBig( benchmark::State& state )
+{
+    static constexpr sz bufferSize = 4 * 1024 * 1024;
+    static u8* buffer = (u8*)ALLOC( CTX_ALLOC, bufferSize );
+
+    srand( (u32)time( NULL ) );
+    for( int i = 0; i < bufferSize; ++i )
+        buffer[i] = (u8)rand();
+
+    u64 h;
+    for( auto _ : state )
+    {
+        DoNotOptimize( h = F( buffer, bufferSize ) );
+    }
+}
+
+
+#define TEST_MUTEX(T)                   \
+    BENCHMARK_TEMPLATE(TestMutex, T)    \
+        ->Unit(benchmark::kMillisecond) \
+        ->MeasureProcessCPUTime()       \
+        //->MinTime( 10 )
+
+#if 0
+// TODO Would be interesting to give the threads a more 'realistic' workload, to see if the differences remain that big
+TEST_MUTEX(Mutex);
+TEST_MUTEX(RecursiveMutex);
+TEST_MUTEX(PlatformMutex);
+
+TEST_MUTEX(Benaphore<PlatformSemaphore>);
+TEST_MUTEX(Benaphore<PreshingSemaphore>);
+TEST_MUTEX(Benaphore<Semaphore>);
+TEST_MUTEX(RecursiveBenaphore<PlatformSemaphore>);
+TEST_MUTEX(RecursiveBenaphore<PreshingSemaphore>);
+TEST_MUTEX(RecursiveBenaphore<Semaphore>);
+
+TEST_MUTEX(SpinLockMutex);
+#endif
+
+#if 0
 BENCHMARK(TestBinarySerializer)
     ->Unit(benchmark::kMicrosecond)
     //->Iterations(1)
     ->MeasureProcessCPUTime();
+#endif
+
+BENCHMARK_TEMPLATE(TestHashFunctionSmall, CompileTimeHash64);
+BENCHMARK_TEMPLATE(TestHashFunctionSmall, MurmurHash3_x64_64);
+BENCHMARK_TEMPLATE(TestHashFunctionSmall, XXHash64::hash);
+BENCHMARK_TEMPLATE(TestHashFunctionSmall, MetroHash128::Hash64);
+BENCHMARK_TEMPLATE(TestHashFunctionSmall, MetroHash128::Hash64Inc);
+BENCHMARK_TEMPLATE(TestHashFunctionBig, CompileTimeHash64);
+BENCHMARK_TEMPLATE(TestHashFunctionBig, MurmurHash3_x64_64);
+BENCHMARK_TEMPLATE(TestHashFunctionBig, XXHash64::hash);
+BENCHMARK_TEMPLATE(TestHashFunctionBig, MetroHash128::Hash64);
+BENCHMARK_TEMPLATE(TestHashFunctionBig, MetroHash128::Hash64Inc);
+    //->Unit(benchmark::kMicrosecond)
+    //->MeasureProcessCPUTime();
 
 
 int main(int argc, char** argv)

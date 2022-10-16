@@ -2,6 +2,7 @@
 
 namespace Logging
 {
+    // TODO Change this to 'level' / 'verbosity' probably
 #define VOLUME_ITEMS(x) \
     x(Debug,   "DEBUG") \
     x(Info,    "INFO ") \
