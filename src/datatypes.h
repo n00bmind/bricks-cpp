@@ -406,15 +406,15 @@ struct BucketArray
     };
 
     // TODO Pack this down
+    AllocType* const allocator;
     Bucket* bucketBuffer;
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
     sz count;
     T* firstFree;
-    const i32 bucketCapacity;
+    i32 const bucketCapacity;
 
-    AllocType* allocator;
-    MemoryParams memParams;
+    MemoryParams const memParams;
 
 
     struct Iterator
@@ -431,28 +431,19 @@ struct BucketArray
     };
 
 
-    BucketArray()
-    {
-        ZEROP( this, sizeof(*this) );
-    }
-
-    explicit BucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
-        : bucketBufferCount( 0 )
+    explicit BucketArray( i32 bucketSize = 16, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+        : allocator( allocator_ )
+        , bucketBuffer( nullptr )
+        , bucketBufferCount( 0 )
+        , bucketBufferCapacity( 0 )
         , count( 0 )
         , firstFree( nullptr )
         , bucketCapacity( bucketSize )
-        , allocator( allocator_ )
         , memParams( params )
     {
         ASSERT( IsPowerOf2( bucketSize ) );
-        // Allocate an initial array of buckets
-        bucketBufferCapacity = 4;
-        bucketBuffer = ALLOC_ARRAY( allocator, Bucket, bucketBufferCapacity, memParams );
-
-        // We need a minimum size to be able to chain it in the freelist when retiring
+        // We need a minimum size to be able to chain it to the freelist when retiring
         ASSERT( bucketSize * sizeof(T) >= sizeof(T*), "Bucket size too small" );
-        // Allocate a single initial bucket
-        AllocBucket();
     }
 
     ~BucketArray()
@@ -688,6 +679,15 @@ struct BucketArray
         }
     }
 
+    u64 HashContents()
+    {
+        HashBuilder h;
+        for( Bucket* b = bucketBuffer; b < bucketBuffer + bucketBufferCount; ++b )
+            HashAdd( &h, b->data, b->count * SIZEOF(T) );
+
+        return Hash64( &h );
+    }
+
 
 private:
     Bucket* AllocBucket()
@@ -723,10 +723,11 @@ private:
 
     void GrowBucketBuffer()
     {
-        i32 new_capacity = bucketBufferCapacity * 2;
+        i32 new_capacity = Max( bucketBufferCapacity * 2, 4 );
 
         Bucket* new_buffer = ALLOC_ARRAY( allocator, Bucket, new_capacity, memParams );
-        COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
+        if( bucketBufferCount )
+            COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
 
         FREE( allocator, bucketBuffer, memParams );
         bucketBuffer = new_buffer;

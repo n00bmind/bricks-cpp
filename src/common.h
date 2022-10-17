@@ -183,9 +183,9 @@ static constexpr auto CONSTEVAL = F;
 // Marker for a compile-time if, in case we either decide to go full nuts and use c++17, or find a decent substitute
 // NOTE msvc has an outstanding bug going on for a decade which causes the __cplusplus macro to always return a really old value
 #if __cplusplus >= 201703L || _MSVC_LANG >= 201703L
-    #define STATIC_IF if constexpr
+    #define IF if constexpr
 #else
-    #define STATIC_IF if
+    #define IF if
 #endif
 
 

@@ -103,7 +103,7 @@ template <bool RW>
 INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<JsonReflector<RW>>* info, JsonReflector<RW>& r )
 {
     // NOTE Use if constexpr when available to obliterate the check and not-taken branch even in Debug
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         // Add a child to current parent object value
         json_object_s* obj = json_value_as_object( r.head->value );
@@ -189,7 +189,7 @@ INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo
 
 REFLECT_SPECIAL_RW( JsonReflector, int )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         // TODO Have a switch in the reflector so we can do non-temp serialisation trees
         String numString = String::FromFormatTmp( "%d", d );
@@ -212,7 +212,7 @@ REFLECT_SPECIAL_RW( JsonReflector, int )
 
 REFLECT_SPECIAL_RW( JsonReflector, String )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         json_string_s* str = ALLOC_STRUCT( r.allocator, json_string_s );
         *str = { d.data, (size_t)d.length };
@@ -229,7 +229,7 @@ REFLECT_SPECIAL_RW( JsonReflector, String )
 
 REFLECT_SPECIAL_RWT( JsonReflector, Array<T> )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         json_array_s* array = ALLOC_STRUCT( r.allocator, json_array_s );
         *array = {};

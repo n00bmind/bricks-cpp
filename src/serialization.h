@@ -189,7 +189,7 @@ REFLECT_T( EnumStruct<T> )
     static_assert( !std::is_same< ValueType, EnumStruct<T>::InvalidValueType >(), "EnumStruct has no declared values to serialize" );
 
     ValueType v;
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         v = e.Value();
     }
@@ -198,7 +198,7 @@ REFLECT_T( EnumStruct<T> )
     if( !ret )
         return ret;
 
-    STATIC_IF( r.IsReading )
+    IF( r.IsReading )
     {
         // TODO TEST TEST TEST !!!
         // TODO What happens if we use a struct value?

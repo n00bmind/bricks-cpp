@@ -73,7 +73,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
         : reflector( r )
         , header{}
     {
-        STATIC_IF( r->IsWriting )
+        IF( r->IsWriting )
         {
             startOffset = U32(reflector->buffer->count);
             // make space to write it back later
@@ -97,7 +97,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
 
     ~ReflectedTypeInfo()
     {
-        STATIC_IF( reflector->IsWriting )
+        IF( reflector->IsWriting )
         {
             // Finish header
             header.totalSize = U32(reflector->buffer->count - startOffset);
@@ -116,7 +116,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
 template <bool RW>
 INLINE sz ReflectFieldOffset( BinaryReflector<RW>& r )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
         return r.buffer->count;
     else
         return r.bufferHead;
@@ -224,7 +224,7 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
 template <bool RW>
 INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
         return ReflectFieldStartWrite( r, info, fieldId );
     else
         return ReflectFieldStartRead( r, info, fieldId );
@@ -233,7 +233,7 @@ INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedT
 template <bool RW>
 INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         // Fix up field size
         // final size includes the field metadata
@@ -251,7 +251,7 @@ INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo
 template <typename R, typename T>
 INLINE ReflectResult ReflectBytes( R& r, T& d )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         r.buffer->Push( (u8*)&d, sizeof(T) );
     }
@@ -281,7 +281,7 @@ template <typename R> INLINE ReflectResult Reflect( R& r, f64& d )          { re
 template <typename R>
 INLINE ReflectResult ReflectBytesRaw( R& r, void* buffer, sz sizeBytes )
 {
-    STATIC_IF( r.IsWriting )
+    IF( r.IsWriting )
     {
         r.buffer->Push( (u8*)buffer, sizeBytes );
     }
@@ -301,23 +301,68 @@ INLINE ReflectResult ReflectBytes( R& r, T* buffer, sz bufferLen )
     return ReflectBytesRaw( r, (void*)buffer, bufferLen * SIZEOF(T) );
 }
 
-REFLECT( String )
+template <typename R, typename T, size_t N>
+ReflectResult Reflect( R& r, T (&d)[N] )
 {
-    Reflect( r, d.length );
-    Reflect( r, d.flags );
+    i32 count = N;
+    Reflect( r, count );
 
-    STATIC_IF( r.IsReading )
-        d.Reset( d.length, d.flags );
+    // If we're loading an array of a different size, stop / truncate as needed
+    IF( r.IsReading )
+        count = Min( count, N );
 
-    return ReflectBytes( r, d.data, d.length );
+    ReflectResult result = ReflectOk;
+    for( int i = 0; i < count; ++i )
+    {
+        result = Reflect( r, d[i] );
+        if( !result )
+            break;
+    }
+    return result;
 }
+
+template <typename R, typename T, size_t N>
+ReflectResult ReflectArrayPOD( R& r, T (&d)[N] )
+{
+    i32 count = N;
+    Reflect( r, count );
+
+    // If we're loading an array of a different size, stop / truncate as needed
+    IF( r.IsReading )
+        count = Min( count, N );
+
+    return ReflectBytes( r, d, count );
+}
+
+#define REFLECT_ARRAY( T ) \
+    template <typename R, size_t N> \
+    ReflectResult Reflect( R& r, T (&d)[N] )
+
+// Faster path for arrays of simple types
+// TODO Keep adding suitable types here
+REFLECT_ARRAY( bool )       { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( char )       { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( u8 )         { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( u16 )        { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( u32 )        { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( u64 )        { return ReflectArrayPOD( r, d ); }
+//REFLECT_ARRAY( sz )         { return ReflectArrayPOD( r, d ); }       // Already defined
+REFLECT_ARRAY( i8 )         { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( i16 )        { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( i32 )        { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( i64 )        { return ReflectArrayPOD( r, d ); }
+//REFLECT_ARRAY( int )        { return ReflectArrayPOD( r, d ); }       // Already defined
+REFLECT_ARRAY( f32 )        { return ReflectArrayPOD( r, d ); }
+REFLECT_ARRAY( f64 )        { return ReflectArrayPOD( r, d ); }
+
+#undef REFLECT_ARRAY
 
 REFLECT_T( Array<T> )
 {
     i32 count = d.count;
     Reflect( r, count );
 
-    STATIC_IF( r.IsReading )
+    IF( r.IsReading )
     {
         d.Reset( count );
         d.ResizeToCapacity();
@@ -339,7 +384,7 @@ ReflectResult ReflectArrayPOD( R& r, T& d )
     i32 count = d.count;
     Reflect( r, count );
 
-    STATIC_IF( r.IsReading )
+    IF( r.IsReading )
     {
         d.Reset( count );
         d.ResizeToCapacity();
@@ -356,10 +401,23 @@ REFLECT( Array<u8> )        { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<u16> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<u32> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<u64> )       { return ReflectArrayPOD( r, d ); }
+//REFLECT( Array<sz> )        { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<i8> )        { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<i16> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<i32> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<i64> )       { return ReflectArrayPOD( r, d ); }
+//REFLECT( Array<int> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<f32> )       { return ReflectArrayPOD( r, d ); }
 REFLECT( Array<f64> )       { return ReflectArrayPOD( r, d ); }
+
+REFLECT( String )
+{
+    Reflect( r, d.length );
+    Reflect( r, d.flags );
+
+    IF( r.IsReading )
+        d.Reset( d.length, d.flags );
+
+    return ReflectBytes( r, d.data, d.length );
+}
 
