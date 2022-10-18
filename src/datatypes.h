@@ -498,11 +498,16 @@ struct BucketArray
         return (*(BucketArray<T, AllocType>*)this)[ index ];
     }
 
+    INLINE Bucket* GetLastBucket()
+    {
+        return bucketBufferCount ? &bucketBuffer[bucketBufferCount - 1] : nullptr;
+    }
+
 
     T* PushEmpty( bool clear = true )
     {
-        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
-        if( lastBucket->count == lastBucket->capacity )
+        Bucket* lastBucket = GetLastBucket();
+        if( !lastBucket || lastBucket->count == lastBucket->capacity )
             lastBucket = AllocBucket();
 
         T* result = lastBucket->data + lastBucket->count++;
@@ -515,7 +520,9 @@ struct BucketArray
 
     void PushEmpty( int itemCount, bool clear = true )
     {
-        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+        Bucket* lastBucket = GetLastBucket();
+        if( !lastBucket || lastBucket->count == lastBucket->capacity )
+            lastBucket = AllocBucket();
 
         int remaining = itemCount, itemsToAdd = 0;
         while( remaining > 0 )
@@ -559,7 +566,9 @@ struct BucketArray
 
     INLINE void Push( T const* buffer, sz bufferLen )
     {
-        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+        Bucket* lastBucket = GetLastBucket();
+        if( !lastBucket || lastBucket->count == lastBucket->capacity )
+            lastBucket = AllocBucket();
 
         sz remaining = bufferLen; int itemsToCopy = 0;
         while( remaining > 0 )
@@ -580,7 +589,9 @@ struct BucketArray
 
     T Pop()
     {
-        Bucket* lastBucket = &bucketBuffer[ bucketBufferCount - 1 ];
+        Bucket* lastBucket = GetLastBucket();
+        ASSERT( lastBucket );
+
         int idx = --lastBucket->count;
         T result = std::move(lastBucket->data[ idx ]);
 
@@ -598,11 +609,12 @@ struct BucketArray
     void Clear()
     {
         // Add all buckets to the free list (backwards so its faster)
-        // Skip bucket 0 since it won't be retired anyway
+        // Leave bucket 0 in place since it's probably gonna be reused anyway
         for( int i = bucketBufferCount - 1; i > 0; --i )
             RetireBucket( bucketBuffer + i );
 
-        bucketBuffer[0].count = 0;
+        if( bucketBufferCount > 0 )
+            bucketBuffer[0].count = 0;
         count = 0;
     }
 
@@ -610,30 +622,21 @@ struct BucketArray
     // TODO Add Find
     // TODO Add LowerBound search (see Algorithm.h)
 
-    void CopyTo( T* buffer, sz bufferLen ) const
+    // Return how many items were actually copied
+    // TODO All methods using memcpy should check if the type is trivially copyable!
+    INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
     {
-        ASSERT( count <= bufferLen );
-
-        for( int i = 0; i < bucketBufferCount; ++i )
-        {
-            Bucket const& b = bucketBuffer[i];
-            COPYP( b.data, buffer, b.count * SIZEOF(T) );
-            buffer += b.count;
-        }
-    }
-
-    INLINE void CopyTo( T* buffer, sz itemCount, sz startOffset ) const
-    {
-        ASSERT( startOffset + itemCount <= count );
+        ASSERT( startOffset >= 0 );
 
         int bucketIndex, indexInBucket;
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
+        T* bufferStart = buffer;
         Bucket const* b = bucketBuffer + bucketIndex;
-        sz remaining = itemCount; int itemsToCopy = 0;
+        sz remaining = Min( itemCount, count - startOffset );
         while( remaining > 0 )
         {
-            itemsToCopy = (int)Min( (sz)bucketCapacity - indexInBucket, remaining );
+            sz itemsToCopy = Min( (sz)b->count - indexInBucket, remaining );
             COPYP( b->data + indexInBucket, buffer, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
 
@@ -641,6 +644,8 @@ struct BucketArray
             remaining -= itemsToCopy;
             ++b;
         }
+
+        return buffer - bufferStart;
     }
 
     template <typename AllocType2 = Allocator>
@@ -658,18 +663,22 @@ struct BucketArray
         }
     }
 
-    INLINE void CopyFrom( T* buffer, sz itemCount, sz startOffset )
+    // Copy on top of the existing elements, without altering the total count
+    // Return how many were actually copied
+    INLINE sz CopyFrom( T* buffer, sz itemCount, sz startOffset )
     {
+        ASSERT( startOffset >= 0 );
         ASSERT( startOffset + itemCount <= count );
 
         int bucketIndex, indexInBucket;
         FindBucket( startOffset, &bucketIndex, &indexInBucket );
 
+        T* bufferStart = buffer;
         Bucket const* b = bucketBuffer + bucketIndex;
-        sz remaining = itemCount; int itemsToCopy = 0;
+        sz remaining = Min( itemCount, count - startOffset );
         while( remaining > 0 )
         {
-            itemsToCopy = (int)Min( (sz)bucketCapacity - indexInBucket, remaining );
+            sz itemsToCopy = Min( (sz)bucketCapacity - indexInBucket, remaining );
             COPYP( buffer, b->data + indexInBucket, itemsToCopy * SIZEOF(T) );
             indexInBucket = 0;
 
@@ -677,6 +686,8 @@ struct BucketArray
             remaining -= itemsToCopy;
             ++b;
         }
+
+        return buffer - bufferStart;
     }
 
     u64 HashContents()
@@ -685,6 +696,7 @@ struct BucketArray
         for( Bucket* b = bucketBuffer; b < bucketBuffer + bucketBufferCount; ++b )
             HashAdd( &h, b->data, b->count * SIZEOF(T) );
 
+        // TODO I assume this returns 0 on an empty buffer.. how do we want to signal that?
         return Hash64( &h );
     }
 
@@ -726,8 +738,7 @@ private:
         i32 new_capacity = Max( bucketBufferCapacity * 2, 4 );
 
         Bucket* new_buffer = ALLOC_ARRAY( allocator, Bucket, new_capacity, memParams );
-        if( bucketBufferCount )
-            COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
+        COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
 
         FREE( allocator, bucketBuffer, memParams );
         bucketBuffer = new_buffer;

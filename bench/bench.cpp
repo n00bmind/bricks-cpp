@@ -217,13 +217,14 @@ TEST_MUTEX(RecursiveBenaphore<Semaphore>);
 TEST_MUTEX(SpinLockMutex);
 #endif
 
-#if 0
+#if 1
 BENCHMARK(TestBinarySerializer)
     ->Unit(benchmark::kMicrosecond)
     //->Iterations(1)
     ->MeasureProcessCPUTime();
 #endif
 
+#if 0
 BENCHMARK_TEMPLATE(TestHashFunctionSmall, CompileTimeHash64);
 BENCHMARK_TEMPLATE(TestHashFunctionSmall, MurmurHash3_x64_64);
 BENCHMARK_TEMPLATE(TestHashFunctionSmall, XXHash64::hash);
@@ -236,6 +237,7 @@ BENCHMARK_TEMPLATE(TestHashFunctionBig, MetroHash128::Hash64);
 BENCHMARK_TEMPLATE(TestHashFunctionBig, MetroHash128::Hash64Inc);
     //->Unit(benchmark::kMicrosecond)
     //->MeasureProcessCPUTime();
+#endif
 
 
 int main(int argc, char** argv)

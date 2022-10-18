@@ -27,13 +27,15 @@ struct BinaryReflector : public Reflector<RW>
 
     INLINE void ReadAndAdvance( u8* out, sz size )
     {
-        buffer->CopyTo( out, size, bufferHead );
+        sz copied = buffer->CopyTo( out, size, bufferHead );
+        ASSERT( copied == size );
         bufferHead += size;
     }
 
     INLINE void ReadField( sz offset, BinaryField* fieldOut )
     {
-        buffer->CopyTo( (u8*)fieldOut, BinaryFieldSize, offset );
+        sz copied = buffer->CopyTo( (u8*)fieldOut, BinaryFieldSize, offset );
+        ASSERT( copied == BinaryFieldSize );
     }
 
     INLINE void WriteField( sz offset, BinaryField const& field )
