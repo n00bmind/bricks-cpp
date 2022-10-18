@@ -134,9 +134,6 @@ static void TestMutex( benchmark::State& state )
 
 static void TestBinarySerializer( benchmark::State& state )
 {
-    BucketArray<u8> buffer( 2048 * 1024, CTX_TMPALLOC );
-    BinaryWriter w( &buffer );
-
     SerialTypeComplex cmp = { { 42 }, {}, "Hello sailor" };
     INIT( cmp.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
     SerialTypeDeeper deeper = { { cmp, 666  }, "Apartense vacas, que la vida es corta" };
@@ -147,11 +144,16 @@ static void TestBinarySerializer( benchmark::State& state )
         before.deeper.Push( deeper );
 
 
+    BucketArray<u8> buffer( 2048 * 1024, CTX_TMPALLOC );
+    buffer.Reserve( 2048 * 1024 );
+    BinaryWriter w( &buffer );
+
     for( auto _ : state )
     {
         buffer.Clear();
         Reflect( w, before );
 
+        // TODO Test a linear array on read
         BinaryReader r( &buffer );
         SerialTypeChunky after;
         Reflect( r, after );

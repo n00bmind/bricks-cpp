@@ -463,17 +463,18 @@ struct BucketArray
     }
 
 
-    Iterator    begin()         { return { this, 0 }; }
-    Iterator    begin() const   { return { this, 0 }; }
-    Iterator    end()           { return { this, count }; }
-    Iterator    end() const     { return { this, count }; }
+    Iterator    begin()          { return { this, 0 }; }
+    Iterator    begin() const    { return { this, 0 }; }
+    Iterator    end()            { return { this, count }; }
+    Iterator    end() const      { return { this, count }; }
 
-    T&          First()         { return (*this)[0]; }
-    T const&    First() const   { return (*this)[0]; }
-    T&          Last()          { return (*this)[count - 1]; }
-    T const&    Last() const    { return (*this)[count - 1]; }
+    T&          First()          { return (*this)[0]; }
+    T const&    First() const    { return (*this)[0]; }
+    T&          Last()           { return (*this)[count - 1]; }
+    T const&    Last() const     { return (*this)[count - 1]; }
 
-    bool        Empty() const   { return count == 0; }
+    sz          Capacity() const { return bucketBufferCount * bucketCapacity; }
+    bool        Empty() const    { return count == 0; }
 
 
     INLINE void FindBucket( sz index, int* bucketIndex, int* indexInBucket ) const
@@ -503,6 +504,18 @@ struct BucketArray
         return bucketBufferCount ? &bucketBuffer[bucketBufferCount - 1] : nullptr;
     }
 
+
+    void Reserve( sz capacity )
+    {
+        if( capacity <= Capacity() )
+            return;
+
+        int newBucketCount = (int)((capacity + bucketCapacity - 1) / bucketCapacity);
+        GrowBucketBuffer( newBucketCount );
+
+        for( int i = bucketBufferCount; i < newBucketCount; ++i )
+            AllocBucket();
+    }
 
     T* PushEmpty( bool clear = true )
     {
@@ -733,16 +746,17 @@ private:
         bucketBuffer[ --bucketBufferCount ] = {};
     }
 
-    void GrowBucketBuffer()
+    void GrowBucketBuffer( int new_bucket_capacity = 0 )
     {
-        i32 new_capacity = Max( bucketBufferCapacity * 2, 4 );
+        new_bucket_capacity = Max( 4, new_bucket_capacity
+            ? new_bucket_capacity : bucketBufferCapacity * 2 );
 
-        Bucket* new_buffer = ALLOC_ARRAY( allocator, Bucket, new_capacity, memParams );
+        Bucket* new_buffer = ALLOC_ARRAY( allocator, Bucket, new_bucket_capacity, memParams );
         COPYP( bucketBuffer, new_buffer, bucketBufferCount * SIZEOF(Bucket) );
 
         FREE( allocator, bucketBuffer, memParams );
         bucketBuffer = new_buffer;
-        bucketBufferCapacity = new_capacity;
+        bucketBufferCapacity = new_bucket_capacity;
     }
 };
 
