@@ -50,7 +50,8 @@ namespace Win32
 
     struct State
     {
-        ARRAY_DECL(ThreadInfo, 16, liveThreads );
+        ThreadInfo liveThreads[16];
+        sz threadCount;
         f64 appStartTimeMillis;
     };
     internal State platformState = {};
@@ -72,10 +73,38 @@ namespace Win32
         VirtualFree( memoryBlock, 0, MEM_RELEASE );
     }
 
+    internal u64 FiletimeToPOSIX( FILETIME ft )
+    {
+        LARGE_INTEGER date, adjust;
+        date.HighPart = (LONG)ft.dwHighDateTime;
+        date.LowPart = ft.dwLowDateTime;
+
+        // 100-nanoseconds = milliseconds * 10000
+        adjust.QuadPart = 11644473600000LL * 10000;
+
+        // removes the diff between 1970 and 1601
+        date.QuadPart -= adjust.QuadPart;
+
+        // converts back from 100-nanoseconds to seconds
+        return (u64)date.QuadPart / 10000000;
+    }
+    PLATFORM_GET_FILE_ATTRIBUTES(GetFileAttributes)
+    {
+        *out = {};
+
+        WIN32_FILE_ATTRIBUTE_DATA data = {};
+        if( !GetFileAttributesExA( filename, GetFileExInfoStandard, &data ) )
+            return false;
+
+        out->sizeBytes = ((size_t)data.nFileSizeHigh << 32) | data.nFileSizeLow;
+        out->modifiedTimePosix = FiletimeToPOSIX( data.ftLastWriteTime );
+
+        return true;
+    }
 
     PLATFORM_READ_ENTIRE_FILE(ReadEntireFile)
     {
-        void* resultData = nullptr;
+        u8* resultData = nullptr;
         sz resultLength = 0;
 
         HANDLE fileHandle = CreateFile( filename, GENERIC_READ, FILE_SHARE_READ, 0, OPEN_EXISTING, 0, 0 );
@@ -84,7 +113,8 @@ namespace Win32
             sz fileSize;
             if( GetFileSizeEx( fileHandle, (PLARGE_INTEGER)&fileSize ) )
             {
-                resultData = ALLOC( allocator, fileSize + 1 );
+                resultLength = nullTerminate ? fileSize + 1 : fileSize;
+                resultData = (u8*)ALLOC( allocator, resultLength );
 
                 if( resultData )
                 {
@@ -93,13 +123,14 @@ namespace Win32
                         && (fileSize == bytesRead) )
                     {
                         // Null-terminate to help when handling text files
-                        *((u8 *)resultData + fileSize) = '\0';
-                        resultLength = fileSize + 1;
+                        if( nullTerminate )
+                            *(resultData + fileSize) = '\0';
                     }
                     else
                     {
                         LogE( "Platform", "ReadFile failed for '%s'", filename );
-                        resultData = 0;
+                        resultData = nullptr;
+                        resultLength = 0;
                     }
                 }
                 else
@@ -119,10 +150,10 @@ namespace Win32
             LogE( "Platform", "Failed opening file '%s' for reading", filename );
         }
 
-        return { resultData, resultLength };
+        return Buffer<u8>( resultData, resultLength );
     }
 
-    PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFile)
+    PLATFORM_WRITE_FILE_CHUNKS(WriteFileChunks)
     {
         DWORD creationMode = CREATE_NEW;
         if( overwrite ) 
@@ -222,7 +253,9 @@ namespace Win32
 
     PLATFORM_CREATE_THREAD(CreateThread)
     {
-        ThreadInfo* info = platformState.liveThreads.PushEmpty();
+        ASSERT( platformState.threadCount < ARRAYCOUNT(platformState.liveThreads), "Too many threads" );
+
+        ThreadInfo* info = &platformState.liveThreads[platformState.threadCount++];
         info->name = name;
         info->func = threadFunc;
         info->userData = userdata;
@@ -238,9 +271,16 @@ namespace Win32
 
     PLATFORM_JOIN_THREAD(JoinThread)
     {
-        ThreadInfo* info = platformState.liveThreads.Find( [handle]( ThreadInfo const& i ) { return i.handle == handle; } );
+        ThreadInfo* info = nullptr;
+        for( ThreadInfo& ti : platformState.liveThreads )
+            if( ti.handle == handle )
+            {
+                info = &ti;
+                break;
+            }
+
         if( info )
-            platformState.liveThreads.Remove( info );
+            *info = platformState.liveThreads[platformState.threadCount--];
         else
             LogE( "Platform", "Thread with handle 0x%x not found!", handle );
 
@@ -345,7 +385,7 @@ namespace Win32
         FILE* pipe = _popen( cmdLine, "rt" );
         if( pipe == NULL )
         {
-            _strerror_s( outBuffer, Size( ARRAYCOUNT(outBuffer) ), "Error executing compiler command" );
+            _strerror_s( outBuffer, SizeT( ARRAYCOUNT(outBuffer) ), "Error executing compiler command" );
             LogE( "Platform", outBuffer );
             LogE( "Platform", "\n" );
         }
@@ -670,8 +710,9 @@ namespace Win32
         win32API.GetContext           = Platform::GetContext;
         win32API.PushContext          = Platform::PushContext;
         win32API.PopContext           = Platform::PopContext;
+        win32API.GetFileAttributes    = GetFileAttributes;
         win32API.ReadEntireFile       = ReadEntireFile;
-        win32API.WriteEntireFile      = WriteEntireFile;
+        win32API.WriteFileChunks      = WriteFileChunks;
         win32API.CreateThread         = CreateThread;
         win32API.JoinThread           = JoinThread;
         win32API.GetThreadId          = GetThreadId;

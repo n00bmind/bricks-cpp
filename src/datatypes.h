@@ -71,7 +71,7 @@ struct Array
     // TODO This still doesnt work when we're inside a struct and trying to initialize with an 'initializer list'
     // Maybe try some of the stuff in https://www.foonathan.net/2016/12/fixing-initializer-list/
     template <size_t N>
-    Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+    explicit Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : Array( (int)N, allocator_, params )
     {
         ResizeToCapacity();
@@ -79,7 +79,7 @@ struct Array
     }
 
     // NOTE Arrays initialized from a buffer have count set equal to their capacity by default
-    Array( T* buffer, i32 bufferLen, i32 initialCount = -1 )
+    explicit Array( T* buffer, i32 bufferLen, i32 initialCount = -1 )
         : data( buffer )
         , count( initialCount == -1 ? bufferLen : initialCount )
         , capacity( bufferLen )
@@ -90,7 +90,7 @@ struct Array
     }
 
     // Initialize from a Buffer of the same type (same as above)
-    Array( Buffer<T> const& buffer )
+    explicit Array( Buffer<T> const& buffer )
         : Array( buffer.data, (int)buffer.length, (int)buffer.length )
     {}
 
@@ -114,33 +114,52 @@ struct Array
             FREE( allocator, data, memParams );
     }
 
+    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = Memory::NoClear() )
+    {
+        ASSERT( new_allocator );
+        T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
 
-    operator Buffer<T>()
+        sz copy_size = Min( count, new_capacity ) * SIZEOF(T);
+        COPYP( data, new_data, copy_size );
+
+        if( allocator )
+            FREE( allocator, data, memParams );
+
+        data      = new_data;
+        count     = Min( count, new_capacity );
+        capacity  = new_capacity;
+        allocator = new_allocator;
+        memParams = new_params;
+    }
+
+
+    INLINE explicit operator Buffer<T>()
     {
         return Buffer<T>( data, count );
     }
-    operator Buffer<>()
+    INLINE explicit operator Buffer<>()
     {
         return Buffer<>( data, count );
     }
 
-
-    T*          begin()         { return data; }
-    const T*    begin() const   { return data; }
-    T*          end()           { return data + count; }
-    const T*    end() const     { return data + count; }
-
-    T&          First()         { ASSERT( count > 0 ); return data[0]; }
-    T const&    First() const   { ASSERT( count > 0 ); return data[0]; }
-    T&          Last()          { ASSERT( count > 0 ); return data[count - 1]; }
-    T const&    Last() const    { ASSERT( count > 0 ); return data[count - 1]; }
-
-    bool        Empty() const   { return count == 0; }
-
-    explicit operator bool() const
+    INLINE explicit operator bool() const
     {
         return data != nullptr && count != 0;
     }
+
+
+    INLINE T*          begin()         { return data; }
+    INLINE const T*    begin() const   { return data; }
+    INLINE T*          end()           { return data + count; }
+    INLINE const T*    end() const     { return data + count; }
+
+    INLINE T&          First()         { ASSERT( count > 0 ); return data[0]; }
+    INLINE T const&    First() const   { ASSERT( count > 0 ); return data[0]; }
+    INLINE T&          Last()          { ASSERT( count > 0 ); return data[count - 1]; }
+    INLINE T const&    Last() const    { ASSERT( count > 0 ); return data[count - 1]; }
+
+    INLINE sz          Size() const    { return count * SIZEOF(T); }
+    INLINE bool        Empty() const   { return count == 0; }
 
     void Resize( i32 new_count )
     {
@@ -163,23 +182,6 @@ struct Array
         return capacity - count;
     }
 
-    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = Memory::NoClear() )
-    {
-        ASSERT( new_allocator );
-        T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
-
-        sz copy_size = Min( count, new_capacity ) * SIZEOF(T);
-        COPYP( data, new_data, copy_size );
-
-        if( allocator )
-            FREE( allocator, data, memParams );
-
-        data      = new_data;
-        count     = Min( count, new_capacity );
-        capacity  = new_capacity;
-        allocator = new_allocator;
-        memParams = new_params;
-    }
 
     T& operator[]( int i )
     {
@@ -345,17 +347,30 @@ struct Array
         return result;
     }
 
+    // Return how many items were actually copied
+    INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
+    {
+        sz itemsToCopy = Min( itemCount, count - startOffset );
+        COPYP( data + startOffset, buffer, itemsToCopy * SIZEOF(T) );
+
+        return itemsToCopy;
+    }
+
+    // Return how many items were actually copied
+    INLINE sz CopyFrom( T* buffer, sz itemCount, sz startOffset )
+    {
+        sz itemsToCopy = Min( itemCount, count - startOffset );
+        COPYP( buffer, data + startOffset, itemsToCopy * SIZEOF(T) );
+
+        return itemsToCopy;
+    }
+
     template <typename AllocType2 = Allocator>
     void CopyTo( Array<T, AllocType2>* out ) const
     {
         ASSERT( out->capacity >= count );
         COPYP( data, out->data, count * SIZEOF(T) );
         out->count = count;
-    }
-
-    void CopyTo( T* buffer ) const
-    {
-        COPYP( data, buffer, count * SIZEOF(T) );
     }
 };
 
@@ -372,11 +387,6 @@ Array<T, AllocType> ArrayClone( Buffer<T> const& other, AllocType* allocator = n
     return Array<T, AllocType>::Clone( Array<T, AllocType>( other ), allocator );
 }
 
-// Declare a static array and its Array wrapper in a single line
-#define ARRAY_DECL( T, len, name ) \
-        T UNIQUE(__array_storage)[len] = {}; \
-        Array<T> name = { UNIQUE(__array_storage), len, 0 };
-
 #if 0
 template <typename T, typename AllocType>
 const Array<T, AllocType> Array<T, AllocType>::Empty = {};
@@ -388,8 +398,8 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 // Growable container that allocates its items in pages, or 'buckets', so no extra copying occurs whatsoever when new items get pushed.
 // The buckets themselves are indexed in a linear array, which should stay reasonably hot when iterated often, and could easily
 // be modified in a lock-free fashion for a potential multithreaded version.
-// Items are always kept compact, so iteration remains really fast. Since bucket sizes are Po2, it can be iterated using a normal integer index
-// or with the provided iterator (for new-style 'for each').
+// Items are always kept compact, so iteration remains really fast. Since bucket sizes are Po2, it can be iterated using a normal integer
+// index or with the provided iterator (for new-style 'for each').
 
 // TODO Benchmark this against std::vector and the compact_vector proposed in https://www.sebastiansylvan.com/post/space-efficient-rresizable-arrays/
 // (the twitter thread https://twitter.com/andy_kelley/status/1516949533413892096?t=vEW63veywf4fqhfBfPRQSA&s=03 is quite interesting)
@@ -463,18 +473,19 @@ struct BucketArray
     }
 
 
-    Iterator    begin()          { return { this, 0 }; }
-    Iterator    begin() const    { return { this, 0 }; }
-    Iterator    end()            { return { this, count }; }
-    Iterator    end() const      { return { this, count }; }
+    INLINE Iterator    begin()          { return { this, 0 }; }
+    INLINE Iterator    begin() const    { return { this, 0 }; }
+    INLINE Iterator    end()            { return { this, count }; }
+    INLINE Iterator    end() const      { return { this, count }; }
 
-    T&          First()          { return (*this)[0]; }
-    T const&    First() const    { return (*this)[0]; }
-    T&          Last()           { return (*this)[count - 1]; }
-    T const&    Last() const     { return (*this)[count - 1]; }
+    INLINE T&          First()          { return (*this)[0]; }
+    INLINE T const&    First() const    { return (*this)[0]; }
+    INLINE T&          Last()           { return (*this)[count - 1]; }
+    INLINE T const&    Last() const     { return (*this)[count - 1]; }
 
-    sz          Capacity() const { return bucketBufferCount * bucketCapacity; }
-    bool        Empty() const    { return count == 0; }
+    INLINE sz          Size() const     { return count * SIZEOF(T); }
+    INLINE sz          Capacity() const { return bucketBufferCount * bucketCapacity; }
+    INLINE bool        Empty() const    { return count == 0; }
 
 
     INLINE void FindBucket( sz index, int* bucketIndex, int* indexInBucket ) const
@@ -636,7 +647,7 @@ struct BucketArray
     // TODO Add LowerBound search (see Algorithm.h)
 
     // Return how many items were actually copied
-    // TODO All methods using memcpy should check if the type is trivially copyable!
+    // FIXME All methods using memcpy should check if the type is trivially copyable!
     INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
     {
         ASSERT( startOffset >= 0 );
@@ -702,6 +713,32 @@ struct BucketArray
 
         return buffer - bufferStart;
     }
+
+
+    Array<Buffer<T>> const ToBufferArray() const
+    {
+        Array<Buffer<T>> result( bucketBufferCount );
+
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket const& b = bucketBuffer[i];
+            result.Push( Buffer<T>( b.data, b.count ) );
+        }
+        return result;
+    }
+
+    Array<Buffer<>> const ToRawBufferArray() const
+    {
+        Array<Buffer<>> result( bucketBufferCount );
+
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket const& b = bucketBuffer[i];
+            result.Push( Buffer<>( b.data, b.count * SIZEOF(T) ) );
+        }
+        return result;
+    }
+
 
     u64 HashContents()
     {

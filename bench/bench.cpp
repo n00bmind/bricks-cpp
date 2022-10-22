@@ -250,7 +250,7 @@ int main(int argc, char** argv)
         { "Platform" },
         { "Net" },
     };
-    Win32::InitGlobalPlatform( channels );
+    Win32::InitGlobalPlatform( (Buffer<Logging::ChannelDecl>)channels );
 
     ::benchmark::Initialize(&argc, argv);
     if (::benchmark::ReportUnrecognizedArguments(argc, argv))

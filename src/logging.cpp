@@ -28,7 +28,7 @@ namespace Logging
         newEntry->channelName = channelName;
         newEntry->sourceFile  = file;
         newEntry->sourceLine  = line;
-        newEntry->timeSeconds = Core::AppTimeSeconds();
+        newEntry->timeSeconds = Clock::AppTimeSeconds();
         newEntry->threadId    = Core::GetThreadId();
         newEntry->volume      = volume;
         newEntry->msgLen      = len;

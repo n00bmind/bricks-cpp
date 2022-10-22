@@ -394,9 +394,9 @@ TEST_F( HttpTest, Get )
     u32 ret = Http::Get( &globalState.http, "https://httpbin.org/get?message=https_client", callback, &done );
     ASSERT_TRUE( ret != 0 );
 
-    f32 start = Core::AppTimeSeconds();
+    f32 start = Clock::AppTimeSeconds();
     // TODO Move to a method in the class above?
-    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
+    while( !done && (IsDebuggerPresent() || Clock::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -419,8 +419,8 @@ TEST_F( HttpTest, Post )
                           callback, &done );
     ASSERT_TRUE( ret != 0 );
 
-    f32 start = Core::AppTimeSeconds();
-    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
+    f32 start = Clock::AppTimeSeconds();
+    while( !done && (IsDebuggerPresent() || Clock::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -441,8 +441,8 @@ TEST_F( HttpTest, GetChunked )
     u32 ret = Http::Get( &globalState.http, "https://httpbin.org/stream/10", callback, &done );
     ASSERT_TRUE( ret != 0 );
 
-    f32 start = Core::AppTimeSeconds();
-    while( !done && (IsDebuggerPresent() || Core::AppTimeSeconds() - start < 10.f) )
+    f32 start = Clock::AppTimeSeconds();
+    while( !done && (IsDebuggerPresent() || Clock::AppTimeSeconds() - start < 10.f) )
         Http::ProcessResponses( &globalState.http );
 
     ASSERT_TRUE( done );
@@ -770,7 +770,7 @@ GTEST_API_ int main(int argc, char **argv)
         { "Core" },
         { "Net" },
     };
-    Win32::InitGlobalPlatform( channels );
+    Win32::InitGlobalPlatform( (Buffer<Logging::ChannelDecl>)channels );
 
     if( !globalPlatform.TestConnectivity() )
     {

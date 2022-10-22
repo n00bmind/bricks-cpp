@@ -587,7 +587,7 @@ namespace Http
 
     static bool ParseResponse( Response* response )
     {
-        String responseString = String::Ref( response->rawData );
+        String responseString = String::Ref( (Buffer<u8>)response->rawData );
 #if HTTP_DEBUG_PRINT
         printf("--- RSP:\n%s---\n", responseString.c() );
 #endif
@@ -827,7 +827,7 @@ namespace Http
 
     u32 Get( State* state, char const* url, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
-        Array<Header> headers;
+        Buffer<Header> headers;
         return Get( state, url, headers, callback, userData, flags );
     }
 
@@ -851,7 +851,7 @@ namespace Http
 
     u32 Post( State* state, char const* url, char const* bodyData, Callback callback, void* userData /*= nullptr*/, u32 flags /*= 0*/ )
     {
-        Array<Header> headers;
+        Buffer<Header> headers;
         return Post( state, url, headers, bodyData, callback, userData, flags );
     }
 

@@ -49,13 +49,21 @@ typedef PLATFORM_POP_CONTEXT(PopContextFunc);
 // TODO Do something better for paths
 #define PLATFORM_PATH_MAX                  1024
 
-#define PLATFORM_GET_ABSOLUTE_PATH(x)   bool x( char const* filename, char* outBuffer, sz outBufferLen )
-typedef PLATFORM_GET_ABSOLUTE_PATH(GetAbsolutePathFunc);
+    struct FileAttributes
+    {
+        size_t sizeBytes;
+        u64 modifiedTimePosix;      // UNIX epoch (in seconds)
+    };
+
+#define PLATFORM_GET_FILE_ATTRIBUTES(x) bool x( char const* filename, Platform::FileAttributes* out )
+typedef PLATFORM_GET_FILE_ATTRIBUTES(GetFileAttributesFunc);
+//#define PLATFORM_GET_ABSOLUTE_PATH(x)   bool x( char const* filename, char* outBuffer, sz outBufferLen )
+//typedef PLATFORM_GET_ABSOLUTE_PATH(GetAbsolutePathFunc);
 // Returned buffer data must be null-terminated
-#define PLATFORM_READ_ENTIRE_FILE(x)    Buffer<> x( char const* filename, Allocator* allocator )
+#define PLATFORM_READ_ENTIRE_FILE(x)    Buffer<u8> x( char const* filename, Allocator* allocator, bool nullTerminate )
 typedef PLATFORM_READ_ENTIRE_FILE(ReadEntireFileFunc);
-#define PLATFORM_WRITE_ENTIRE_FILE(x)   bool x( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
-typedef PLATFORM_WRITE_ENTIRE_FILE(WriteEntireFileFunc);
+#define PLATFORM_WRITE_FILE_CHUNKS(x)   bool x( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
+typedef PLATFORM_WRITE_FILE_CHUNKS(WriteFileChunksFunc);
 
     
     typedef void* ThreadHandle;
@@ -119,12 +127,13 @@ struct API
     PopContextFunc*                   PopContext;
 
     // Filesystem
+    GetFileAttributesFunc*            GetFileAttributes;
 #if 0
     GetAbsolutePathFunc*              GetAbsolutePath;
 #endif
 
     ReadEntireFileFunc*               ReadEntireFile;
-    WriteEntireFileFunc*              WriteEntireFile;
+    WriteFileChunksFunc*              WriteFileChunks;
 
     // Threading
     CreateThreadFunc*                 CreateThread;

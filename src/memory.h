@@ -177,7 +177,7 @@ ALLOC_FUNC( LazyAllocator )
 {
     ASSERT( !params.alignment );
     
-    void* result = malloc( Size( sizeBytes ) );
+    void* result = malloc( SizeT( sizeBytes ) );
 
     if( !params.IsSet( Memory::MF_NoClear ) )
         ZEROP( result, sizeBytes );

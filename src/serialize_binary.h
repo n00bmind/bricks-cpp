@@ -44,15 +44,18 @@ struct BinaryReflector : public Reflector<RW>
     }
 };
 
+// TODO Should the reader default to Buffer?
 using BinaryReader = BinaryReflector<true>;
 using BinaryWriter = BinaryReflector<false>;
 
+template<template <typename...> typename BufferType>
+using CustomBinaryReader = BinaryReflector<true, BufferType>;
 
 
-template <bool RW>
-struct ReflectedTypeInfo< BinaryReflector<RW> >
+template <bool RW, template <typename...> typename BufferType>
+struct ReflectedTypeInfo< BinaryReflector<RW, BufferType> >
 {
-    BinaryReflector<RW>*   reflector;
+    BinaryReflector<RW, BufferType>*   reflector;
 
     struct Header
     {
@@ -71,13 +74,13 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
     u32 currentFieldSize;
 
 
-    ReflectedTypeInfo( BinaryReflector<RW>* r )
+    ReflectedTypeInfo( BinaryReflector<RW, BufferType>* r )
         : reflector( r )
         , header{}
     {
         IF( r->IsWriting )
         {
-            startOffset = U32(reflector->buffer->count);
+            startOffset = U32(reflector->buffer->Size());
             // make space to write it back later
             reflector->buffer->PushEmpty( HeaderSize, false );
         }
@@ -88,10 +91,10 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
             reflector->ReadAndAdvance( (u8*)&header, HeaderSize );
 
             sz endOffset = startOffset + header.totalSize;
-            if( endOffset > r->buffer->count || header.totalSize < HeaderSize )
+            if( endOffset > r->buffer->Size() || header.totalSize < HeaderSize )
             {
                 LogE( "Core", "Serialised type at %u has an invalid size %u (buffer is %I64d bytes)",
-                      startOffset, header.totalSize, r->buffer->count );
+                      startOffset, header.totalSize, r->buffer->Size() );
                 reflector->SetError( ReflectResult::BadData );
             }
         }
@@ -102,7 +105,7 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
         IF( reflector->IsWriting )
         {
             // Finish header
-            header.totalSize = U32(reflector->buffer->count - startOffset);
+            header.totalSize = U32(reflector->buffer->Size() - startOffset);
 
             reflector->buffer->CopyFrom( (u8*)&header, HeaderSize, startOffset );
         }
@@ -115,11 +118,11 @@ struct ReflectedTypeInfo< BinaryReflector<RW> >
     }
 };
 
-template <bool RW>
-INLINE sz ReflectFieldOffset( BinaryReflector<RW>& r )
+template <bool RW, template <typename...> typename BufferType = BucketArray>
+INLINE sz ReflectFieldOffset( BinaryReflector<RW, BufferType>& r )
 {
     IF( r.IsWriting )
-        return r.buffer->count;
+        return r.buffer->Size();
     else
         return r.bufferHead;
 }
@@ -223,8 +226,9 @@ template< typename R > bool ReflectFieldStartRead( R& r, ReflectedTypeInfo<R>* i
     return true;
 }
 
-template <bool RW>
-INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
+template <bool RW, template <typename...> typename BufferType = BucketArray>
+INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedTypeInfo<BinaryReflector<RW, BufferType>>* info,
+                               BinaryReflector<RW, BufferType>& r )
 {
     IF( r.IsWriting )
         return ReflectFieldStartWrite( r, info, fieldId );
@@ -232,14 +236,15 @@ INLINE bool ReflectFieldStart( u32 fieldId, StaticString const& name, ReflectedT
         return ReflectFieldStartRead( r, info, fieldId );
 }
 
-template <bool RW>
-INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<BinaryReflector<RW>>* info, BinaryReflector<RW>& r )
+template <bool RW, template <typename...> typename BufferType = BucketArray>
+INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo<BinaryReflector<RW, BufferType>>* info,
+                             BinaryReflector<RW, BufferType>& r )
 {
     IF( r.IsWriting )
     {
         // Fix up field size
         // final size includes the field metadata
-        u32 finalSize = U32(r.buffer->count - fieldStartOffset);
+        u32 finalSize = U32(r.buffer->Size() - fieldStartOffset);
         r.WriteField( fieldStartOffset, { finalSize, (u8)fieldId } );
     }
     else 
@@ -251,7 +256,7 @@ INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo
 
 
 template <typename R, typename T>
-INLINE ReflectResult ReflectBytes( R& r, T& d )
+INLINE ReflectResult ReflectTypeRaw( R& r, T& d )
 {
     IF( r.IsWriting )
     {
@@ -259,7 +264,7 @@ INLINE ReflectResult ReflectBytes( R& r, T& d )
     }
     else
     {
-        if( r.bufferHead + SIZEOF(T) > r.buffer->count )
+        if( r.bufferHead + SIZEOF(T) > r.buffer->Size() )
             return { ReflectResult::BufferOverflow };
 
         r.ReadAndAdvance( (u8*)&d, sizeof(T) );
@@ -267,18 +272,18 @@ INLINE ReflectResult ReflectBytes( R& r, T& d )
     return ReflectOk;
 }
 
-template <typename R> INLINE ReflectResult Reflect( R& r, bool& d )         { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, char& d )         { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, i8& d )           { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, i16& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, i32& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, i64& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, u8& d )           { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, u16& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, u32& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, u64& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, f32& d )          { return ReflectBytes( r, d ); }
-template <typename R> INLINE ReflectResult Reflect( R& r, f64& d )          { return ReflectBytes( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, bool& d )         { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, char& d )         { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i8& d )           { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i16& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i32& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, i64& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u8& d )           { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u16& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u32& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, u64& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, f32& d )          { return ReflectTypeRaw( r, d ); }
+template <typename R> INLINE ReflectResult Reflect( R& r, f64& d )          { return ReflectTypeRaw( r, d ); }
 
 template <typename R>
 INLINE ReflectResult ReflectBytesRaw( R& r, void* buffer, sz sizeBytes )
@@ -289,7 +294,7 @@ INLINE ReflectResult ReflectBytesRaw( R& r, void* buffer, sz sizeBytes )
     }
     else
     {
-        if( r.bufferHead + sizeBytes > r.buffer->count )
+        if( r.bufferHead + sizeBytes > r.buffer->Size() )
             return { ReflectResult::BufferOverflow };
 
         r.ReadAndAdvance( (u8*)buffer, sizeBytes );
@@ -303,7 +308,7 @@ INLINE ReflectResult ReflectBytes( R& r, T* buffer, sz bufferLen )
     return ReflectBytesRaw( r, (void*)buffer, bufferLen * SIZEOF(T) );
 }
 
-template <typename R, typename T, size_t N>
+template <typename R, typename T, sz N>
 ReflectResult Reflect( R& r, T (&d)[N] )
 {
     i32 count = N;
@@ -311,7 +316,7 @@ ReflectResult Reflect( R& r, T (&d)[N] )
 
     // If we're loading an array of a different size, stop / truncate as needed
     IF( r.IsReading )
-        count = Min( count, N );
+        count = Min( count, (i32)N );
 
     ReflectResult result = ReflectOk;
     for( int i = 0; i < count; ++i )
@@ -323,7 +328,7 @@ ReflectResult Reflect( R& r, T (&d)[N] )
     return result;
 }
 
-template <typename R, typename T, size_t N>
+template <typename R, typename T, sz N>
 ReflectResult ReflectArrayPOD( R& r, T (&d)[N] )
 {
     i32 count = N;
@@ -331,7 +336,7 @@ ReflectResult ReflectArrayPOD( R& r, T (&d)[N] )
 
     // If we're loading an array of a different size, stop / truncate as needed
     IF( r.IsReading )
-        count = Min( count, N );
+        count = Min( count, (i32)N );
 
     return ReflectBytes( r, d, count );
 }

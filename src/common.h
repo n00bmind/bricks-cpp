@@ -144,10 +144,10 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 #define ZERO(dest) memset( &dest, 0, sizeof(dest) )
 #define EQUAL(source, dest) (memcmp( &source, &dest, sizeof(source) ) == 0)
 
-#define COPYP(source, dest, size) memcpy( dest, source, Size( size ) )
-#define SETP(dest, value, size) memset( dest, value, Size( size ) )
-#define ZEROP(dest, size) memset( dest, 0, Size( size ) )
-#define EQUALP(source, dest, size) (memcmp( source, dest, Size( size ) ) == 0)
+#define COPYP(source, dest, size) memcpy( dest, source, SizeT( size ) )
+#define SETP(dest, value, size) memset( dest, value, SizeT( size ) )
+#define ZEROP(dest, size) memset( dest, 0, SizeT( size ) )
+#define EQUALP(source, dest, size) (memcmp( source, dest, SizeT( size ) ) == 0)
 
 // Do a placement new on any variable with simpler syntax
 #define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type
@@ -355,7 +355,7 @@ Sz( size_t value )
 }
 
 INLINE constexpr size_t
-Size( sz value )
+SizeT( sz value )
 {
     ASSERT( value >= 0 );
     return (size_t)value;
@@ -375,7 +375,7 @@ public:
         , length( 0 )
     {}
 
-    Buffer( T* data_, i64 length_ )
+    explicit Buffer( T* data_, i64 length_ )
         : data( data_ )
         , length( length_ )
     {}
@@ -383,21 +383,41 @@ public:
     // Convert from any static array of a compatible type
     // NOTE The array itself must be an lvalue, since by definition Buffers only reference data
     template <typename SrcT, size_t N>
-    Buffer( SrcT (&data_)[N] )
+    explicit Buffer( SrcT (&data_)[N] )
         : data( data_ )
         , length( (sz)N )
     {}
 
 
-    operator T const*() const { return data; }
-    operator T*() { return data; }
+    explicit INLINE operator T const*() const { return data; }
+    explicit INLINE operator T*() { return data; }
 
     INLINE bool Valid() const { return data && length; }
 
-    T*          begin()         { return data; }
-    const T*    begin() const   { return data; }
-    T*          end()           { return data + length; }
-    const T*    end() const     { return data + length; }
+    INLINE T*          begin()         { return data; }
+    INLINE const T*    begin() const   { return data; }
+    INLINE T*          end()           { return data + length; }
+    INLINE const T*    end() const     { return data + length; }
+
+    INLINE sz          Size() const    { return length * SIZEOF(T); }
+
+    // Return how many items were actually copied
+    INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
+    {
+        sz itemsToCopy = Min( itemCount, length - startOffset );
+        COPYP( data + startOffset, buffer, itemsToCopy * SIZEOF(T) );
+
+        return itemsToCopy;
+    }
+
+    // Return how many items were actually copied
+    INLINE sz CopyFrom( T* buffer, sz itemCount, sz startOffset )
+    {
+        sz itemsToCopy = Min( itemCount, length - startOffset );
+        COPYP( buffer, data + startOffset, itemsToCopy * SIZEOF(T) );
+
+        return itemsToCopy;
+    }
 };
 
 using StringBuffer = Buffer<char const>;

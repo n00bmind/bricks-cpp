@@ -99,7 +99,7 @@ INLINE bool StringsEqual( char const* a, char const* b, sz len = 0, bool caseSen
 
 INLINE void StringCopy( char const* src, char* dst, sz dstSize )
 {
-    strncpy( dst, src, Size( dstSize ) );
+    strncpy( dst, src, SizeT( dstSize ) );
 }
 
 INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
@@ -587,7 +587,8 @@ public:
     {
         return Ref( other.data, other.length );
     }
-    static String Ref( Buffer<> const& buffer )
+    template <typename T>
+    static String Ref( Buffer<T> const& buffer )
     {
         return Ref( (char const*)buffer.data, I32(buffer.length) );
     }
@@ -1070,7 +1071,7 @@ struct StringBuilder
         char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n, Memory::NoClear() );
 
         // TODO Does this work??
-        vsnprintf( buf, Size( n ), fmt, args );
+        vsnprintf( buf, SizeT( n ), fmt, args );
         va_end( args );
 
         // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
