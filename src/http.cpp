@@ -714,7 +714,7 @@ namespace Http
         while( state->threadRunning.LOAD_RELAXED() )
         {
             state->requestSemaphore.Wait();
-            // TODO Move!?
+            // TODO Move assignment!?
             Request req;
             while( state->requestQueue.TryPop( &req ) )
             {
@@ -737,7 +737,6 @@ namespace Http
 #if HTTP_DEBUG_PRINT
                 printf("-- Queuing response with callback %p\n", response.callback );
 #endif
-                // TODO Move!?
                 state->responseQueue.Push( std::move(response) );
             }
         }

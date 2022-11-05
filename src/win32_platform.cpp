@@ -633,7 +633,7 @@ namespace Win32
     internal LONG WINAPI ExceptionHandler( LPEXCEPTION_POINTERS exceptionPointers )
     {
         char callstack[16384];
-        DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 8 );
+        DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 9 );
 
         LogE( "Platform", "### UNHANDLED EXCEPTION ###\n%s", callstack );
 
@@ -689,11 +689,7 @@ namespace Win32
         va_end( args );
 
         LogE( "Platform", "ASSERTION FAILED! :: \"%s\" (%s@%d)\n", buffer, file, line );
-
-        char callstack[16384];
-        DumpCallstackToBuffer( callstack, ARRAYCOUNT(callstack), 2 );
-
-        LogE( "Platform", "%s", callstack );
+        // Don't dump a callstack, as we're either in the debugger, or the TRAP will cause an unhandled exception
     }
 
 

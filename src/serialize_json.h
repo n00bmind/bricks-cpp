@@ -187,6 +187,27 @@ INLINE void ReflectFieldEnd( u32 fieldId, sz fieldStartOffset, ReflectedTypeInfo
 }
 
 
+REFLECT_SPECIAL_RW( JsonReflector, bool )
+{
+    IF( r.IsWriting )
+    {
+        if( d )
+            *r.head->value = { nullptr, json_type_true };
+        else
+            *r.head->value = { nullptr, json_type_false };
+    }
+    else
+    {
+        if( json_value_is_true( r.head->value ) )
+            d = true;
+        else if( json_value_is_false( r.head->value ) )
+            d = false;
+        else
+            return { ReflectResult::BadData };
+    }
+    return ReflectOk;
+}
+
 REFLECT_SPECIAL_RW( JsonReflector, int )
 {
     IF( r.IsWriting )
@@ -205,6 +226,73 @@ REFLECT_SPECIAL_RW( JsonReflector, int )
             return { ReflectResult::BadData };
 
         if( !StringToI32( num->number, &d ) )
+            return { ReflectResult::BadData };
+    }
+    return ReflectOk;
+}
+
+REFLECT_SPECIAL_RW( JsonReflector, u32 )
+{
+    IF( r.IsWriting )
+    {
+        // TODO Have a switch in the reflector so we can do non-temp serialisation trees
+        String numString = String::FromFormatTmp( "%" PRIu32, d );
+        json_number_s* num = ALLOC_STRUCT( r.allocator, json_number_s );
+        *num = { numString.data, (size_t)numString.length };
+
+        *r.head->value = { num, json_type_number };
+    }
+    else
+    {
+        json_number_s* num = json_value_as_number( r.head->value );
+        if( !num )
+            return { ReflectResult::BadData };
+
+        if( !StringToU32( num->number, &d ) )
+            return { ReflectResult::BadData };
+    }
+    return ReflectOk;
+}
+
+REFLECT_SPECIAL_RW( JsonReflector, u64 )
+{
+    IF( r.IsWriting )
+    {
+        String numString = String::FromFormatTmp( "%" PRIu64, d );
+        json_number_s* num = ALLOC_STRUCT( r.allocator, json_number_s );
+        *num = { numString.data, (size_t)numString.length };
+
+        *r.head->value = { num, json_type_number };
+    }
+    else
+    {
+        json_number_s* num = json_value_as_number( r.head->value );
+        if( !num )
+            return { ReflectResult::BadData };
+
+        if( !StringToU64( num->number, &d ) )
+            return { ReflectResult::BadData };
+    }
+    return ReflectOk;
+}
+
+REFLECT_SPECIAL_RW( JsonReflector, f64 )
+{
+    IF( r.IsWriting )
+    {
+        String numString = String::FromFormatTmp( "%.*g", DBL_DECIMAL_DIG, d );
+        json_number_s* num = ALLOC_STRUCT( r.allocator, json_number_s );
+        *num = { numString.data, (size_t)numString.length };
+
+        *r.head->value = { num, json_type_number };
+    }
+    else
+    {
+        json_number_s* num = json_value_as_number( r.head->value );
+        if( !num )
+            return { ReflectResult::BadData };
+
+        if( !StringToF64( num->number, &d ) )
             return { ReflectResult::BadData };
     }
     return ReflectOk;

@@ -108,6 +108,14 @@ struct Array
         {}
 #endif
 
+    Array( Array const& ) = delete;
+    void operator =( Array const& ) = delete;
+
+    Array( Array&& other )
+    {
+        *this = std::move( other );
+    }
+
     ~Array()
     {
         if( allocator )
@@ -132,6 +140,17 @@ struct Array
         memParams = new_params;
     }
 
+
+    void operator =( Array&& other )
+    {
+        data      = other.data;
+        count     = other.count;
+        capacity  = other.capacity;
+        allocator = other.allocator;
+        memParams = other.memParams;
+
+        ZERO( other );
+    }
 
     INLINE explicit operator Buffer<T>()
     {
@@ -243,7 +262,7 @@ struct Array
 
         T* last = &Last();
         if( item != last )
-            *item = *last;
+            *item = std::move( *last );
 
         last->~T();
         --count;
@@ -2290,6 +2309,15 @@ public:
         Mutex::Scope lock( mutex );
         T* result = PushEmptyUnsafe( false );
         *result = item;
+
+        return result;
+    }
+
+    T* Push( T&& item )
+    {
+        Mutex::Scope lock( mutex );
+        T* result = PushEmptyUnsafe( false );
+        *result = std::move( item );
 
         return result;
     }
