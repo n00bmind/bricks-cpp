@@ -274,6 +274,7 @@ ClearArena( MemoryArena* arena )
     while( arena->pageCount > 0 )
         FreeLastPage( arena );
 
+    // FIXME This doesnt work for non-dynamic arenas
     sz pageSize = arena->pageSize;
     InitArena( arena, pageSize );
 }

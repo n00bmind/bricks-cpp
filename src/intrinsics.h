@@ -61,6 +61,7 @@ INLINE i32 NextPowerOf2( i32 value )
 #define CountShift(bits)  if( n >> bits ) { n >>= bits; result += bits; }
 INLINE int Log2( i32 n )
 {
+    // FIXME This should just be an assert
     if( n <= 0 )
         return -1;
 

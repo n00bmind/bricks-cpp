@@ -1,6 +1,8 @@
 
+CORE
 - Investigate if/how we could make all datatypes (& String) do shallow copies by default (default copy & assignment)
 - Investigate how we could use something similar to the REFLECT() mechanism in KoM to enable automatic deep copies where needed
+- Follow this advice, most specially concerning time representation throughout the engine! https://cohost.org/tomforsyth/post/943070-a-matter-of-precisio?s=03
 
 HTTP
 - Chunked transfers

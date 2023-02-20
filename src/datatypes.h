@@ -2225,7 +2225,11 @@ public:
 /////     SYNC QUEUE    /////
 // Thread safe queue.
 // TODO Lock-free
+// https://moodycamel.com/blog/2013/a-fast-lock-free-queue-for-c++.htm
+// https://moodycamel.com/blog/2014/a-fast-general-purpose-lock-free-queue-for-c++.htm
 
+// TODO Consider how to avoid false-sharing, given that a producer thread will always access the tail and a consumer will access the head
+// TODO Also consider switching all datatypes of this kind to a 'virtual stream' model .. https://fgiesen.wordpress.com/2010/12/14/ring-buffers-and-queues/
 template <typename T, typename AllocType = Allocator>
 struct SyncQueue
 {

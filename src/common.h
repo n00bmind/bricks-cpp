@@ -128,7 +128,7 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 // NOTE Must be placed at global / namespace scope
 #define CHECKSIZE( ... ) \
     template<int> struct CompileTimeSize; \
-    CompileTimeSize<sizeof( __VA_ARGS__ )> _;
+    CompileTimeSize<sizeof( __VA_ARGS__ )> _##__VA_ARGS__;
 
 #if 0
 #define STR(s) _STR(s)
