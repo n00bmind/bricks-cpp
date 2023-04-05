@@ -456,9 +456,11 @@ struct String
         : flags( flags_ | Owned )
     { InternalClone( buffer.data, I32(buffer.length) ); }
 
-    explicit String( Buffer<char> const& buffer, u32 flags_ = 0 )
+    // FIXME enable_if T is same size
+    template<typename T>
+    explicit String( Buffer<T> const& buffer, u32 flags_ = 0 )
         : flags( flags_ | Owned )
-    { InternalClone( buffer.data, I32(buffer.length) ); }
+    { InternalClone( (char const*)buffer.data, I32(buffer.length) ); }
 
 
     String( String const& other )
@@ -655,6 +657,7 @@ public:
     {
         return Ref( other.data, other.length );
     }
+    // FIXME enable_if T is same size
     template <typename T>
     static String Ref( Buffer<T> const& buffer )
     {
@@ -795,6 +798,7 @@ public:
 
     // NOTE All 'ConsumeX' methods advance the current data pointer a certain number of characters (and reduce length accordingly)
     // This means they are only allowed on Ref Strings!
+    // TODO All these need the simd treatment
     String ConsumeLine()
     {
         ASSERT( !(flags & Owned) );
@@ -826,6 +830,7 @@ public:
     }
 
     // Consume next word trimming whatever whitespace is there at the beginning
+    // This is a WORD in the Vim sense, i.e. anything that's not whitespace is included
     String ConsumeWord()
     {
         ASSERT( !(flags & Owned) );
@@ -871,6 +876,27 @@ public:
         length = remaining;
 
         return advancedCount;
+    }
+
+    String ConsumeUntil( char token )
+    {
+        ASSERT( !(flags & Owned) );
+
+        const char *start = data;
+        int remaining = length;
+
+        while( *start && *start != token && remaining > 0 )
+        {
+            start++;
+            remaining--;
+        }
+
+        String result = String::Ref( data, I32(start - data) );
+
+        data = start;
+        length = remaining;
+
+        return result;
     }
 
     String Consume( int charCount )

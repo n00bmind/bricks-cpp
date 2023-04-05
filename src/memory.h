@@ -200,7 +200,7 @@ FREE_FUNC( LazyAllocator )
 #define PUSH_STRING(arena, count, ...) (char *)_PushSize( arena, (count)*SIZEOF(char), alignof(char), ## __VA_ARGS__ )
 #define PUSH_SIZE(arena, size, ...) _PushSize( arena, size, DefaultMemoryAlignment, ## __VA_ARGS__ )
 
-static const sz DefaultArenaPageSize = MEGABYTES( 1 );
+static const sz DefaultArenaPageSize = MEGABYTES( 16 );
 static const sz DefaultMemoryAlignment = alignof(u64);
 
 struct MemoryArenaHeader

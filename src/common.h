@@ -375,9 +375,17 @@ public:
         , length( 0 )
     {}
 
-    explicit Buffer( T* data_, i64 length_ )
+    template <typename SrcT>
+    explicit Buffer( SrcT* data_, i64 length_ )
         : data( data_ )
         , length( length_ )
+    {}
+
+    // FIXME enable_if T is same size
+    template <typename SrcT>
+    explicit Buffer( Buffer<SrcT> const& other )
+        : data( (T*)other.data )
+        , length( other.length )
     {}
 
     // Convert from any static array of a compatible type

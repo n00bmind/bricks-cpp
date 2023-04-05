@@ -105,7 +105,7 @@ struct ReflectedTypeInfo
     ReflectedTypeInfo<R> _reflectInfo( &r );
 
 // FIXME Setting attributes on the reflector like this means they're not correctly set/unset across a hierarchy
-// We'd need a stack of them. We could maybe put ReflectedTypeInfo there ?, along with any other stuff (json stack) too!
+// We'd need a stack of them. Probably push them in Start and pop them in End, along with any other stuff (json stack)
 template <typename R, typename F>
 INLINE ReflectResult ReflectFieldBody( R& r, ReflectedTypeInfo<R>& info, u32 fieldId, F& f, StaticString const& name, FieldAttributes const& attribs )
 {                                                         
