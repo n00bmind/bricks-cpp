@@ -150,7 +150,7 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 #define EQUALP(source, dest, size) (memcmp( source, dest, SizeT( size ) ) == 0)
 
 // Do a placement new on any variable with simpler syntax
-#define INIT(var) new (&(var)) std::remove_reference<decltype(var)>::type
+#define INIT(var) new (&(var)) typename std::remove_reference<decltype(var)>::type
 // NOTE Don't use with a pointer to a base class, as apparently this may inhibit virtual destructor calls
 #define DEINIT(var) var.~decltype(var)()
 
@@ -235,6 +235,24 @@ typedef std::atomic<u64> atomic_u64;
 #define STORE_RELAXED(x) store( x, std::memory_order_relaxed )
 #define STORE_RELEASE(x) store( x, std::memory_order_release )
 #define COMPARE_EXCHANGE_ACQREL(exp, des) compare_exchange_weak( exp, des, std::memory_order_acq_rel )
+
+template <typename T>
+INLINE T Min( T a, T b )
+{
+    return a < b ? a : b;
+}
+
+template <typename T>
+INLINE T Max( T a, T b )
+{
+    return a > b ? a : b;
+}
+
+template <typename T>
+INLINE T Clamp( T v, T min, T max )
+{
+    return Min( max, Max( min, v ) );
+}
 
 // TODO See how to turn these into actual constexprs by using a constexpr-compatible assert expression
 // TODO (may need to use C's assert?)
@@ -495,6 +513,7 @@ int main()
 // TODO We may just want to return the value itself for integer values, since we'll be using consecutive values
 // which may mean more chance for the compiler to optimize FromValue() into a jump table
 #define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( values[x] ),
+//#define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( (char*)&values[x], sizeof(ValueType) ),
 #define _ENUM_VALUE_CASE(x, ...)                case valueHashes[x]: \
                                                     if( values[x] == value )           \
                                                     {                              \

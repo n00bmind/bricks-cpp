@@ -26,6 +26,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // TODO Write copy/move constructors & assignments for everybody
 // TODO Move Push() for everybody
 
+
+
+
 /////     DYNAMIC ARRAY    /////
 
 // Actually, a reference to an array of any size and type somewhere in memory, so more like a 'buffer view' as it's called in do-lang
@@ -108,7 +111,7 @@ struct Array
         {}
 #endif
 
-    Array( Array const& ) = delete;
+    Array( Array const& ) = default;
     void operator =( Array const& ) = delete;
 
     Array( Array&& other )
@@ -440,6 +443,7 @@ struct BucketArray
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
     sz count;
+    // TODO Remove freelist
     T* firstFree;
     i32 const bucketCapacity;
 
@@ -467,12 +471,12 @@ struct BucketArray
         , bucketBufferCapacity( 0 )
         , count( 0 )
         , firstFree( nullptr )
-        , bucketCapacity( bucketSize )
+        , bucketCapacity( NextPowerOf2( bucketSize ) )
         , memParams( params )
     {
-        ASSERT( IsPowerOf2( bucketSize ) );
+        ASSERT( IsPowerOf2( bucketCapacity ) );
         // We need a minimum size to be able to chain it to the freelist when retiring
-        ASSERT( bucketSize * sizeof(T) >= sizeof(T*), "Bucket size too small" );
+        ASSERT( bucketCapacity * sizeof(T) >= sizeof(T*), "Bucket size too small" );
     }
 
     ~BucketArray()
@@ -547,18 +551,50 @@ struct BucketArray
             AllocBucket();
     }
 
-    T* PushEmpty( bool clear = true )
+private:
+    // NOTE Separate any initialization calls so that only the relevant constructors
+    // are required in the user type
+    INLINE T* PushInternal()
     {
         Bucket* lastBucket = GetLastBucket();
         if( !lastBucket || lastBucket->count == lastBucket->capacity )
             lastBucket = AllocBucket();
 
         T* result = lastBucket->data + lastBucket->count++;
-        if( clear )
-            INIT( *result );
-
         count++;
+
         return result;
+    }
+
+public:
+    T* PushEmpty()
+    {
+        T* slot = PushInternal();
+        INIT( *slot );
+        return slot;
+    }
+
+    T* Push( const T& item )
+    {
+        T* slot = PushInternal();
+        INIT( *slot )( item );
+        return slot;
+    }
+
+    T* Push( T&& item )
+    {
+        T* slot = PushInternal();
+        INIT( *slot )( std::move(item) );
+        return slot;
+    }
+
+    template <class... TInitArgs>
+    T* PushInit( TInitArgs&&... args )
+    {
+        T* slot = PushInternal();
+        INIT( *slot )( args... );
+
+        return slot;
     }
 
     void PushEmpty( int itemCount, bool clear = true )
@@ -582,29 +618,6 @@ struct BucketArray
         }
 
         count += itemCount;
-    }
-
-    T* Push( const T& item )
-    {
-        T* slot = PushEmpty( false );
-        INIT( *slot )( item );
-        return slot;
-    }
-
-    T* Push( T&& item )
-    {
-        T* slot = PushEmpty( false );
-        INIT( *slot )( std::move(item) );
-        return slot;
-    }
-
-    template <class... TInitArgs>
-    T* PushInit( TInitArgs&&... args )
-    {
-        T* slot = PushEmpty( false );
-        INIT( *slot )( args... );
-
-        return slot;
     }
 
     INLINE void Push( T const* buffer, sz bufferLen )
@@ -695,7 +708,7 @@ struct BucketArray
     void CopyTo( Array<T, AllocType2>* array ) const
     {
         ASSERT( count <= array->capacity );
-        array->Resize( count );
+        array->Resize( I32(count) );
 
         T* buffer = array->data;
         for( int i = 0; i < bucketBufferCount; ++i )
@@ -733,6 +746,16 @@ struct BucketArray
         return buffer - bufferStart;
     }
 
+
+    template <typename AllocType2 = Allocator>
+    Array<T, AllocType2> ToArray( AllocType2* allocator_ = nullptr ) const
+    {
+        Array<T, AllocType2> result( I32(count), allocator_ ? allocator_ : CTX_ALLOC );
+        result.ResizeToCapacity();
+        CopyTo( &result );
+
+        return result;
+    }
 
     Array<Buffer<T>> const ToBufferArray() const
     {
@@ -1220,13 +1243,13 @@ struct OldBucketArray
 
     T const* Find( T const& item ) const
     {
-        T* result = ((OldBucketArray<T, AllocType>*)this)->Find( item, cmp );
+        T* result = ((OldBucketArray<T, AllocType>*)this)->Find( item );
         return result;
     }
 
     bool Contains( T const& item ) const
     {
-        T const* result = Find( item, cmp );
+        T const* result = Find( item );
         return result != nullptr;
     }
 
@@ -1645,7 +1668,7 @@ struct Hashtable
     struct ItemIterator : public BaseIterator<Item>
     {
         ItemIterator( Hashtable const& table_ )
-            : BaseIterator( table_ )
+            : BaseIterator<Item>( table_ )
         {}
 
         Item Get() const override
@@ -1660,7 +1683,7 @@ struct Hashtable
     struct KeyIterator : public BaseIterator<K const&>
     {
         KeyIterator( Hashtable const& table_ )
-            : BaseIterator( table_ )
+            : BaseIterator<Item>( table_ )
         {}
 
         K const& Get() const override
@@ -1673,7 +1696,7 @@ struct Hashtable
     struct ValueIterator : public BaseIterator<V&>
     {
         ValueIterator( Hashtable const& table_ )
-            : BaseIterator( table_ )
+            : BaseIterator<Item>( table_ )
         {}
 
         V& Get() const override

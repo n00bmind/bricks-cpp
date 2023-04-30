@@ -406,8 +406,7 @@ namespace Http
         Array<u8>* buffer = nullptr;
         if( readBuffers->Empty() || readBuffers->Last().Available() == 0 )
         {
-            buffer = readBuffers->PushEmpty( false );
-            INIT( *buffer )( bufferSize, CTX_TMPALLOC );
+            buffer = readBuffers->PushInit( bufferSize, CTX_TMPALLOC );
         }
         else
             buffer = &readBuffers->Last();

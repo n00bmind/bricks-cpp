@@ -20,7 +20,7 @@ struct BinaryReflector : public Reflector<RW>
     sz bufferHead;
 
     BinaryReflector( BufferType<u8>* b, Allocator* allocator = CTX_TMPALLOC )
-        : Reflector( allocator )
+        : Reflector<RW>( allocator )
         , buffer( b )
         , bufferHead( 0 )
     {}

@@ -22,24 +22,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #pragma once
 
-template <typename T>
-INLINE T Min( T a, T b )
-{
-    return a < b ? a : b;
-}
-
-template <typename T>
-INLINE T Max( T a, T b )
-{
-    return a > b ? a : b;
-}
-
-template <typename T>
-INLINE T Clamp( T v, T min, T max )
-{
-    return Min( max, Max( min, v ) );
-}
-
 INLINE sz
 AlignUp( sz size, sz alignment )
 {
@@ -712,16 +694,16 @@ inline void Hash128( HashBuilder* hash, u8* out )
 // Number of collisions is low enough (0 in a test body of 100K+) that this can be used as a 1-to-1 id for short name strings
 // (assuming we still check for them ofc!)
 // https://mikejsavage.co.uk/blog/cpp-tricks-compile-time-string-hashing.html
-constexpr u64 CompileTimeHash64( const void* data, sz n, u64 basis )
+constexpr u64 CompileTimeHash64( const char* data, sz n, u64 basis )
 {
-    return n == 0 ? basis : CompileTimeHash64( (u8*)data + 1, n - 1, ( basis ^ ((u8*)data)[0] ) * 0x100000001b3ULL );
+    return n == 0 ? basis : CompileTimeHash64( data + 1, n - 1, ( basis ^ (data)[0] ) * 0x100000001b3ULL );
 }
-constexpr u64 CompileTimeHash64( const void* data, sz n )
+constexpr u64 CompileTimeHash64( const char* data, sz n )
 {
     return CompileTimeHash64( data, n, 0xcbf29ce484222325ULL );
 }
 
-constexpr u32 CompileTimeHash32( const void* data, sz n )
+constexpr u32 CompileTimeHash32( const char* data, sz n )
 {
     return (u32)(CompileTimeHash64( data, n, 0xcbf29ce484222325ULL ) & U32MAX);
 }
@@ -729,7 +711,7 @@ constexpr u32 CompileTimeHash32( const void* data, sz n )
 template<size_t N>
 constexpr u64 CompileTimeHash64( const char (&str)[N] )
 {
-    return CompileTimeHash64( (u8*)str, N - 1 );
+    return CompileTimeHash64( str, N - 1 );
 }
 
 template<size_t N>
@@ -738,6 +720,8 @@ constexpr u32 CompileTimeHash32( const char (&str)[N] )
     return (u32)(CompileTimeHash64( str ) & U32MAX);
 }
 
+// TODO Disable these for char const* (string literals)
+#if 1
 // Taken from https://stackoverflow.com/a/12996028/2151254
 template<typename T, typename std::enable_if_t<sizeof( T ) <= 8>* = nullptr>
 constexpr u64 CompileTimeHash64( T data )
@@ -758,13 +742,19 @@ constexpr u32 CompileTimeHash32( T data )
     x = (x >> 16) ^ x;
     return x;
 }
+#endif
 
-// There just seems to be no way of doing this in this wonderful language
+// TODO This should be doable in C++ 20 using bit_cast
+// See https://stackoverflow.com/questions/74137475/c17-constexpr-byte-iteration-for-trivial-types
+// I just keep getting 'no matching overloaded function found' though
 #if 0
 template<typename T>
 constexpr u64 CompileTimeHash64( const T& data )
 {
-    return CompileTimeHash64( (u8*)&data, sizeof(T) );
+    static_assert( std::has_unique_object_representations_v<T>, "Type must be trivially copyable to be able to hash it at compile time" );
+    //return CompileTimeHash64( &std::bit_cast<char[sizeof(T)]>( data ), sizeof(T) );
+    auto obj = std::bit_cast< std::array<std::byte, sizeof(T)>, T >( data );
+    return CompileTimeHash64( obj.begin(), obj.size() );
 }
 
 template<typename T>
@@ -774,10 +764,10 @@ constexpr u32 CompileTimeHash32( const T& data )
 }
 #endif
 
-#define CONSTEVAL_HASH(...) \
+#define COMPTIME_HASH(...) \
     ForceCompileTime<u64, CompileTimeHash64(__VA_ARGS__)>::value
 
-#define CONSTEVAL_HASH_32(...) \
+#define COMPTIME_HASH_32(...) \
     ForceCompileTime<u32, CompileTimeHash32(__VA_ARGS__)>::value
 
 

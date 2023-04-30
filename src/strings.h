@@ -607,7 +607,7 @@ public:
     operator char const*() const { return c(); }
     char const& operator []( int index ) const { ASSERT( index >= 0 && index < length ); return data[index]; }
 
-    bool Empty() const { return length == 0 || data == nullptr; }
+    bool Empty() const { return length == 0 || data == nullptr || (length == 1 && data[0] == 0); }
     bool ValidCString() const { return Empty() || data[length] == 0; }
 
     // Return a valid C String
@@ -974,6 +974,11 @@ public:
         return StringToU32( data, output, base );
     }
 
+    bool ToF32( f32* output ) const
+    {
+        return StringToF32( data, output );
+    }
+
     bool ToBool( bool* output ) const
     {
         return StringToBool( data, output );
@@ -1106,6 +1111,7 @@ struct StaticStringHash : public StaticString
     template <size_t N>
     constexpr StaticStringHash( char const (&s)[N], u32 flags_ = 0 )
         : StaticString( s, flags_ )
+        //, hash( CONSTEVAL<CompileTimeHash64( s )> )
         , hash( CompileTimeHash64( s ) )
     {}
     // TODO Check we can replace (& delete) the above with:

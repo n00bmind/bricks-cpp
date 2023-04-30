@@ -81,7 +81,7 @@ struct JsonReflector : public Reflector<RW>
 protected:
 
     JsonReflector( Allocator* allocator = CTX_TMPALLOC )
-        : Reflector( allocator )
+        : Reflector<RW>( allocator )
         , stack( 16, allocator )
         , head( nullptr )
     {
