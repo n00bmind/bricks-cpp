@@ -59,10 +59,10 @@ struct Array
 
     // NOTE All newly allocated arrays start empty
     // NOTE You cannot specify an AllocType for the instance and then not provide an allocator
-    explicit Array( i32 capacity_, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+    explicit Array( i32 capacity_, AllocType* alloc = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
         : count( 0 )
         , capacity( capacity_ )
-        , allocator( allocator_ )
+        , allocator( alloc )
         , memParams( params )
     {
         ASSERT( allocator );
@@ -74,8 +74,8 @@ struct Array
     // TODO This still doesnt work when we're inside a struct and trying to initialize with an 'initializer list'
     // Maybe try some of the stuff in https://www.foonathan.net/2016/12/fixing-initializer-list/
     template <size_t N>
-    explicit Array( T (&&data_)[N], AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
-        : Array( (int)N, allocator_, params )
+    explicit Array( T (&&data_)[N], AllocType* alloc = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+        : Array( (int)N, alloc, params )
     {
         ResizeToCapacity();
         COPYP( data_, data, capacity * SIZEOF(T) );
@@ -93,23 +93,15 @@ struct Array
     }
 
     // Initialize from a Buffer of the same type (same as above)
-    explicit Array( Buffer<T> const& buffer )
+    Array( Buffer<T> const& buffer )
         : Array( buffer.data, (int)buffer.length, (int)buffer.length )
     {}
 
     // Initialize from an l-value array of the same type (same as above)
     template <size_t N>
-    explicit Array( T (&data_)[N] )
+    Array( T (&data_)[N] )
         : Array( data_, (int)N, (int)N )
     {}
-
-    // Convert from an lvalue static array of a compatible type
-#if 0
-    template <typename SrcT, size_t N>
-        Array( SrcT (&data_)[N] )
-        : Array( data_, (int)N, (int)N )
-        {}
-#endif
 
     Array( Array const& ) = default;
     void operator =( Array const& ) = delete;
@@ -121,8 +113,7 @@ struct Array
 
     ~Array()
     {
-        if( allocator )
-            FREE( allocator, data, memParams );
+        Destroy();
     }
 
     void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = Memory::NoClear() )
@@ -130,8 +121,11 @@ struct Array
         ASSERT( new_allocator );
         T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
 
-        sz copy_size = Min( count, new_capacity ) * SIZEOF(T);
-        COPYP( data, new_data, copy_size );
+        if( data )
+        {
+            sz copy_size = Min( count, new_capacity ) * SIZEOF(T);
+            COPYP( data, new_data, copy_size );
+        }
 
         if( allocator )
             FREE( allocator, data, memParams );
@@ -141,6 +135,18 @@ struct Array
         capacity  = new_capacity;
         allocator = new_allocator;
         memParams = new_params;
+    }
+
+    void Destroy()
+    {
+        if( allocator )
+            FREE( allocator, data, memParams );
+
+        data = nullptr;
+        count = 0;
+        capacity = 0;
+        allocator = nullptr;
+        memParams = {};
     }
 
 
@@ -158,10 +164,6 @@ struct Array
     INLINE explicit operator Buffer<T>()
     {
         return Buffer<T>( data, count );
-    }
-    INLINE explicit operator Buffer<>()
-    {
-        return Buffer<>( data, count );
     }
 
     INLINE explicit operator bool() const
@@ -352,18 +354,18 @@ struct Array
 
     // Deep copy
     template <typename AllocType2 = Allocator>
-    Array<T, AllocType2> Clone( AllocType2* allocator_ = nullptr ) const
+    Array<T, AllocType2> Clone( AllocType2* alloc = nullptr ) const
     {
-        Array<T, AllocType2> result( count, allocator_ ? allocator_ : CTX_ALLOC );
+        Array<T, AllocType2> result( count, alloc ? alloc : CTX_ALLOC );
         result.ResizeToCapacity();
         COPYP( data, result.data, count * SIZEOF(T) );
         return result;
     }
 
     template <typename AllocType2 = Allocator>
-    static Array<T, AllocType2> Clone( Array<T, AllocType2> const& other, AllocType2* allocator_ = nullptr )
+    static Array<T, AllocType2> Clone( Array<T, AllocType2> const& other, AllocType2* alloc = nullptr )
     {
-        Array<T, AllocType2> result( other.capacity, allocator_ ? allocator_ : CTX_ALLOC );
+        Array<T, AllocType2> result( other.capacity, alloc ? alloc : CTX_ALLOC );
         result.count = other.count;
         COPYP( other.data, result.data, result.count * SIZEOF(T) );
         return result;
@@ -438,16 +440,16 @@ struct BucketArray
     };
 
     // TODO Pack this down
-    AllocType* const allocator;
+    AllocType* allocator;
     Bucket* bucketBuffer;
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
     sz count;
     // TODO Remove freelist
     T* firstFree;
-    i32 const bucketCapacity;
+    i32 bucketCapacity;
 
-    MemoryParams const memParams;
+    MemoryParams memParams;
 
 
     struct Iterator
@@ -464,35 +466,20 @@ struct BucketArray
     };
 
 
-    explicit BucketArray( i32 bucketSize = 16, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
-        : allocator( allocator_ )
+    BucketArray( i32 bucketSize = 16, AllocType* alloc = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+        : allocator( nullptr )
         , bucketBuffer( nullptr )
         , bucketBufferCount( 0 )
         , bucketBufferCapacity( 0 )
         , count( 0 )
         , firstFree( nullptr )
-        , bucketCapacity( NextPowerOf2( bucketSize ) )
-        , memParams( params )
     {
-        ASSERT( IsPowerOf2( bucketCapacity ) );
-        // We need a minimum size to be able to chain it to the freelist when retiring
-        ASSERT( bucketCapacity * sizeof(T) >= sizeof(T*), "Bucket size too small" );
+        Reset( bucketSize, alloc, params );
     }
 
     ~BucketArray()
     {
-        for( int i = 0; i < bucketBufferCount; ++i )
-            FREE( allocator, bucketBuffer[i].data, memParams );
-
-        while( firstFree )
-        {
-            T* data = firstFree;
-            firstFree = *(T**)&firstFree[0];
-
-            FREE( allocator, data, memParams );
-        }
-
-        FREE( allocator, bucketBuffer, memParams );
+        Destroy();
     }
 
 
@@ -538,6 +525,46 @@ struct BucketArray
         return bucketBufferCount ? &bucketBuffer[bucketBufferCount - 1] : nullptr;
     }
 
+
+    void Reset( i32 bucketSize = 16, AllocType* alloc = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+    {
+        Destroy();
+
+        ASSERT( alloc );
+        allocator = alloc;
+        bucketCapacity = NextPowerOf2( bucketSize );
+        memParams = params;
+
+        ASSERT( IsPowerOf2( bucketCapacity ) );
+        // We need a minimum size to be able to chain it to the freelist when retiring
+        ASSERT( bucketCapacity * sizeof(T) >= sizeof(T*), "Bucket size too small" );
+    }
+
+    void Destroy()
+    {
+        for( int i = 0; i < bucketBufferCount; ++i )
+            FREE( allocator, bucketBuffer[i].data, memParams );
+
+        while( firstFree )
+        {
+            T* data = firstFree;
+            firstFree = *(T**)&firstFree[0];
+
+            FREE( allocator, data, memParams );
+        }
+
+        if( allocator )
+            FREE( allocator, bucketBuffer, memParams );
+
+        allocator = nullptr;
+        bucketBuffer = nullptr;
+        bucketBufferCount = 0;
+        bucketBufferCapacity = 0;
+        count = 0;
+        firstFree = nullptr;
+        bucketCapacity = 0;
+        memParams = {};
+    }
 
     void Reserve( sz capacity )
     {
@@ -748,9 +775,9 @@ public:
 
 
     template <typename AllocType2 = Allocator>
-    Array<T, AllocType2> ToArray( AllocType2* allocator_ = nullptr ) const
+    Array<T, AllocType2> ToArray( AllocType2* alloc = nullptr ) const
     {
-        Array<T, AllocType2> result( I32(count), allocator_ ? allocator_ : CTX_ALLOC );
+        Array<T, AllocType2> result( I32(count), alloc ? alloc : CTX_ALLOC );
         result.ResizeToCapacity();
         CopyTo( &result );
 
@@ -897,10 +924,10 @@ struct OldBucketArray
             , capacity( 0 )
         {}
 
-        Bucket( i32 capacity_, AllocType* allocator_, MemoryParams memParams_ )
+        Bucket( i32 capacity_, AllocType* alloc, MemoryParams memParams_ )
             : next( nullptr )
             , prev( nullptr )
-            , allocator( allocator_ )
+            , allocator( alloc )
             , count( 0 )
             , capacity( capacity_ )
             , memParams( memParams_ )
@@ -1003,11 +1030,11 @@ struct OldBucketArray
         , count( 0 )
     {}
 
-    explicit OldBucketArray( i32 bucketSize, AllocType* allocator_ = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
-        : first( bucketSize, allocator_, params )
+    explicit OldBucketArray( i32 bucketSize, AllocType* alloc = CTX_ALLOC, MemoryParams params = Memory::NoClear() )
+        : first( bucketSize, alloc, params )
         , last( &first )
         , firstFree( nullptr )
-        , allocator( allocator_ )
+        , allocator( alloc )
         , memParams( params )
         , count( 0 )
     {
@@ -1346,9 +1373,9 @@ struct OldBucketArray
     }
 
     template <typename AllocType2 = Allocator>
-    Array<T, AllocType2> ToArray( AllocType2* allocator_ = nullptr ) const
+    Array<T, AllocType2> ToArray( AllocType2* alloc = nullptr ) const
     {
-        Array<T, AllocType2> result( count, allocator_ ? allocator_ : CTX_ALLOC );
+        Array<T, AllocType2> result( count, alloc ? alloc : CTX_ALLOC );
         result.ResizeToCapacity();
         CopyTo( &result );
 
@@ -1472,11 +1499,11 @@ struct Hashtable
     u32 flags;
 
 
-    explicit Hashtable( int expectedSize = 0, AllocType* allocator_ = CTX_ALLOC, 
+    explicit Hashtable( int expectedSize = 0, AllocType* alloc = CTX_ALLOC, 
                         HashFunc hashFunc_ = DefaultHashFunc<K>, KeysEqFunc eqFunc_ = DefaultEqFunc<K>, u32 flags_ = 0 )
         : keys( nullptr )
         , values( nullptr )
-        , allocator( allocator_ )
+        , allocator( alloc )
         , hashFunc( hashFunc_ )
         , eqFunc( eqFunc_ )
         , count( 0 )
@@ -2287,8 +2314,8 @@ struct SyncQueue
         , count( 0 )
     {}
 
-    SyncQueue( int pageCapacity, AllocType* allocator_ = CTX_ALLOC )
-        : allocator( allocator_ )
+    SyncQueue( int pageCapacity, AllocType* alloc = CTX_ALLOC )
+        : allocator( alloc )
         , head( nullptr )
         , tail( nullptr )
         , firstFree( nullptr )

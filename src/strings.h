@@ -1102,7 +1102,7 @@ INLINE StaticString operator"" _s( const char *s, size_t len )
 }
 
 
-// Version that gets hashed in compile time
+// Version that gets hashed at compile time
 struct StaticStringHash : public StaticString
 {
     const u64 hash;
@@ -1120,6 +1120,8 @@ struct StaticStringHash : public StaticString
         : StaticString( s, flags_ )
         , hash( CompileTimeHash64( s ) )
     {}
+
+    // TODO We can also accept an l-value constexpr char* if we do something like https://blog.molecular-matters.com/2011/06/22/subtle-differences-in-c/
 
     // for non-const char arrays like buffers
     template<size_t N> StaticStringHash( char (&)[N] ) = delete;

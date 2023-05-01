@@ -381,7 +381,7 @@ SizeT( sz value )
 
 /////     BUFFER VIEW    /////
 
-template <typename T = void>
+template <typename T = u8>
 struct Buffer
 {
     T* data;
@@ -408,8 +408,8 @@ public:
 
     // Convert from any static array of a compatible type
     // NOTE The array itself must be an lvalue, since by definition Buffers only reference data
-    template <typename SrcT, size_t N>
-    explicit Buffer( SrcT (&data_)[N] )
+    template <size_t N>
+    Buffer( T (&data_)[N] )
         : data( data_ )
         , length( (sz)N )
     {}
@@ -418,7 +418,8 @@ public:
     explicit INLINE operator T const*() const { return data; }
     explicit INLINE operator T*() { return data; }
 
-    INLINE bool Valid() const { return data && length; }
+    INLINE T& operator []( sz offset ) { ASSERT( offset < length ); return *(data + offset); }
+    INLINE T const& operator []( sz offset ) const { ASSERT( offset < length ); return *(data + offset); }
 
     INLINE T*          begin()         { return data; }
     INLINE const T*    begin() const   { return data; }
@@ -426,6 +427,8 @@ public:
     INLINE const T*    end() const     { return data + length; }
 
     INLINE sz          Size() const    { return length * SIZEOF(T); }
+    INLINE bool        Valid() const   { return data && length; }
+
 
     // Return how many items were actually copied
     INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
@@ -544,10 +547,11 @@ protected:
 };
 
 #define _CREATE_ENUM(enumName, valueType, valueHasher, xItemList, xItemInitializer)   \
-struct enumName : public EnumStruct<enumName>                                         \
+class enumName : public EnumStruct<enumName>                                         \
 {                                                                                     \
     i32 index;                                                                        \
                                                                                       \
+public: \
     enum Enum : i32                                                                   \
     {                                                                                 \
         xItemList(_ENUM_ENTRY)                                                        \
@@ -579,6 +583,9 @@ struct enumName : public EnumStruct<enumName>                                   
     { return index > other.index; }                                                   \
     INLINE constexpr bool operator >=( enumName const& other ) const                  \
     { return index >= other.index; }                                                  \
+    \
+    INLINE constexpr void operator ++() \
+    { index = (index < itemCount - 1) ? index + 1 : 0; } \
                                                                                       \
     INLINE constexpr char const* Name()  const { return names[index]; }               \
     INLINE constexpr valueType const& Value() const { return values[index]; }         \
