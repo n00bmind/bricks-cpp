@@ -266,7 +266,7 @@ inline bool StringToI32( char const* str, i32* output, int base = 0 )
     *output = strtol( str, &end, base );
 
     if( *output == 0 )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( *output == LONG_MAX || *output == LONG_MIN )
         result = (errno != ERANGE);
     else
@@ -283,7 +283,7 @@ inline bool StringToU32( char const* str, u32* output, int base = 0 )
     *output = strtoul( str, &end, base );
 
     if( *output == 0 )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( *output == ULONG_MAX )
         result = (errno != ERANGE);
     else
@@ -300,7 +300,7 @@ inline bool StringToI64( char const* str, i64* output, int base = 0 )
     *output = strtoll( str, &end, base );
 
     if( *output == 0 )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( *output == LLONG_MAX || *output == LLONG_MIN )
         result = (errno != ERANGE);
     else
@@ -317,7 +317,7 @@ inline bool StringToU64( char const* str, u64* output, int base = 0 )
     *output = strtoull( str, &end, base );
 
     if( *output == 0 )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( *output == ULLONG_MAX )
         result = (errno != ERANGE);
     else
@@ -334,7 +334,7 @@ inline bool StringToF32( char const* str, f32* output )
     *output = strtof( str, &end );
 
     if( *output == 0.f )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( abs( *output ) == HUGE_VALF )
         result = (errno != ERANGE);
     else
@@ -351,7 +351,7 @@ inline bool StringToF64( char const* str, f64* output )
     *output = strtod( str, &end );
 
     if( *output == 0.f )
-        result = (end != nullptr);
+        result = (end != str) && (end != nullptr);
     else if( abs( *output ) == HUGE_VAL )
         result = (errno != ERANGE);
     else
