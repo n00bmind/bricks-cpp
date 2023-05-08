@@ -235,8 +235,8 @@ namespace Http
         if( request.bodyData )
             tmpHeaders.Put( "content-length"_s, String::FromFormatTmp( "%d", request.bodyData.length ) ); 
         // TODO 
-        //tmpHeaders.PutIfNotFound( "connection"_str, "Keep-Alive"_str );
-        tmpHeaders.PutIfNotFound( "accept"_s, "*/*"_s );
+        //tmpHeaders.GetOrPut( "connection"_str, "Keep-Alive"_str );
+        tmpHeaders.GetOrPut( "accept"_s, "*/*"_s );
 
 
         // TODO Keep any interesting info in the request

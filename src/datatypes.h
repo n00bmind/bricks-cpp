@@ -1576,8 +1576,11 @@ struct Hashtable
             if( i == U32( capacity ) )
                 i = 0;
             if( i == startIdx )
+            {
                 // Something went horribly wrong
+                ASSERT( false );
                 return nullptr;
+            }
         }
     }
 
@@ -1596,7 +1599,16 @@ struct Hashtable
         u32 startIdx = i;
         for( ;; )
         {
-            if( eqFunc( keys[i], ZeroKey<K> ) )
+            if( eqFunc( keys[i], key ) )
+            {
+                if( clear )
+                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
+                    INIT( values[i] )();
+                if( occupiedOut )
+                    *occupiedOut = true;
+                return &values[i];
+            }
+            else if( eqFunc( keys[i], ZeroKey<K> ) )
             {
                 keys[i] = key;
                 if( clear )
@@ -1607,22 +1619,16 @@ struct Hashtable
                     *occupiedOut = false;
                 return &values[i];
             }
-            else if( eqFunc( keys[i], key ) )
-            {
-                if( clear )
-                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-                    INIT( values[i] )();
-                if( occupiedOut )
-                    *occupiedOut = true;
-                return &values[i];
-            }
 
             i++;
             if( i == U32( capacity ) )
                 i = 0;
             if( i == startIdx )
+            {
                 // Something went horribly wrong
+                ASSERT( false );
                 return nullptr;
+            }
         }
     }
 
@@ -1635,7 +1641,22 @@ struct Hashtable
         return result;
     }
 
-    V* PutIfNotFound( K const& key, V const& value, bool* foundOut = nullptr )
+    V* GetOrPutEmpty( K const& key, bool* foundOut = nullptr )
+    {
+        bool found;
+        V* result = PutEmpty( key, false, &found );
+        ASSERT( result );
+
+        if( !found )
+            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
+            INIT( *result )();
+
+        if( foundOut )
+            *foundOut = found;
+        return result;
+    }
+
+    V* GetOrPut( K const& key, V const& value, bool* foundOut = nullptr )
     {
         bool found;
         V* result = PutEmpty( key, false, &found );
@@ -1710,7 +1731,7 @@ struct Hashtable
     struct KeyIterator : public BaseIterator<K const&>
     {
         KeyIterator( Hashtable const& table_ )
-            : BaseIterator<Item>( table_ )
+            : BaseIterator<K const&>( table_ )
         {}
 
         K const& Get() const override
@@ -1723,7 +1744,7 @@ struct Hashtable
     struct ValueIterator : public BaseIterator<V&>
     {
         ValueIterator( Hashtable const& table_ )
-            : BaseIterator<Item>( table_ )
+            : BaseIterator<V&>( table_ )
         {}
 
         V& Get() const override
@@ -1735,7 +1756,7 @@ struct Hashtable
     };
 
     ItemIterator Items() { return ItemIterator( *this ); }
-    KeyIterator Keys() { return KeyIterator( *this ); }
+    KeyIterator Keys() const { return KeyIterator( *this ); }
     ValueIterator Values() { return ValueIterator( *this ); }
 
 private:

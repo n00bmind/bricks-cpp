@@ -7,10 +7,10 @@ namespace Logging
         State* state = CTX.logState;
 
         // TODO We probably won't need this. Just check we're initialized?
-        // FIXME If we don't find the Channel we should just add one with default attrs on the spot
         ASSERT( !state->channels.Empty(), "No channels.. have you called Logging::Init?" );
 
-        Channel const* channel = state->channels.Get( channelName );
+        // If we don't find the Channel just add one with default attrs on the spot
+        Channel const* channel = state->channels.GetOrPutEmpty( channelName );
         ASSERT( channelName && channel, "Invalid log channel" );
         if( !channel )
             return;

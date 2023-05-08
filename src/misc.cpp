@@ -31,6 +31,8 @@ struct CSVCell
 struct CSVRow
 {
     Array<CSVCell*> cells;
+    String text;
+    int rowIndex;
 
     CSVRow( int cellCount ) : cells( cellCount )
     {}
@@ -72,13 +74,18 @@ CSV LoadCSV( String contents, Buffer<char const* const> headerNames, char separa
     result.rows.Reset( 128, allocator );
     result.cells.Reset( (int)result.headers.count * 128, allocator );
 
+    int r = 0;
     while( contents )
     {
         String line = contents.ConsumeLine();
 
         CSVRow* curRow = nullptr;
         if( line )
+        {
             curRow = result.rows.PushInit( (int)result.headers.count );
+            curRow->text = line;
+            curRow->rowIndex = r++;
+        }
 
         while( line )
         {

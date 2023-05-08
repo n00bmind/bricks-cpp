@@ -404,6 +404,16 @@ inline bool StringAppendToBuffer( char*& buffer, char const* bufferEnd, char con
     return false;
 }
 
+inline int StringCompare( char const* a, char const* b )
+{
+    return strcmp( a, b );
+}
+
+// For sorting
+inline bool StringComparator( char const* a, char const* b )
+{
+    return strcmp( a, b ) < 0;
+}
 
 // Specialised hash & equality implementations for char* strings
 template <>
