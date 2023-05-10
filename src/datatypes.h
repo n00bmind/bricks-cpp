@@ -1755,9 +1755,24 @@ struct Hashtable
         }
     };
 
+    struct ConstValueIterator : public BaseIterator<V const&>
+    {
+        ConstValueIterator( Hashtable const& table_ )
+            : BaseIterator<V const&>( table_ )
+        {}
+
+        V const& Get() const override
+        {
+            ASSERT( current );
+            V& currentValue = table.values[ current - table.keys ];
+            return currentValue;
+        }
+    };
+
     ItemIterator Items() { return ItemIterator( *this ); }
     KeyIterator Keys() const { return KeyIterator( *this ); }
     ValueIterator Values() { return ValueIterator( *this ); }
+    ConstValueIterator ConstValues() const { return ConstValueIterator( *this ); }
 
 private:
     void Grow( int newCapacity )

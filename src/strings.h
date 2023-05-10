@@ -613,6 +613,9 @@ public:
     bool operator !=( String const& other ) const { return !(*this == other); }
     bool operator !=( const char* cString ) const { return !(*this == cString); }
 
+    bool operator < ( String const& other ) const { return StringComparator( data, other.data ); }
+    bool operator < ( char const* cString ) const { return StringComparator( data, cString ); }
+
     explicit operator bool() const { return !Empty(); }
     operator char const*() const { return c(); }
     char const& operator []( int index ) const { ASSERT( index >= 0 && index < length ); return data[index]; }
