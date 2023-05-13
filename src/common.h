@@ -511,6 +511,9 @@ int main()
 #define _ENUM_NAME_2b(x, ...)                   #x,
 #define _ENUM_NAME_3(x, n, ...)                 n,
 
+// TODO As mentioned in the Perfect Hashing section onwards on https://blog.demofox.org/2016/09/23/exploring-compile-time-hashing/
+// we should examine the optimized output for these and experiment with doing a modulo of the hashed result to coherce the compiler
+// into constructing a jump table in debug and/or a straight constant evaluation in optimized..
 #define _ENUM_NAME_HASH_1(x)                    CompileTimeHash64( #x ),
 #define _ENUM_NAME_HASH_2a(x, n)                CompileTimeHash64( n ),
 #define _ENUM_NAME_HASH_2b(x, ...)              CompileTimeHash64( #x ),

@@ -694,18 +694,33 @@ inline void Hash128( HashBuilder* hash, u8* out )
 // Number of collisions is low enough (0 in a test body of 100K+) that this can be used as a 1-to-1 id for short name strings
 // (assuming we still check for them ofc!)
 // https://mikejsavage.co.uk/blog/cpp-tricks-compile-time-string-hashing.html
-constexpr u64 CompileTimeHash64( const char* data, sz n, u64 basis )
+constexpr u64 _CompileTimeHash64( const char* data, sz n, u64 basis )
 {
-    return n == 0 ? basis : CompileTimeHash64( data + 1, n - 1, ( basis ^ (data)[0] ) * 0x100000001b3ULL );
+    return n == 0 ? basis : _CompileTimeHash64( data + 1, n - 1, ( basis ^ (data)[0] ) * 0x100000001b3ULL );
 }
 constexpr u64 CompileTimeHash64( const char* data, sz n )
 {
-    return CompileTimeHash64( data, n, 0xcbf29ce484222325ULL );
+    return _CompileTimeHash64( data, n, 0xcbf29ce484222325ULL );
 }
 
 constexpr u32 CompileTimeHash32( const char* data, sz n )
 {
-    return (u32)(CompileTimeHash64( data, n, 0xcbf29ce484222325ULL ) & U32MAX);
+    return (u32)(_CompileTimeHash64( data, n, 0xcbf29ce484222325ULL ) & U32MAX);
+}
+
+// Same FNV1 above rewritten to deref the pointer instead of relying on a size arg
+constexpr u64 _CompileTimeHash64( const char* data, u64 basis )
+{
+    return *data == 0 ? basis : _CompileTimeHash64( data + 1, ( basis ^ (data)[0] ) * 0x100000001b3ULL );
+}
+constexpr u64 CompileTimeHash64( const char* data )
+{
+    return _CompileTimeHash64( data, 0xcbf29ce484222325ULL );
+}
+
+constexpr u32 CompileTimeHash32( const char* data )
+{
+    return (u32)(_CompileTimeHash64( data, 0xcbf29ce484222325ULL ) & U32MAX);
 }
 
 template<size_t N>
@@ -763,6 +778,9 @@ constexpr u32 CompileTimeHash32( const T& data )
     return (u32)CompileTimeHash64( data );
 }
 #endif
+
+
+// Use these when we need to guarantee compile time but we dont necessarily have a constexpr var at hand to place the result
 
 #define COMPTIME_HASH(...) \
     ForceCompileTime<u64, CompileTimeHash64(__VA_ARGS__)>::value
