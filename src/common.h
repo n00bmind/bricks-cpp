@@ -472,13 +472,14 @@ struct V
     u64 iVal;
 };
 
+// NOTE Composite values must be declared inside {}
 #define VALUES(x) \
-    x(None,         "a",  42u ) \
-    x(Animation,    "b",  42u ) \
-    x(Landscape,    "c",  42u ) \
-    x(Audio,        "d",  42u ) \
-    x(Network,      "e",  42u ) \
-    x(Scripting,    "f",  42u ) \
+    x(None,         "a",  { 42u } ) \
+    x(Animation,    "b",  { 42u } ) \
+    x(Landscape,    "c",  { 42u } ) \
+    x(Audio,        "d",  { 42u } ) \
+    x(Network,      "e",  { 42u } ) \
+    x(Scripting,    "f",  { 42u } ) \
 
 ENUM_STRUCT_WITH_NAMES_VALUES(MemoryTag, V, VALUES)
 #undef VALUES
@@ -526,16 +527,16 @@ int main()
 // TODO We'd ideally remove values entirely so any code using them (serialization!) errors out at compile time
 #define _ENUM_VALUE_1(x)                        {},
 #define _ENUM_VALUE_2a(x, n)                    {},
-#define _ENUM_VALUE_2b(x, ...)                  { __VA_ARGS__ },
-#define _ENUM_VALUE_3(x, n, ...)                { __VA_ARGS__ },
+#define _ENUM_VALUE_2b(x, ...)                  __VA_ARGS__,
+#define _ENUM_VALUE_3(x, n, ...)                __VA_ARGS__,
 
 #define _ENUM_VALUE_HASH_1(x)                   (u64)x,                                 // Use index as a dummy value
 #define _ENUM_VALUE_HASH_2a(x, n)               (u64)x,                                 // Use index as a dummy value
 // FIXME This works only for up to 64 bit values or strings
 // TODO We may just want to return the value itself for integer values, since we'll be using consecutive values
 // which may mean more chance for the compiler to optimize FromValue() into a jump table
-#define _ENUM_VALUE_HASH_2b(x, ...)             CompileTimeHash64( { __VA_ARGS__ } ),
-#define _ENUM_VALUE_HASH_3(x, n, ...)           CompileTimeHash64( { __VA_ARGS__ } ),
+#define _ENUM_VALUE_HASH_2b(x, ...)             CompileTimeHash64( __VA_ARGS__ ),
+#define _ENUM_VALUE_HASH_3(x, n, ...)           CompileTimeHash64( __VA_ARGS__ ),
 //#define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( (char*)&values[x], sizeof(ValueType) ),
 
 #define _ENUM_VALUE_CASE(x, ...)                case valueHashes[x]:         \

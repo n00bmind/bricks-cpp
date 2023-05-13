@@ -85,7 +85,7 @@ struct
 
 //// Some basic stuff
 
-// TODO Something's fishy here.. what CompileTimeHash64 is being called here?
+// TODO Something's fishy here.. what CompileTimeHash64 is being called here? (V type is bigger than 8 bytes)
 // TODO Test if we can actually call FromValue for some distinct values
 // TODO Why dont floats work?
 struct V
@@ -96,12 +96,12 @@ struct V
 };
 
 #define VALUES(x) \
-    x(None,         "a",  42u, 10 ) \
-    x(Animation,    "b",  42u, 10 ) \
-    x(Landscape,    "c",  42u, 10 ) \
-    x(Audio,        "d",  42u, 10 ) \
-    x(Network,      "e",  42u, 10 ) \
-    x(Scripting,    "f",  42u, 10 ) \
+    x(None,         "a",  { 42u, 10 } ) \
+    x(Animation,    "b",  { 42u, 10 } ) \
+    x(Landscape,    "c",  { 42u, 10 } ) \
+    x(Audio,        "d",  { 42u, 10 } ) \
+    x(Network,      "e",  { 42u, 10 } ) \
+    x(Scripting,    "f",  { 42u, 10 } ) \
 
 ENUM_STRUCT_WITH_NAMES_VALUES(MemoryTag, V, VALUES)
 #undef VALUES
