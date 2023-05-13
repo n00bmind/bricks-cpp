@@ -469,72 +469,90 @@ using StringBuffer = Buffer<char const>;
 
 struct V
 {
-    char const* sVal;
-    int iVal;
+    u64 iVal;
 };
 
 #define VALUES(x) \
-    x(None,         ("a", 100)) \
-    x(Animation,    ("b", 200)) \
-    x(Landscape,    ("c", 300)) \
-    x(Audio,        ("d", 400)) \
-    x(Network,      ("e", 500)) \
-    x(Scripting,    ("f", 600)) \
+    x(None,         "a",  42u ) \
+    x(Animation,    "b",  42u ) \
+    x(Landscape,    "c",  42u ) \
+    x(Audio,        "d",  42u ) \
+    x(Network,      "e",  42u ) \
+    x(Scripting,    "f",  42u ) \
 
-// Values must go in () even if they're a single primitive type!
-ENUM_STRUCT_WITH_VALUES(MemoryTag, V, VALUES)
+ENUM_STRUCT_WITH_NAMES_VALUES(MemoryTag, V, VALUES)
 #undef VALUES
 
 int main()
 {
-    // Can be used as normal
+    // Can be used as a normal enum
     int index = MemoryTag::Audio;
     
     // But also
-    MemoryTag::Item const& t = MemoryTag::Items::Audio;
-    ASSERT( t.index == index );
+    MemoryTag t = MemoryTag::Audio;
+    ASSERT_EQ( t.Index(), index );
+    ASSERT_EQ( (int)t, index );
 
-    V const& value = MemoryTag::Items::Landscape.value;
+    char const* name = t.Name();
 
     for( int i = 0; i < MemoryTag::itemCount; ++i )
     {
-        MemoryTag::Item const& t = MemoryTag::items[i];
-        std::cout << "sVal: " << t.value.sVal << "\tiVal: " << t.value.iVal << std::endl;
+        MemoryTag::ValueType const& v = MemoryTag::values[i];
+        LOG( "%s is: %llu, %d\n", MemoryTag::names[i], v.uVal, v.iVal );
     }
 }
 */
 
-#define _ENUM_ARGS(...)                         { __VA_ARGS__ }
 #define _ENUM_ENTRY(x, ...)                     x,
-#define _ENUM_NAME(x, ...)                      items[x].name,
-// TODO We're constructing values twice, due to referring to items for the values array here
-// TODO We should probably just construct Items on request, since it's kind of an exotic concept which will be seldom used anyway
-// (maybe even remove it entirely!)
-#define _ENUM_VALUE(x, ...)                     items[x].value,
-#define _ENUM_VALUE_HASH_DUMMY(x, ...)          (u64)x,                                 // Use index as a dummy value
+
+#define _ENUM_NAME_1(x)                         #x,
+#define _ENUM_NAME_2a(x, n)                     n,
+#define _ENUM_NAME_2b(x, ...)                   #x,
+#define _ENUM_NAME_3(x, n, ...)                 n,
+
+#define _ENUM_NAME_HASH_1(x)                    CompileTimeHash64( #x ),
+#define _ENUM_NAME_HASH_2a(x, n)                CompileTimeHash64( n ),
+#define _ENUM_NAME_HASH_2b(x, ...)              CompileTimeHash64( #x ),
+#define _ENUM_NAME_HASH_3(x, n, ...)            CompileTimeHash64( n ),
+
+#define _ENUM_NAME_CASE(x, ...)                 case nameHashes[x]:                     \
+                                                    if( StringsEqual( names[x], name ) ) \
+                                                    {                                   \
+                                                        result = x;                     \
+                                                        match = true;                   \
+                                                    }                                   \
+                                                break;
+
+// TODO We'd ideally remove values entirely so any code using them (serialization!) errors out at compile time
+#define _ENUM_VALUE_1(x)                        {},
+#define _ENUM_VALUE_2a(x, n)                    {},
+#define _ENUM_VALUE_2b(x, ...)                  { __VA_ARGS__ },
+#define _ENUM_VALUE_3(x, n, ...)                { __VA_ARGS__ },
+
+#define _ENUM_VALUE_HASH_1(x)                   (u64)x,                                 // Use index as a dummy value
+#define _ENUM_VALUE_HASH_2a(x, n)               (u64)x,                                 // Use index as a dummy value
 // FIXME This works only for up to 64 bit values or strings
 // TODO We may just want to return the value itself for integer values, since we'll be using consecutive values
 // which may mean more chance for the compiler to optimize FromValue() into a jump table
-#define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( values[x] ),
+#define _ENUM_VALUE_HASH_2b(x, ...)             CompileTimeHash64( { __VA_ARGS__ } ),
+#define _ENUM_VALUE_HASH_3(x, n, ...)           CompileTimeHash64( { __VA_ARGS__ } ),
 //#define _ENUM_VALUE_HASH(x, ...)                CompileTimeHash64( (char*)&values[x], sizeof(ValueType) ),
-#define _ENUM_VALUE_CASE(x, ...)                case valueHashes[x]: \
-                                                    if( values[x] == value )           \
-                                                    {                              \
-                                                        result = x;                \
-                                                        match = true;              \
-                                                    }                              \
-                                                break;
-#define _ENUM_ITEM_REF(x, ...)  static constexpr EnumTypeName::Item const& x = EnumTypeName::items[x];
-// TODO We'd ideally remove values entirely so any code using them (serialization!) errors out at compile time
-#define _ENUM_INIT(x)                           { #x, {}, x },
-#define _ENUM_INIT_WITH_NAMES(x, n)             {  n, {}, x },
-#define _ENUM_INIT_WITH_VALUES(x, v)            { #x, _ENUM_ARGS v, x },
-#define _ENUM_INIT_WITH_NAMES_VALUES(x, n, v)   {  n, _ENUM_ARGS v, x },
 
-// TODO Add a constexpr string to enum constructor as explained in "Compile Time Assisted String To Enum"
-// in https://blog.demofox.org/2016/09/23/exploring-compile-time-hashing/
-// TODO Can we do value-to-enum too?
-// TODO What other stuff can we move to the parent
+#define _ENUM_VALUE_CASE(x, ...)                case valueHashes[x]:         \
+                                                    if( values[x] == value ) \
+                                                    {                        \
+                                                        result = x;          \
+                                                        match = true;        \
+                                                    }                        \
+                                                break;
+
+//#define _ENUM_ARGS(...)                         { __VA_ARGS__ }
+//#define _ENUM_ITEM_1(x)                         { #x, {}, x },
+//#define _ENUM_ITEM_2a(x, n)                     {  n, {}, x },
+//#define _ENUM_ITEM_2b(x, v)                     { #x, _ENUM_ARGS v, x },
+//#define _ENUM_ITEM_3(x, n, v)                   {  n, _ENUM_ARGS v, x },
+
+// TODO What stuff can we possibly move to the parent and take out of the macro?
 template <typename T> struct EnumStruct
 {
     struct InvalidValueType
@@ -546,105 +564,102 @@ protected:
     constexpr EnumStruct() {};
 };
 
-#define _CREATE_ENUM(enumName, valueType, valueHasher, xItemList, xItemInitializer)   \
-class enumName : public EnumStruct<enumName>                                         \
-{                                                                                     \
-    i32 index;                                                                        \
-                                                                                      \
-public: \
-    enum Enum : i32                                                                   \
-    {                                                                                 \
-        xItemList(_ENUM_ENTRY)                                                        \
-    };                                                                                \
-                                                                                      \
-    using EnumTypeName = enumName;                                                    \
-    using ValueType = valueType;                                                      \
-                                                                                      \
-                                                                                      \
-    constexpr enumName() : index( itemCount )                                         \
-    {}                                                                                \
-    constexpr enumName( int index_ ) : index( index_ )                                \
-    {                                                                                 \
-        ASSERT( index >= 0 && index < itemCount, #enumName " index out of range" );   \
-    }                                                                                 \
-                                                                                      \
-    constexpr bool IsValid() const { return index >= 0 && index < itemCount; }        \
-                                                                                      \
-    INLINE constexpr operator int() { return index; }                                 \
-    INLINE constexpr bool operator ==( enumName const& other ) const                  \
-    { return index == other.index; }                                                  \
-    INLINE constexpr bool operator ==( Enum const& other ) const                      \
-    { return index == (int)other; }                                                   \
-    INLINE constexpr bool operator <( enumName const& other ) const                   \
-    { return index < other.index; }                                                   \
-    INLINE constexpr bool operator <=( enumName const& other ) const                  \
-    { return index <= other.index; }                                                  \
-    INLINE constexpr bool operator >( enumName const& other ) const                   \
-    { return index > other.index; }                                                   \
-    INLINE constexpr bool operator >=( enumName const& other ) const                  \
-    { return index >= other.index; }                                                  \
-    \
-    INLINE constexpr void operator ++() \
-    { index = (index < itemCount - 1) ? index + 1 : 0; } \
-                                                                                      \
-    INLINE constexpr char const* Name()  const { return names[index]; }               \
-    INLINE constexpr valueType const& Value() const { return values[index]; }         \
-                                                                                      \
-    template <typename T = valueType,                                                 \
-              std::enable_if_t< !std::is_same<T, InvalidValueType>() >* = nullptr>    \
-    static enumName FromValue( valueType const& value )                               \
-    {                                                                                 \
-        enumName result;                                                              \
-        bool match = false;                                                           \
-        u64 vHash = CompileTimeHash64( value );                                       \
-        switch( vHash )                                                               \
-        {                                                                             \
-            xItemList(_ENUM_VALUE_CASE)                                               \
-        }                                                                             \
-        ASSERT( match, "Undeclared value in " #enumName );                            \
-        return result;                                                                \
-    }                                                                                 \
-                                                                                      \
-    struct Item                                                                       \
-    {                                                                                 \
-        char const* name;                                                             \
-        valueType value;                                                              \
-        i32 index;                                                                    \
-                                                                                      \
-        bool operator ==( Item const& other ) const                                   \
-        { return index == other.index; }                                              \
-        bool operator !=( Item const& other ) const                                   \
-        { return index != other.index; }                                              \
-    };                                                                                \
-                                                                                      \
-    static constexpr Item items[] =                                                   \
-    {                                                                                 \
-        xItemList(xItemInitializer)                                                   \
-    };                                                                                \
-    static constexpr char const* names[] =                                            \
-    {                                                                                 \
-        xItemList(_ENUM_NAME)                                                         \
-    };                                                                                \
-    static constexpr valueType values[] =                                             \
-    {                                                                                 \
-        xItemList(_ENUM_VALUE)                                                        \
-    };                                                                                \
-    static constexpr u64 valueHashes[] =                                              \
-    {                                                                                 \
-        xItemList(valueHasher)                                                        \
-    };                                                                                \
-    static constexpr sz itemCount = ARRAYCOUNT(items);                                \
-                                                                                      \
-    struct Items                                                                      \
-    {                                                                                 \
-        xItemList(_ENUM_ITEM_REF)                                                     \
-    };                                                                                \
+#define _CREATE_ENUM(enumName, xItemList, xSelector, valueType) \
+class enumName : public EnumStruct<enumName>                                        \
+{                                                                                   \
+    i32 index;                                                                      \
+                                                                                    \
+public:                                                                             \
+    enum Enum : i32                                                                 \
+    {                                                                               \
+        xItemList(_ENUM_ENTRY)                                                      \
+    };                                                                              \
+                                                                                    \
+    using EnumTypeName = enumName;                                                  \
+    using ValueType = valueType;                                                    \
+                                                                                    \
+                                                                                    \
+    constexpr enumName() : index( itemCount )                                       \
+    {}                                                                              \
+    constexpr enumName( int index_ ) : index( index_ )                              \
+    {                                                                               \
+        ASSERT( index >= 0 && index < itemCount, #enumName " index out of range" ); \
+    }                                                                               \
+                                                                                    \
+    constexpr bool IsValid() const { return index >= 0 && index < itemCount; }      \
+                                                                                    \
+    INLINE constexpr operator int() { return index; }                               \
+    INLINE constexpr bool operator ==( enumName const& other ) const                \
+    { return index == other.index; }                                                \
+    INLINE constexpr bool operator ==( Enum const& other ) const                    \
+    { return index == (int)other; }                                                 \
+    INLINE constexpr bool operator <( enumName const& other ) const                 \
+    { return index < other.index; }                                                 \
+    INLINE constexpr bool operator <=( enumName const& other ) const                \
+    { return index <= other.index; }                                                \
+    INLINE constexpr bool operator >( enumName const& other ) const                 \
+    { return index > other.index; }                                                 \
+    INLINE constexpr bool operator >=( enumName const& other ) const                \
+    { return index >= other.index; }                                                \
+                                                                                    \
+    INLINE constexpr void operator ++()                                             \
+    { index = (index < itemCount - 1) ? index + 1 : 0; }                            \
+                                                                                    \
+    INLINE constexpr int Index()  const { return index; }             \
+    INLINE constexpr char const* Name()  const { return names[index]; }             \
+    INLINE constexpr valueType const& Value() const { return values[index]; }       \
+                                                                                    \
+    static enumName FromName( char const* name )                                    \
+    {                                                                               \
+        enumName result;                                                            \
+        bool match = false;                                                         \
+        u64 nHash = CompileTimeHash64( name );                                      \
+        switch( nHash )                                                             \
+        {                                                                           \
+            xItemList(_ENUM_NAME_CASE)                                              \
+        }                                                                           \
+        ASSERT( match, "Undeclared name in " #enumName );                           \
+        return result;                                                              \
+    }                                                                               \
+                                                                                    \
+    template <typename T = valueType,                                               \
+              std::enable_if_t< !std::is_same<T, InvalidValueType>() >* = nullptr>  \
+    static enumName FromValue( valueType const& value )                             \
+    {                                                                               \
+        enumName result;                                                            \
+        bool match = false;                                                         \
+        u64 vHash = CompileTimeHash64( value );                                     \
+        switch( vHash )                                                             \
+        {                                                                           \
+            xItemList(_ENUM_VALUE_CASE)                                             \
+        }                                                                           \
+        ASSERT( match, "Undeclared value in " #enumName );                          \
+        return result;                                                              \
+    }                                                                               \
+                                                                                    \
+    static constexpr char const* names[] =                                          \
+    {                                                                               \
+        xItemList( CAT(_ENUM_NAME_, xSelector) )                                                       \
+    };                                                                              \
+    static constexpr u64 nameHashes[] =                                             \
+    {                                                                               \
+        xItemList( CAT(_ENUM_NAME_HASH_, xSelector) )                                                  \
+    };                                                                              \
+    static constexpr valueType values[] =                                           \
+    {                                                                               \
+        xItemList( CAT(_ENUM_VALUE_, xSelector) )                                                      \
+    };                                                                              \
+    static constexpr u64 valueHashes[] =                                            \
+    {                                                                               \
+        xItemList( CAT(_ENUM_VALUE_HASH_, xSelector) )                                                      \
+    };                                                                              \
+    static constexpr sz itemCount = ARRAYCOUNT(names);                              \
 };                                                                  
 
-#define ENUM_STRUCT(enumName, xItemList)                                _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH_DUMMY,    xItemList, _ENUM_INIT)
-#define ENUM_STRUCT_WITH_NAMES(enumName, xItemList)                     _CREATE_ENUM(enumName, InvalidValueType, _ENUM_VALUE_HASH_DUMMY,    xItemList, _ENUM_INIT_WITH_NAMES)
-#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xItemList)         _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH,          xItemList, _ENUM_INIT_WITH_VALUES)
-#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xItemList)   _CREATE_ENUM(enumName, valueType,        _ENUM_VALUE_HASH,          xItemList, _ENUM_INIT_WITH_NAMES_VALUES)
+#define ENUM_STRUCT(enumName, xItemList)                                _CREATE_ENUM(enumName, xItemList, 1,  InvalidValueType)
+#define ENUM_STRUCT_WITH_NAMES(enumName, xItemList)                     _CREATE_ENUM(enumName, xItemList, 2a, InvalidValueType)
+#define ENUM_STRUCT_WITH_VALUES(enumName, valueType, xItemList)         _CREATE_ENUM(enumName, xItemList, 2b, valueType)
+#define ENUM_STRUCT_WITH_NAMES_VALUES(enumName, valueType, xItemList)   _CREATE_ENUM(enumName, xItemList, 3,  valueType)
 
 
 /////     DEFER    /////
@@ -659,9 +674,6 @@ struct UNIQUE(Deferred)                                             \
 	decltype(UNIQUE(_deferred_func_)) f;                            \
 };                                                                  \
 UNIQUE(Deferred) UNIQUE(_deferred_) { UNIQUE(_deferred_func_) };
-
-
-
 
 
 

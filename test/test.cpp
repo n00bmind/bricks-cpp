@@ -83,6 +83,48 @@ struct
 #endif
 
 
+//// Some basic stuff
+
+// TODO Something's fishy here.. what CompileTimeHash64 is being called here?
+// TODO Test if we can actually call FromValue for some distinct values
+// TODO Why dont floats work?
+struct V
+{
+    u64 uVal;
+    i32 iVal;
+    //float fVal;
+};
+
+#define VALUES(x) \
+    x(None,         "a",  42u, 10 ) \
+    x(Animation,    "b",  42u, 10 ) \
+    x(Landscape,    "c",  42u, 10 ) \
+    x(Audio,        "d",  42u, 10 ) \
+    x(Network,      "e",  42u, 10 ) \
+    x(Scripting,    "f",  42u, 10 ) \
+
+ENUM_STRUCT_WITH_NAMES_VALUES(MemoryTag, V, VALUES)
+#undef VALUES
+
+TEST( Core, EnumStructs )
+{
+    MemoryTag tag;
+
+    int index = MemoryTag::Audio;
+    
+    MemoryTag t = MemoryTag::Audio;
+    ASSERT_EQ( t.Index(), index );
+    ASSERT_EQ( (int)t, index );
+
+    char const* name = t.Name();
+
+    for( int i = 0; i < MemoryTag::itemCount; ++i )
+    {
+        MemoryTag::ValueType const& v = MemoryTag::values[i];
+        LOG( "%s is: %llu, %d\n", MemoryTag::names[i], v.uVal, v.iVal );
+    }
+}
+
 // TODO Math tests
 
 //// Serialization
