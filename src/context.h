@@ -1,5 +1,6 @@
 #pragma once
 
+struct MemoryArena;
 namespace Logging
 {
     struct State;
@@ -21,7 +22,7 @@ Context InitContext( MemoryArena* mainArena, MemoryArena* tmpArena, Logging::Sta
 
 // Access the platform's thread-local Context from anywhere in the app
 Context& GetContext();
-#define CTX          GetContext()
+#define CTX          ::GetContext()
 #define CTX_ALLOC    &CTX.allocator
 #define CTX_TMPALLOC &CTX.tmpAllocator
 

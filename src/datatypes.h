@@ -427,7 +427,7 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 
 // TODO Benchmark this against std::vector and the compact_vector proposed in https://www.sebastiansylvan.com/post/space-efficient-rresizable-arrays/
 // (the twitter thread https://twitter.com/andy_kelley/status/1516949533413892096?t=vEW63veywf4fqhfBfPRQSA&s=03 is quite interesting)
-template <typename T, typename AllocType = Allocator>
+template <typename T, typename AllocType /*= Allocator*/>
 struct BucketArray
 {
     // TODO Do we wanna keep the count+capacity in the array of buckets or do we wanna put them inline with the bucket memory?
@@ -729,6 +729,20 @@ public:
         }
 
         return buffer - bufferStart;
+    }
+
+    void MoveTo( T* buffer, sz itemCount )
+    {
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket& b = bucketBuffer[i];
+            T* end = b.data + b.count;
+            for( T* src = b.data; src < end; src++ )
+            {
+                *buffer = std::move( *src );
+                buffer++;
+            }
+        }
     }
 
     template <typename AllocType2 = Allocator>
@@ -1411,6 +1425,76 @@ const OldBucketArray<T, AllocType> OldBucketArray<T, AllocType>::Empty = {};
 #endif
 
 
+/////     STRING BUILDER     /////
+
+// String builder to help compose Strings piece by piece
+// NOTE This uses temporary memory by default!
+struct StringBuilder
+{
+    BucketArray<char> buckets;
+
+    explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
+        : buckets( 32, allocator )
+    {}
+
+    bool Empty() const { return buckets.count == 0; }
+
+    void Clear()
+    {
+        buckets.Clear();
+    }
+
+    void Append( char const* str, int length = 0 )
+    {
+        if( !length )
+            length = StringLength( str );
+
+        // Not including null terminator
+        buckets.Push( str, length );
+    }
+
+    // TODO No way to use this as it will always prefer the above!
+    template <size_t N>
+    void Append( char (&&str)[N] )
+    {
+        // Not including null terminator
+        buckets.Push( str, N - 1 );
+    }
+
+    void AppendFormat( char const* fmt, ... )
+    {
+        va_list args;
+        va_start( args, fmt );
+
+        int n = 1 + vsnprintf( nullptr, 0, fmt, args );
+        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n, Memory::NoClear() );
+
+        // TODO Does this work??
+        vsnprintf( buf, SizeT( n ), fmt, args );
+        va_end( args );
+
+        // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
+        // length needed for each append (n above) so we don't need this extra copy
+        buckets.Push( buf, n - 1 );
+    }
+
+    String ToString()
+    {
+        buckets.Push( '\0' );
+        return String::Clone( buckets );
+    }
+    String ToStringTmp()
+    {
+        buckets.Push( '\0' );
+        return String::CloneTmp( buckets );
+    }
+    char const* ToCStringTmp()
+    {
+        return ToStringTmp().c();
+    }
+};
+
+
 /////     HASHTABLE     /////
 
 /*
@@ -1462,8 +1546,14 @@ We could somehow templatize an internal structure that dictates the layout, base
 would be through pass-through methods in that structure, which I guess is fine as long as they're inlined?
 */
 
-template <typename K> INLINE u64  DefaultHashFunc( K const& key )          { return Hash64( &key, I32( SIZEOF(K) ) ); }
-template <typename K> INLINE bool DefaultEqFunc( K const& a, K const& b )  { return a == b; }
+template <typename K> INLINE u64  DefaultHashFunc( K const& key )           { return Hash64( &key, I32( SIZEOF(K) ) ); }
+template <typename K> INLINE bool DefaultEqFunc( K const& a, K const& b )   { return a == b; }
+
+// Some specializations
+template <> INLINE u64  DefaultHashFunc< char const* >( char const* const& key )                    { return Hash64( key, StringLength( key ) ); }
+template <> INLINE bool DefaultEqFunc< const char* >( char const* const& a, char const* const& b )  { return StringEquals( a, b ); }
+template <> INLINE u64  DefaultHashFunc< String >( String const& key )      { return key.Hash(); }
+
 
 template <typename K>
 const K ZeroKey{};

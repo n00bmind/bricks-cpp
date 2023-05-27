@@ -23,12 +23,6 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 
-
-struct Allocator;
-struct Context;
-template <typename T, typename AllocType = Allocator> struct Array;
-
-
 namespace Platform
 {
 
@@ -55,6 +49,20 @@ typedef PLATFORM_POP_CONTEXT(PopContextFunc);
         u64 modifiedTimePosix;      // UNIX epoch (in seconds)
     };
 
+    enum FileType : u8
+    {
+        Unknown = 0,
+        Regular,
+        Directory,
+    };
+
+    struct DirEntry
+    {
+        String path;
+        FileAttributes attribs;
+        FileType type;
+    };
+
 #define PLATFORM_GET_FILE_ATTRIBUTES(x) bool x( char const* filename, Platform::FileAttributes* out )
 typedef PLATFORM_GET_FILE_ATTRIBUTES(GetFileAttributesFunc);
 //#define PLATFORM_GET_ABSOLUTE_PATH(x)   bool x( char const* filename, char* outBuffer, sz outBufferLen )
@@ -64,6 +72,10 @@ typedef PLATFORM_GET_FILE_ATTRIBUTES(GetFileAttributesFunc);
 typedef PLATFORM_READ_ENTIRE_FILE(ReadEntireFileFunc);
 #define PLATFORM_WRITE_FILE_CHUNKS(x)   bool x( char const* filename, Array<Buffer<>> const& chunks, bool overwrite )
 typedef PLATFORM_WRITE_FILE_CHUNKS(WriteFileChunksFunc);
+// TODO Add flags that specify the amount of info to retrieve for each entry
+#define PLATFORM_FIND_FILES(x)          Buffer<Platform::DirEntry> x( char const* path, char const* filenamePattern, bool recursive, \
+                                                                      Allocator* allocator )
+typedef PLATFORM_FIND_FILES(FindFilesFunc);
 
     
     typedef void* ThreadHandle;
@@ -134,6 +146,7 @@ struct API
 
     ReadEntireFileFunc*               ReadEntireFile;
     WriteFileChunksFunc*              WriteFileChunks;
+    FindFilesFunc*                    FindFiles;
 
     // Threading
     CreateThreadFunc*                 CreateThread;
@@ -159,7 +172,7 @@ struct API
     PrintFunc*                        Error;
     PrintVAFunc*                      PrintVA;
     PrintVAFunc*                      ErrorVA;
-    AssertHandlerFunc*                          DefaultAssertHandler;
+    AssertHandlerFunc*                DefaultAssertHandler;
 
 #if 0
 #if !CONFIG_RELEASE

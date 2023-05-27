@@ -73,7 +73,7 @@ INLINE int StringLength( char const* s )
     return I32( strlen( s ) );
 }
 
-INLINE bool StringsEqual( char const* a, char const* b, sz len = 0, bool caseSensitive = true )
+INLINE bool StringEquals( char const* a, char const* b, sz len = 0, bool caseSensitive = true )
 {
     if( !len )
         len = a ? StringLength( a ) : 0;
@@ -363,12 +363,12 @@ inline bool StringToF64( char const* str, f64* output )
 inline bool StringToBool( char const* str, bool* output )
 {
     bool result = false;
-    if( StringsEqual( str, "true", false ) || StringsEqual( str, "y", false ) || StringsEqual( str, "yes", false ) || StringsEqual( str, "1" ) )
+    if( StringEquals( str, "true", false ) || StringEquals( str, "y", false ) || StringEquals( str, "yes", false ) || StringEquals( str, "1" ) )
     {
         result = true;
         *output = true;
     }
-    else if( StringsEqual( str, "false", false ) || StringsEqual( str, "n", false ) || StringsEqual( str, "no", false ) || StringsEqual( str, "0" ) )
+    else if( StringEquals( str, "false", false ) || StringEquals( str, "n", false ) || StringEquals( str, "no", false ) || StringEquals( str, "0" ) )
     {
         result = true;
         *output = false;
@@ -415,12 +415,6 @@ inline bool StringComparator( char const* a, char const* b )
     return strcmp( a, b ) < 0;
 }
 
-// Specialised hash & equality implementations for char* strings
-template <>
-INLINE u64  DefaultHashFunc< char const* >( char const* const& key )                    { return Hash64( key, StringLength( key ) ); }
-template <>
-INLINE bool DefaultEqFunc< const char* >( char const* const& a, char const* const& b )  { return StringsEqual( a, b ); }
-
 
 
 // Read-only string
@@ -434,7 +428,7 @@ struct String
     {
         None        = 0,
         Owned       = 1 << 0,
-        Temporary   = 1 << 1,
+        Temporary   = 1 << 1,       // TODO Are these just the same as non-owned?
     };
 
     char const* data;
@@ -489,18 +483,7 @@ struct String
     { Clear(); }
 
 
-    void Clear()
-    {
-        if( flags & Owned )
-        {
-            Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-            FREE( allocator, data );
-        }
-
-        data = nullptr;
-        length = 0;
-        flags &= ~Owned;
-    }
+    void Clear();
 
     String const& operator =( char const* cString )
     {
@@ -541,7 +524,7 @@ struct String
         {
             data = other.data;
             length = other.length;
-            // If we haven't forced a copy, don't delete any memory owned by the source
+            // If we haven't forced a copy, ensure the source won't delete anything when destroyed
             other.flags &= ~Owned;
         }
 
@@ -551,17 +534,7 @@ struct String
     }
 
     // Length not counting the null terminator (which will be added)
-    void Reset( int len, u32 flags_ = 0 )
-    {
-        Clear();
-        flags = flags_ | Owned;
-        length = len;
-
-        Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-        data = ALLOC_ARRAY( allocator, char, len + 1, Memory::NoClear() );
-        // Null terminate it even if we expect we'll be writing to data later
-        ((char*)data)[len] = 0;
-    }
+    void Reset( int len, u32 flags_ = 0 );
 
     // Turn a Ref string into a owned one by allocating and copying
     void MakeOwned()
@@ -580,31 +553,7 @@ private:
 
     // Will copy len chars and append an extra null-terminator at the end
     // If no len is given, assumes src itself is null-terminated and computes its StringLength
-    void InternalClone( char const* src, int len = 0 )
-    {
-        ASSERT( src );
-
-        i32 new_len = len ? len : StringLength( src );
-        if( new_len )
-        {
-            Allocator* allocator = (flags & Temporary) ? CTX_TMPALLOC : CTX_ALLOC;
-            char* dst = ALLOC_ARRAY( allocator, char, new_len + 1, Memory::NoClear() );
-
-            COPYP( src, dst, new_len );
-            dst[new_len] = 0;
-
-            data = dst;
-            length = new_len;
-            flags |= Owned;
-        }
-        else
-        {
-            data = "";
-            length = 0;
-        }
-
-        ASSERT( ValidCString() );
-    }
+    void InternalClone( char const* src, int len = 0 );
 
 public:
 
@@ -646,7 +595,7 @@ public:
     {
         if( !len )
             len = str ? StringLength( str ) : 0;
-        return length == len && (data == str || StringsEqual( data, str, length, caseSensitive ));
+        return length == len && (data == str || StringEquals( data, str, length, caseSensitive ));
     }
     bool IsEqualIgnoreCase( const char* str, sz len = 0 ) const
     {
@@ -705,17 +654,7 @@ public:
     }
 
     // Automatically appends null-terminator
-    static String Clone( BucketArray<char> const& src, bool temporary = false )
-    {
-        bool terminated = src.Last() == 0;
-
-        // Constructor already accounts for the terminator space
-        String result( (int)(terminated ? src.count - 1 : src.count) );
-        src.CopyTo( (char*)result.data, result.length + 1 );
-
-        result.InPlaceModify()[result.length] = 0;
-        return result;
-    }
+    static String Clone( BucketArray<char> const& src, bool temporary = false );
     static String CloneTmp( BucketArray<char> const& src )
     {
         return Clone( src, true );
@@ -998,36 +937,7 @@ public:
     }
 
     // Find all locations of the given separator in this String and create a bunch of Ref Strings pointing to the substrings
-    void Split( BucketArray<String>* result, char separator = ' ' ) const
-    {
-        i32 nextLength = 0;
-
-        char const* s = data;
-        char const* nextData = s;
-        while( char c = *s++ )
-        {
-            if( c == separator )
-            {
-                if( nextLength )
-                {
-                    String str = String::Ref( nextData, nextLength );
-                    result->Push( str );
-
-                    nextData = s;
-                    nextLength = 0;
-                }
-            }
-            else
-                nextLength++;
-        }
-
-        // Last piece
-        if( nextLength )
-        {
-            String str = String::Ref( nextData, nextLength );
-            result->Push( str );
-        }
-    }
+    void Split( BucketArray<String>* result, char separator = ' ' ) const;
 
 
     char* InPlaceModify() { return (char*)data; }
@@ -1050,10 +960,6 @@ public:
         return copyLen;
     }
 };
-
-// Correctly hash Strings
-template <>
-INLINE u64  DefaultHashFunc< String >( String const& key )  { return key.Hash(); }
 
 
 // Version accepting string literals only, so we can guarantee a Ref is fine always
@@ -1141,99 +1047,4 @@ struct StaticStringHash : public StaticString
 
     constexpr u32 Hash32() const { return (u32)(hash & U32MAX); }
 };
-
-
-// String builder to help compose Strings piece by piece
-// NOTE This uses temporary memory by default!
-struct StringBuilder
-{
-    BucketArray<char> buckets;
-
-    explicit StringBuilder( Allocator* allocator = CTX_TMPALLOC )
-        : buckets( 32, allocator )
-    {}
-
-    bool Empty() const { return buckets.count == 0; }
-
-    void Clear()
-    {
-        buckets.Clear();
-    }
-
-    void Append( char const* str, int length = 0 )
-    {
-        if( !length )
-            length = StringLength( str );
-
-        // Not including null terminator
-        buckets.Push( str, length );
-    }
-
-    // TODO No way to use this as it will always prefer the above!
-    template <size_t N>
-    void Append( char (&&str)[N] )
-    {
-        // Not including null terminator
-        buckets.Push( str, N - 1 );
-    }
-
-    void AppendFormat( char const* fmt, ... )
-    {
-        va_list args;
-        va_start( args, fmt );
-
-        int n = 1 + vsnprintf( nullptr, 0, fmt, args );
-        char* buf = ALLOC_ARRAY( CTX_TMPALLOC, char, n, Memory::NoClear() );
-
-        // TODO Does this work??
-        vsnprintf( buf, SizeT( n ), fmt, args );
-        va_end( args );
-
-        // TODO We probably want this struct to be made out of irregular buckets that are allocated exactly of the
-        // length needed for each append (n above) so we don't need this extra copy
-        buckets.Push( buf, n - 1 );
-    }
-
-    String ToString()
-    {
-        buckets.Push( '\0' );
-        return String::Clone( buckets );
-    }
-    String ToStringTmp()
-    {
-        buckets.Push( '\0' );
-        return String::CloneTmp( buckets );
-    }
-    char const* ToCStringTmp()
-    {
-        return ToStringTmp().c();
-    }
-};
-
-
-String String::CloneReplace( char const* src, char const* match, char const* subst )
-{
-    int matchLen = StringLength( match );
-
-    StringBuilder builder;
-    int index = 0;
-    while( char const* m = strstr( src + index, match ) )
-    {
-        int subLen = I32( m - (src + index) );
-        builder.Append( src + index, subLen );
-        builder.Append( subst );
-
-        index += subLen + matchLen;
-    }
-
-    int srcLen = StringLength( src );
-    ASSERT( index <= srcLen );
-
-    if( index < srcLen )
-        builder.Append( src + index, srcLen - index );
-
-    String result = builder.ToString();
-    ASSERT( result.ValidCString() );
-    return result;
-}
 

@@ -187,6 +187,66 @@ namespace Win32
         return !error;
     }
 
+    bool FindFilesInternal( char const* path, char const* filenamePattern, bool recursive, BucketArray<Platform::DirEntry>* entriesOut )
+    {
+        bool needsSep = StringEndsWith( path, "/\\" );
+        String fullPath = String::FromFormatTmp( "%s%s%s", path, needsSep ? "/" : "", filenamePattern );
+
+        WIN32_FIND_DATAA fileData;
+        HANDLE searchHandle = FindFirstFileEx( fullPath.c(), FindExInfoBasic, &fileData, FindExSearchNameMatch, NULL,
+                                               FIND_FIRST_EX_LARGE_FETCH );
+
+        if( searchHandle == INVALID_HANDLE_VALUE )
+            // TODO May want to check for errors here
+            return false;
+
+        bool result = true;
+        do
+        {
+            if( fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+            {
+                char const* filename = fileData.cFileName;
+                if( recursive && !StringEquals( filename, "." ) && !StringEquals( filename, ".." ) )
+                {
+                    String subPath = String::FromFormatTmp( "%s%s%s", path, needsSep ? "/" : "", filename );
+                    // TODO Not sure how we want to indicate problems
+                    // TODO We could also just add this path to a list and recurse at the end, to avoid keeping many handles open
+                    result &= FindFilesInternal( subPath.c(), filenamePattern, true, entriesOut );
+                }
+                else
+                {
+                    Platform::DirEntry* newEntry = entriesOut->PushEmpty();
+                    // TODO These Strings *cannot* honour the allocator parameter passed to FindFiles below!
+                    // This is really a general problem everywhere, but I dont want each string to have to hold a pointer to an allocator!
+                    newEntry->path = String::FromFormat( "%s%s%s", path, needsSep ? "/" : "", filename );
+                    newEntry->type = Platform::Regular;
+                    // TODO Add more info
+                }
+            }
+        } while( FindNextFile( searchHandle, &fileData ) != 0 );
+
+        DWORD error = ::GetLastError();
+        if( error != ERROR_NO_MORE_FILES )
+            result = false;
+
+        FindClose( searchHandle );
+        return result;
+    }
+    PLATFORM_FIND_FILES(FindFiles)
+    {
+        using namespace Platform;
+
+        BucketArray<DirEntry> entries( 64, CTX_TMPALLOC );
+        bool result = FindFilesInternal( path, filenamePattern, recursive, &entries );
+
+        // TODO Would be cool to have a Buffer type that can straddle multiple ranges or something
+        DirEntry* resultData = (DirEntry*)ALLOC( allocator, entries.count * SIZEOF(DirEntry) );
+        // Move so we dont copy each filename string
+        entries.MoveTo( resultData, entries.count );
+
+        return Buffer<DirEntry>( resultData, entries.count );
+    }
+
 
     internal DWORD WINAPI WorkerThreadProc( LPVOID lpParam )
     {
@@ -709,6 +769,7 @@ namespace Win32
         win32API.GetFileAttributes    = GetFileAttributes;
         win32API.ReadEntireFile       = ReadEntireFile;
         win32API.WriteFileChunks      = WriteFileChunks;
+        win32API.FindFiles            = FindFiles;
         win32API.CreateThread         = CreateThread;
         win32API.JoinThread           = JoinThread;
         win32API.GetThreadId          = GetThreadId;

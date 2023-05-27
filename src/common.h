@@ -520,7 +520,7 @@ int main()
 #define _ENUM_NAME_HASH_3(x, n, ...)            CompileTimeHash64( n ),
 
 #define _ENUM_NAME_CASE(x, ...)                 case nameHashes[x]:                     \
-                                                    if( StringsEqual( names[x], name ) ) \
+                                                    if( StringEquals( names[x], name ) ) \
                                                     {                                   \
                                                         result = x;                     \
                                                         match = true;                   \
@@ -689,3 +689,12 @@ UNIQUE(Deferred) UNIQUE(_deferred_) { UNIQUE(_deferred_func_) };
 // to store their "captures" (which are specified in their construction, each type decides whether by ref or value, etc)
 // https://stackoverflow.com/questions/25985248/speed-of-bound-lambda-via-stdfunction-vs-operator-of-functor-struct
 // https://devblogs.microsoft.com/oldnewthing/20200515-00/?p=103755
+
+
+
+// Some forward declarations
+struct Allocator;
+struct Context;
+template <typename T, typename AllocType = Allocator> struct Array;
+template <typename T, typename AllocType = Allocator> struct BucketArray;
+
