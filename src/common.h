@@ -421,6 +421,11 @@ public:
     INLINE T& operator []( sz offset ) { ASSERT( offset < length ); return *(data + offset); }
     INLINE T const& operator []( sz offset ) const { ASSERT( offset < length ); return *(data + offset); }
 
+    INLINE explicit operator bool() const
+    {
+        return data != nullptr && length != 0;
+    }
+
     INLINE T*          begin()         { return data; }
     INLINE const T*    begin() const   { return data; }
     INLINE T*          end()           { return data + length; }

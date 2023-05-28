@@ -22,6 +22,8 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 */
 #pragma once
 
+// TODO SIMD this whole file
+
 INLINE bool IsNullOrEmpty( char const* str )
 {
     return str == nullptr || *str == 0;
@@ -175,7 +177,7 @@ inline char const* StringFindLast( char const* str, char c, int len )
 // Adapted from https://stackoverflow.com/questions/1634359/is-there-a-reverse-function-for-strstr
 inline char const* StringFindLast( char const* str, char const* find )
 {
-    if ( !str || !find )
+    if( !str || !find )
         return nullptr;
 
     if( *find == '\0' )
@@ -198,15 +200,15 @@ inline char const* StringFindLast( char const* str, char const* find )
 // TODO Bench against StringFindLast above
 inline char const* StringFindSuffix( const char* str, const char* find, int len = 0 )
 {
-    if ( !str || !find )
+    if( !str || !find )
         return nullptr;
 
     size_t strLen = len ? len : strlen( str );
     size_t sufLen = strlen( find );
-    if ( sufLen >  strLen )
+    if( sufLen >  strLen )
         return nullptr;
 
-    if ( strncmp( str + strLen - sufLen, find, sufLen ) == 0 )
+    if( strncmp( str + strLen - sufLen, find, sufLen ) == 0 )
     {
         // Found it
         return str + strLen - sufLen;
@@ -222,7 +224,7 @@ INLINE bool StringStartsWith( char const* str, char const* find )
 }
 INLINE bool StringStartsWith( char const* str, char const* find, int len )
 {
-    if ( !str || !find )
+    if( !str || !find )
         return false;
 
     size_t findLen = strlen( find );
@@ -231,13 +233,23 @@ INLINE bool StringStartsWith( char const* str, char const* find, int len )
 
     return strncmp( str, find, findLen ) == 0;
 }
-INLINE bool StringEndsWith( char const* str, char const* find )
-{
-    return StringFindSuffix( str, find ) != nullptr;
-}
-INLINE bool StringEndsWith( char const* str, char const* find, int len )
+INLINE bool StringEndsWith( char const* str, char const* find, int len = 0 )
 {
     return StringFindSuffix( str, find, len ) != nullptr;
+}
+INLINE bool StringEndsWithAny( char const* str, char const* charList, int len = 0 )
+{
+    if( !str || !charList )
+        return nullptr;
+
+    size_t strLen = len ? len : strlen( str );
+
+    while( char c = *charList++ )
+    {
+        if( *(str + strLen - 1) == c )
+            return true;
+    }
+    return false;
 }
 
 // In-place conversion to lowercase. Use length if provided or just advance until a null terminator is found

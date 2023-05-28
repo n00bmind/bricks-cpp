@@ -48,7 +48,8 @@ struct CSV
 
 
 // NOTE Uses tmp memory by default!
-CSV LoadCSV( String contents, Buffer<char const* const> headerNames, char separator = ',', Allocator* allocator = CTX_TMPALLOC )
+// TODO Pass some flags for stuff like no header row, etc..
+CSV LoadCSV( String contents, char separator = ',', Buffer<char const* const> headerNames = {}, Allocator* allocator = CTX_TMPALLOC )
 {
     CSV result = {};
 
@@ -64,11 +65,15 @@ CSV LoadCSV( String contents, Buffer<char const* const> headerNames, char separa
         // Skip separator
         headerLine.Consume( 1 );
     }
-    // Check against all given names
-    for( int i = 0; i < result.headers.count; ++i )
+
+    if( headerNames )
     {
-        // TODO log
-        ASSERT( result.headers[i] == headerNames[i] );
+        // Check against all given names
+        for( int i = 0; i < result.headers.count; ++i )
+        {
+            // TODO log
+            ASSERT( result.headers[i] == headerNames[i] );
+        }
     }
 
     result.rows.Reset( 128, allocator );

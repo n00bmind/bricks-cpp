@@ -189,31 +189,27 @@ namespace Win32
 
     bool FindFilesInternal( char const* path, char const* filenamePattern, bool recursive, BucketArray<Platform::DirEntry>* entriesOut )
     {
-        bool needsSep = StringEndsWith( path, "/\\" );
+        bool needsSep = !StringEndsWithAny( path, "/\\" );
         String fullPath = String::FromFormatTmp( "%s%s%s", path, needsSep ? "/" : "", filenamePattern );
 
         WIN32_FIND_DATAA fileData;
         HANDLE searchHandle = FindFirstFileEx( fullPath.c(), FindExInfoBasic, &fileData, FindExSearchNameMatch, NULL,
                                                FIND_FIRST_EX_LARGE_FETCH );
 
-        if( searchHandle == INVALID_HANDLE_VALUE )
-            // TODO May want to check for errors here
-            return false;
-
+        DWORD error;
         bool result = true;
-        do
+        if( searchHandle == INVALID_HANDLE_VALUE )
         {
-            if( fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+            error = ::GetLastError();
+            if( error != ERROR_FILE_NOT_FOUND )
+                result = false;
+        }
+        else
+        {
+            do
             {
                 char const* filename = fileData.cFileName;
-                if( recursive && !StringEquals( filename, "." ) && !StringEquals( filename, ".." ) )
-                {
-                    String subPath = String::FromFormatTmp( "%s%s%s", path, needsSep ? "/" : "", filename );
-                    // TODO Not sure how we want to indicate problems
-                    // TODO We could also just add this path to a list and recurse at the end, to avoid keeping many handles open
-                    result &= FindFilesInternal( subPath.c(), filenamePattern, true, entriesOut );
-                }
-                else
+                if( !(fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) )
                 {
                     Platform::DirEntry* newEntry = entriesOut->PushEmpty();
                     // TODO These Strings *cannot* honour the allocator parameter passed to FindFiles below!
@@ -222,14 +218,53 @@ namespace Win32
                     newEntry->type = Platform::Regular;
                     // TODO Add more info
                 }
-            }
-        } while( FindNextFile( searchHandle, &fileData ) != 0 );
+            } while( FindNextFile( searchHandle, &fileData ) != 0 );
 
-        DWORD error = ::GetLastError();
-        if( error != ERROR_NO_MORE_FILES )
-            result = false;
+            error = ::GetLastError();
+            if( error != ERROR_NO_MORE_FILES )
+                result = false;
 
-        FindClose( searchHandle );
+            FindClose( searchHandle );
+        }
+
+        if( !recursive )
+            return result;
+
+
+        // Now recurse subdirs if asked for
+        fullPath = String::FromFormatTmp( "%s%s*", path, needsSep ? "/" : "" );
+        searchHandle = FindFirstFileEx( fullPath.c(), FindExInfoBasic, &fileData, FindExSearchLimitToDirectories, NULL,
+                                        FIND_FIRST_EX_LARGE_FETCH );
+
+        if( searchHandle == INVALID_HANDLE_VALUE )
+        {
+            error = ::GetLastError();
+            if( error != ERROR_FILE_NOT_FOUND )
+                result = false;
+        }
+        else
+        {
+            do
+            {
+                char const* filename = fileData.cFileName;
+                if( fileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY )
+                {
+                    if( !StringEquals( filename, "." ) && !StringEquals( filename, ".." ) )
+                    {
+                        String subPath = String::FromFormatTmp( "%s%s%s", path, needsSep ? "/" : "", filename );
+                        // TODO We could also just add this path to a list and recurse at the end, to avoid keeping many handles open
+                        FindFilesInternal( subPath.c(), filenamePattern, true, entriesOut );
+                    }
+                }
+            } while( FindNextFile( searchHandle, &fileData ) != 0 );
+
+            error = ::GetLastError();
+            if( error != ERROR_NO_MORE_FILES )
+                result = false;
+
+            FindClose( searchHandle );
+        }
+
         return result;
     }
     PLATFORM_FIND_FILES(FindFiles)
@@ -239,12 +274,16 @@ namespace Win32
         BucketArray<DirEntry> entries( 64, CTX_TMPALLOC );
         bool result = FindFilesInternal( path, filenamePattern, recursive, &entries );
 
-        // TODO Would be cool to have a Buffer type that can straddle multiple ranges or something
-        DirEntry* resultData = (DirEntry*)ALLOC( allocator, entries.count * SIZEOF(DirEntry) );
-        // Move so we dont copy each filename string
-        entries.MoveTo( resultData, entries.count );
+        DirEntry* resultData = nullptr;
+        if( result )
+        {
+            // TODO Would be cool to have a Buffer type that can straddle multiple ranges or something
+            resultData = (DirEntry*)ALLOC( allocator, entries.count * SIZEOF(DirEntry) );
+            // Move so we dont copy each filename string
+            entries.MoveTo( resultData, entries.count );
+        }
 
-        return Buffer<DirEntry>( resultData, entries.count );
+        return Buffer<DirEntry>( resultData, result ? entries.count : 0 );
     }
 
 
