@@ -175,13 +175,13 @@ inline char const* StringFindLast( char const* str, char c, int len )
 }
 
 // Adapted from https://stackoverflow.com/questions/1634359/is-there-a-reverse-function-for-strstr
-inline char const* StringFindLast( char const* str, char const* find )
+inline char const* StringFindLast( char const* str, char const* find, int len = 0 )
 {
     if( !str || !find )
         return nullptr;
 
     if( *find == '\0' )
-        return str + strlen( str );
+        return str + (len ? len : strlen( str ));
 
     char const* result = nullptr;
     for( ;; )
@@ -197,7 +197,29 @@ inline char const* StringFindLast( char const* str, char const* find )
     return result;
 }
 
-// TODO Bench against StringFindLast above
+inline char const* StringFindLastOfAny( char const* str, char const* charList, int len = 0 )
+{
+    if( !str || !charList )
+        return nullptr;
+
+    if( *charList == '\0' )
+        return str + (len ? len : strlen( str ));
+
+    char const* result = nullptr;
+    for( ;; )
+    {
+        char const* p = strpbrk( str, charList );
+        if( p == nullptr )
+            break;
+
+        result = p;
+        str = p + 1;
+    }
+
+    return result;
+
+}
+
 inline char const* StringFindSuffix( const char* str, const char* find, int len = 0 )
 {
     if( !str || !find )
@@ -884,6 +906,13 @@ public:
         length -= advancedCount;
 
         return result;
+    }
+
+    // Trim returns a ref subString of the current String with the whitespace removed
+    String Trim()
+    {
+        ASSERT( false, "Not implemented" );
+        return {};
     }
 
 
