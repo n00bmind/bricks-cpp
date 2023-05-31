@@ -106,6 +106,11 @@ INLINE int Log2( i64 n )
 }
 #undef CountShift
 
+INLINE f32 Abs( f32 x )
+{
+    return (f32)fabs( x );
+}
+
 // Windows looves defining macros with common names
 #undef Yield
 INLINE void Yield()
