@@ -116,7 +116,8 @@ struct Array
         Destroy();
     }
 
-    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC, MemoryParams new_params = Memory::NoClear() )
+    void Reset( i32 new_capacity, AllocType* new_allocator = CTX_ALLOC,
+                MemoryParams new_params = Memory::NoClear(), bool clear = true )
     {
         ASSERT( new_allocator );
         T* new_data = ALLOC_ARRAY( new_allocator, T, new_capacity, new_params );
@@ -131,7 +132,7 @@ struct Array
             FREE( allocator, data, memParams );
 
         data      = new_data;
-        count     = Min( count, new_capacity );
+        count     = clear ? 0 : Min( count, new_capacity );
         capacity  = new_capacity;
         allocator = new_allocator;
         memParams = new_params;
@@ -226,7 +227,7 @@ struct Array
     // https://en.cppreference.com/w/cpp/named_req/StandardLayoutType
     T* PushEmpty( bool clear = true )
     {
-        ASSERT( count < capacity );
+        ASSERT( count < capacity, "Array[%d] overflow", capacity );
         T* result = data + count++;
         if( clear )
             // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
@@ -452,17 +453,24 @@ struct BucketArray
     MemoryParams memParams;
 
 
-    struct Iterator
+    template <typename A>
+    struct IteratorBase
     {
-        BucketArray<T, AllocType>* array;
+        A array;
         sz index;
 
-        INLINE T&           operator *()                                { return (*array)[index]; }
-        INLINE T const&     operator *() const                          { return (*array)[index]; }
-        INLINE bool         operator ==( Iterator const& rhs ) const    { return array == rhs.array && index == rhs.index; }
-        INLINE bool         operator !=( Iterator const& rhs ) const    { return array != rhs.array || index != rhs.index; }
-        INLINE Iterator&    operator ++()                               { ++index; return *this; }
-        INLINE Iterator     operator ++( int)                           { Iterator result(*this); index++; return result; }
+        INLINE bool             operator ==( IteratorBase<A> const& rhs ) const { return array == rhs.array && index == rhs.index; }
+        INLINE bool             operator !=( IteratorBase<A> const& rhs ) const { return array != rhs.array || index != rhs.index; }
+        INLINE IteratorBase<A>& operator ++()                                   { ++index; return *this; }
+        INLINE IteratorBase<A>  operator ++( int)                               { IteratorBase<A> result(*this); index++; return result; }
+    };
+    struct Iterator : public IteratorBase< BucketArray<T, AllocType>* >
+    {
+        INLINE T&               operator *() const                              { return (*array)[index]; }
+    };
+    struct ConstIterator : public IteratorBase< BucketArray<T, AllocType> const* >
+    {
+        INLINE T const&         operator *() const                              { return (*array)[index]; }
     };
 
 
@@ -483,10 +491,11 @@ struct BucketArray
     }
 
 
-    INLINE Iterator    begin()          { return { this, 0 }; }
-    INLINE Iterator    begin() const    { return { this, 0 }; }
-    INLINE Iterator    end()            { return { this, count }; }
-    INLINE Iterator    end() const      { return { this, count }; }
+    // Absolutely no idea why this requires double braces on MSVC
+    INLINE Iterator         begin()          { return {{ this, 0 }}; }
+    INLINE ConstIterator    begin() const    { return {{ this, 0 }}; }
+    INLINE Iterator         end()            { return {{ this, count }}; }
+    INLINE ConstIterator    end() const      { return {{ this, count }}; }
 
     INLINE T&          First()          { return (*this)[0]; }
     INLINE T const&    First() const    { return (*this)[0]; }
