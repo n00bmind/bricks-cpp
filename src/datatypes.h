@@ -23,7 +23,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #pragma once
 
 
-// TODO Write copy/move constructors & assignments for everybody
+// TODO Write move constructors & assignments for everybody
+// (according to https://i.stack.imgur.com/HeDld.png that's the only thing we need to make
+// each type a move-only type)
 // TODO Move Push() for everybody
 
 
@@ -103,9 +105,7 @@ struct Array
         : Array( data_, (int)N, (int)N )
     {}
 
-    Array( Array const& ) = default;
-    void operator =( Array const& ) = delete;
-
+    // NOTE Move only (copy implicitly deleted)
     Array( Array&& other )
     {
         *this = std::move( other );
@@ -714,61 +714,6 @@ public:
     // TODO Add Find
     // TODO Add LowerBound search (see Algorithm.h)
 
-    // Return how many items were actually copied
-    // FIXME All methods using memcpy should check if the type is trivially copyable!
-    INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
-    {
-        ASSERT( startOffset >= 0 );
-
-        int bucketIndex, indexInBucket;
-        FindBucket( startOffset, &bucketIndex, &indexInBucket );
-
-        T* bufferStart = buffer;
-        Bucket const* b = bucketBuffer + bucketIndex;
-        sz remaining = Min( itemCount, count - startOffset );
-        while( remaining > 0 )
-        {
-            sz itemsToCopy = Min( (sz)b->count - indexInBucket, remaining );
-            COPYP( b->data + indexInBucket, buffer, itemsToCopy * SIZEOF(T) );
-            indexInBucket = 0;
-
-            buffer += itemsToCopy;
-            remaining -= itemsToCopy;
-            ++b;
-        }
-
-        return buffer - bufferStart;
-    }
-
-    void MoveTo( T* buffer, sz itemCount )
-    {
-        for( int i = 0; i < bucketBufferCount; ++i )
-        {
-            Bucket& b = bucketBuffer[i];
-            T* end = b.data + b.count;
-            for( T* src = b.data; src < end; src++ )
-            {
-                *buffer = std::move( *src );
-                buffer++;
-            }
-        }
-    }
-
-    template <typename AllocType2 = Allocator>
-    void CopyTo( Array<T, AllocType2>* array ) const
-    {
-        ASSERT( count <= array->capacity );
-        array->Resize( I32(count) );
-
-        T* buffer = array->data;
-        for( int i = 0; i < bucketBufferCount; ++i )
-        {
-            Bucket const& b = bucketBuffer[i];
-            COPYP( b.data, buffer, b.count * SIZEOF(T) );
-            buffer += b.count;
-        }
-    }
-
     // Copy on top of the existing elements, without altering the total count
     // Return how many were actually copied
     INLINE sz CopyFrom( T* buffer, sz itemCount, sz startOffset )
@@ -796,9 +741,49 @@ public:
         return buffer - bufferStart;
     }
 
+    // Return how many items were actually copied
+    // FIXME All methods using memcpy should check if the type is trivially copyable!
+    INLINE sz CopyTo( T* buffer, sz itemCount, sz startOffset = 0 ) const
+    {
+        ASSERT( startOffset >= 0 );
+
+        int bucketIndex, indexInBucket;
+        FindBucket( startOffset, &bucketIndex, &indexInBucket );
+
+        T* bufferStart = buffer;
+        Bucket const* b = bucketBuffer + bucketIndex;
+        sz remaining = Min( itemCount, count - startOffset );
+        while( remaining > 0 )
+        {
+            sz itemsToCopy = Min( (sz)b->count - indexInBucket, remaining );
+            COPYP( b->data + indexInBucket, buffer, itemsToCopy * SIZEOF(T) );
+            indexInBucket = 0;
+
+            buffer += itemsToCopy;
+            remaining -= itemsToCopy;
+            ++b;
+        }
+
+        return buffer - bufferStart;
+    }
 
     template <typename AllocType2 = Allocator>
-    Array<T, AllocType2> ToArray( AllocType2* alloc = nullptr ) const
+    void CopyTo( Array<T, AllocType2>* array ) const
+    {
+        array->Reset( I32(count) );
+        array->ResizeToCapacity();
+
+        T* buffer = array->data;
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket const& b = bucketBuffer[i];
+            COPYP( b.data, buffer, b.count * SIZEOF(T) );
+            buffer += b.count;
+        }
+    }
+
+    template <typename AllocType2 = Allocator>
+    Array<T, AllocType2> CopyToArray( AllocType2* alloc = nullptr ) const
     {
         Array<T, AllocType2> result( I32(count), alloc ? alloc : CTX_ALLOC );
         result.ResizeToCapacity();
@@ -806,6 +791,31 @@ public:
 
         return result;
     }
+
+    void MoveTo( T* buffer, sz itemCount )
+    {
+        ASSERT( count <= itemCount );
+
+        for( int i = 0; i < bucketBufferCount; ++i )
+        {
+            Bucket& b = bucketBuffer[i];
+            T* end = b.data + b.count;
+            for( T* src = b.data; src < end; src++ )
+            {
+                *buffer = std::move( *src );
+                buffer++;
+            }
+        }
+    }
+
+    template <typename AllocType2 = Allocator>
+    void MoveTo( Array<T, AllocType2>* array )
+    {
+        array->Reset( I32(count) );
+        array->ResizeToCapacity();
+        MoveTo( array->begin(), array->capacity );
+    }
+
 
     Array<Buffer<T>> const ToBufferArray() const
     {
@@ -1740,6 +1750,15 @@ struct Hashtable
         return result;
     }
 
+    V* Put( K const& key, V&& value )
+    {
+        V* result = PutEmpty( key, false );
+        ASSERT( result );
+
+        *result = MOVE( value );
+        return result;
+    }
+
     V* GetOrPutEmpty( K const& key, bool* foundOut = nullptr )
     {
         bool found;
@@ -1899,7 +1918,7 @@ private:
         for( int i = 0; i < oldCapacity; ++i )
         {
             if( !eqFunc( oldKeys[i], ZeroKey<K> ) )
-                Put( oldKeys[i], oldValues[i] );
+                Put( oldKeys[i], MOVE( oldValues[i] ) );
         }
 
         FREE( allocator, oldKeys ); // Handles both

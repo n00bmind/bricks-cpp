@@ -13,6 +13,8 @@
 #pragma comment(lib, "Release/benchmark.lib")
 #endif
 
+#pragma warning( push )
+#pragma warning( disable : 5262 )
 #include "magic.h"
 #include "common.h"
 #include "intrinsics.h"
@@ -35,6 +37,7 @@
 #include "logging.cpp"
 #include "platform.cpp"
 #include "win32_platform.cpp"
+#pragma warning( pop )
 
 // Conflicts with benchmark.h
 #undef internal
@@ -135,14 +138,20 @@ static void TestMutex( benchmark::State& state )
 
 static void TestBinarySerializer( benchmark::State& state )
 {
-    SerialTypeComplex cmp = { { 42 }, {}, "Hello sailor" };
-    INIT( cmp.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
-    SerialTypeDeeper deeper = { { cmp, 666  }, "Apartense vacas, que la vida es corta" };
+    SerialTypeDeeper deeper =
+    {
+        { // SerialTypeDeep
+            { { 42 }, {}, "Hello sailor" }, // SerialTypeComplex
+            666
+        },
+        "Apartense vacas, que la vida es corta"
+    };
+    INIT( deeper.deep.complexx.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
 
     SerialTypeChunky before;
     before.deeper.Reset( 8000 );
     for( int i = 0; i < before.deeper.capacity; ++i )
-        before.deeper.Push( deeper );
+        before.deeper.Push( MOVE( deeper ) );
 
 
     BucketArray<u8> buffer( 2048 * 1024, CTX_TMPALLOC );

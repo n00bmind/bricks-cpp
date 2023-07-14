@@ -150,9 +150,14 @@ void SetGlobalAssertHandler( AssertHandlerFunc* f );
 #define EQUALP(source, dest, size) (memcmp( source, dest, SizeT( size ) ) == 0)
 
 // Do a placement new on any variable with simpler syntax
-#define INIT(var) new (&(var)) typename std::remove_reference<decltype(var)>::type
+#define INIT(x) new (&(x)) typename std::remove_reference<decltype(x)>::type
 // NOTE Don't use with a pointer to a base class, as apparently this may inhibit virtual destructor calls
-#define DEINIT(var) var.~decltype(var)()
+#define DEINIT(x) x.~decltype(x)()
+
+// static_cast to rvalue reference
+// See https://www.foonathan.net/2020/09/move-forward/
+#define MOVE(...) \
+    static_cast< std::remove_reference_t< decltype(__VA_ARGS__) >&& >(__VA_ARGS__)
 
 #define __CONCAT(x, y) x ## y
 #define CONCAT(x, y) __CONCAT(x, y)

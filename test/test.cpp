@@ -28,10 +28,11 @@
 
 // TODO Upgrade to v1.8.1 .. https://stackoverflow.com/questions/42847103/stdtr1-with-visual-studio-2017
 #include "gtest/gtest.h"
-
 #pragma warning( pop )
 
 
+#pragma warning( push )
+#pragma warning( disable : 5262 )
 #include "magic.h"
 #include "common.h"
 #include "intrinsics.h"
@@ -54,6 +55,7 @@
 #include "http.cpp"
 #include "platform.cpp"
 #include "win32_platform.cpp"
+#pragma warning( pop )
 
 #include "test.h"
 
@@ -213,14 +215,20 @@ TEST( Serialization, SerializeChunkyType )
     BucketArray<u8> buffer( 2048, CTX_TMPALLOC );
     BinaryWriter w( &buffer );
 
-    SerialTypeComplex cmp = { { 42 }, {}, "Hello sailor" };
-    INIT( cmp.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
-    SerialTypeDeeper deeper = { { cmp, 666  }, "Apartense vacas, que la vida es corta" };
+    SerialTypeDeeper deeper =
+    {
+        { // SerialTypeDeep
+            { { 42 }, {}, "Hello sailor" }, // SerialTypeComplex
+            666
+        },
+        "Apartense vacas, que la vida es corta"
+    };
+    INIT( deeper.deep.complexx.nums )( { 0, 1, 2, 3, 4, 5, 6, 7 } );
 
     SerialTypeChunky before;
     before.deeper.Reset( 8000 );
     for( int i = 0; i < before.deeper.capacity; ++i )
-        before.deeper.Push( deeper );
+        before.deeper.Push( MOVE( deeper ) );
     ReflectResult ret = Reflect( w, before );
     ASSERT_TRUE( (bool)ret );
 
