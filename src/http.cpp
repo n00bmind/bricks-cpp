@@ -457,11 +457,9 @@ namespace Http
         bool done = false;
         if( totalSize )
         {
-            if( response->rawData )
-                DEINIT( response->rawData );
-
             // Compact down and null terminate the current contents
-            INIT( response->rawData )( totalSize + 1 );
+            response->rawData.Reset( totalSize + 1, CTX_ALLOC );
+
             for( Array<u8> const& c : *readBuffers )
                 response->rawData.Append( c );
             response->rawData.Push( 0 );

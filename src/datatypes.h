@@ -167,9 +167,10 @@ struct Array
         return Buffer<T>( data, count );
     }
 
+    // Is this Array "set up" yet?
     INLINE explicit operator bool() const
     {
-        return data != nullptr && count != 0;
+        return data != nullptr;
     }
 
 

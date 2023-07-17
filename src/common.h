@@ -677,6 +677,7 @@ public:                                                                         
 
 
 /////     DEFER    /////
+// TODO Substitute with https://stackoverflow.com/a/42060129/2151254 (check codegen in Godbolt jic!)
 #define DEFER(...)                                                  \
 auto UNIQUE(_deferred_func_) = [&]() INLINE_LAMBDA { __VA_ARGS__ }; \
 struct UNIQUE(Deferred)                                             \
