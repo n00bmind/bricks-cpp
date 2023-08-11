@@ -248,6 +248,14 @@ INLINE T Min( T a, T b )
 }
 
 template <typename T>
+INLINE T Min( T a, T b, T c )
+{
+    return a < b
+        ? (a < c ? a : c)
+        : (b < c ? b : c);
+}
+
+template <typename T>
 INLINE T Max( T a, T b )
 {
     return a > b ? a : b;

@@ -106,6 +106,7 @@ INLINE void StringCopy( char const* src, char* dst, sz dstSize )
 
 INLINE char const* StringFind( char const* str, char find ) { return strchr( str, find ); }
 INLINE char const* StringFind( char const* str, char const* find ) { return strstr( str, find ); }
+// TODO Why would I think this is faster than strstr? Time it at least!
 INLINE char const* StringFind( char const* str, char const* find, int len )
 {
     int findLen = StringLength( find );
@@ -124,8 +125,8 @@ INLINE char const* StringFind( char const* str, char const* find, int len )
         if( strncmp( p, find, (size_t)findLen ) == 0 )
             return p;
 
-        len -= (int)(p - str);
-        str = p;
+        len -= (int)(p + 1 - str);
+        str = p + 1;
     }
     return nullptr;
 }
@@ -449,6 +450,9 @@ inline bool StringComparator( char const* a, char const* b )
     return strcmp( a, b ) < 0;
 }
 
+// Levenshtein distance
+int StringDistance( char const* a, char const* b, int aLen = 0, int bLen = 0 );
+
 
 
 // Read-only string
@@ -615,8 +619,7 @@ public:
         else
         {
             // Will already append terminator
-            static thread_local String cString;
-            cString = String( data, length, Temporary );
+            String cString( data, length, Temporary );
             ASSERT( cString.ValidCString() );
             return cString.data;
         }
@@ -767,7 +770,7 @@ public:
         return StringEndsWith( data, cString, length );
     }
 
-    const char* FindString( const char* cString ) const
+    const char* Find( const char* cString ) const
     {
         if( !cString || Empty() )
             return nullptr;
@@ -791,7 +794,7 @@ public:
 
         int lineLen = length;
         char const* atNL = data + length;
-        char const* onePastNL = (char*)FindString( "\n" );
+        char const* onePastNL = (char*)Find( "\n" );
 
         if( onePastNL )
         {
@@ -987,6 +990,11 @@ public:
     char* ToLowercase()
     {
         return StringToLowercase( InPlaceModify(), length );
+    }
+
+    int Distance( String const& s ) const
+    {
+        return StringDistance( data, s.data, length, s.length );
     }
 
     // dst buffer will be null terminated always

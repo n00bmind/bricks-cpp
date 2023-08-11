@@ -1,4 +1,41 @@
 
+// Adapted from https://web.archive.org/web/20100129012106/http://www.merriampark.com/ldc.htm
+int StringDistance( char const* a, char const* b, int aLen /*= 0*/, int bLen /*= 0*/ )
+{
+    //Step 1
+    aLen = aLen ? aLen : StringLength( a );
+    bLen = bLen ? bLen : StringLength( b );
+
+    if( aLen != 0 && bLen != 0 )
+    {
+        aLen++;
+        bLen++;
+        int* d = ALLOC_ARRAY( CTX_TMPALLOC, int, aLen * bLen );
+
+        //Step 2	
+        for( int k = 0; k < aLen; k++ )
+            d[k] = k;
+        for( int k = 0; k < bLen; k++ )
+            d[k*aLen] = k;
+        //Step 3 and 4	
+        for( int i = 1; i < aLen; i++ )
+        {
+            for( int j = 1; j < bLen; j++ )
+            {
+                //Step 5
+                int cost = ( a[i-1] == b[j-1] ) ? 0 : 1;
+                //Step 6             
+                d[ j*aLen + i ] = Min( d[ (j-1)*aLen + i ] + 1,
+                                       d[ j*aLen + i - 1] + 1,
+                                       d[ (j-1)*aLen + i - 1] + cost );
+            }
+        }
+        return d[ aLen*bLen - 1 ];
+    }
+    else 
+        return -1; //a negative return value means that one or both strings are empty.
+}
+
 void String::Clear()
 {
     if( flags & Owned )
