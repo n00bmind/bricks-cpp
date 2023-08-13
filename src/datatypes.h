@@ -1694,6 +1694,11 @@ struct Hashtable
         }
     }
 
+    V const* Get( K const& key ) const
+    {
+        return ((Hashtable<K, V, AllocType>*)this)->Get( key );
+    }
+
     V* PutEmpty( K const& key, const bool clear = true, bool* occupiedOut = nullptr )
     {
         ASSERT( !eqFunc( key, ZeroKey<K> ) );

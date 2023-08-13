@@ -98,6 +98,7 @@ struct AllocatorImpl
 
 // This guy is just a generic non-templated wrapper to any kind of allocator whatsoever
 // and two function pointers to its corresponding pair of free Alloc & Free functions
+// TODO Can we do this simpler plz
 struct Allocator
 {
     Allocator()
