@@ -13,4 +13,5 @@
 **/.session.vim
 bin/
 .ccls-cache/
+.cache/
 .vs/

@@ -23,8 +23,9 @@
 
 
 
-import os, sys, subprocess, atexit, random, argparse, shutil, fnmatch
+import os, sys, subprocess, atexit, random, argparse, shutil, fnmatch, json
 from collections import namedtuple
+from pathlib import Path
 
 
 Platform = namedtuple('Platform', ['name', 'compiler', 'toolset', 'common_compiler_flags', 'libs', 'common_linker_flags'])
@@ -176,6 +177,7 @@ if __name__ == '__main__':
     parser.add_argument('-c', '--clean', help='Delete contents of the bin folder before building', action='store_true')
     parser.add_argument('-v', '--verbose', help='Increase verbosity', action='store_true')
     parser.add_argument('-t', '--runtests', help='Run all tests found in subfolders', action='store_true')
+    parser.add_argument('--gen-commands', help='Generate compile_commands.json', action='store_true', dest='gen_commands')
     in_args = parser.parse_args()
 
     atexit.register(end_time)
@@ -187,6 +189,7 @@ if __name__ == '__main__':
 
     if not os.path.exists(binpath):
         os.mkdir(binpath)
+
 
     if in_args.clean:
         print(f'Removing contents of \'{binpath}\'..')
@@ -210,6 +213,45 @@ if __name__ == '__main__':
     elif in_args.release:
         config = config_win_release
 
+
+    ### Generate compilation database
+    if in_args.gen_commands:
+        # Build a compile_commands.json file that has an entry per each .c & .cpp file in the project tree
+        # and add a --include=<file> per .h file in the include_paths to *every* entry
+        # See
+        # https://clangd.llvm.org/design/compile-commands
+        # https://github.com/MaskRay/ccls/issues/948#issuecomment-1732168549
+        # https://clang.llvm.org/docs/ClangCommandLineReference.html
+        # https://clangd.llvm.org/installation.html#project-setup
+        # https://github.com/clangd/clangd/issues/45
+        #  TODO This produces "Failed to compile.. index may be incomplete" errors in vim-lsp.log
+        #  although for the most part it seems to work!?
+        arguments = []
+        #  TODO Add other relevant arguments (include paths etc!)
+        for dir in include_dirs:
+            header_files = ( p.resolve() for p in Path(dir).glob('**/*') if p.suffix in {".h", ".hpp"} )
+            for file in header_files:
+                arguments.append( f'--include={file}' )
+
+        commands_root = []
+        src_files = (p.resolve() for p in Path(rootpath).glob("**/*") if p.suffix in {".c", ".cc", ".cpp"})
+        for file in src_files:
+            d = {}
+            d['file'] = str( os.path.abspath(file) )
+            d['directory'] = str(rootpath)
+            d['arguments'] = [ 'clang' ] if file.suffix == '.c' else [ 'clang++' ]
+            d['arguments'].extend( arguments )
+            d['arguments'].append( str(file) )
+
+            commands_root.append( d )
+
+        print( 'Writing compile_commands.json..' )
+        with open( os.path.join( rootpath, 'compile_commands.json' ), 'w' ) as json_file:
+            json.dump( commands_root, json_file, indent=4 )
+
+        exit( 0 )
+
+    ### Normal build
     with open(os.path.join(binpath, 'config'), 'w') as cfg_file:
         print(f'-> Config \'{config.name}\'')
         cfg_file.write(f'Config: {config.name}\n')

@@ -29,6 +29,17 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #endif
 
 
+// Free memory functions, passing any kind of allocator implementation as the first param
+#define ALLOC(allocator, size, ...)                 Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_STRUCT(allocator, type, ...)          (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define ALLOC_ARRAY(allocator, type, count, ...)    (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
+#define FREE(allocator, mem, ...)                   Free( allocator, (void*)(mem), ##__VA_ARGS__ )
+
+#undef DELETE
+#define NEW(allocator, type, ...)                   new ( ALLOC( allocator, sizeof(type), ##__VA_ARGS__ ) ) type
+#define DELETE(allocator, p, T, ...)                { if( p ) { p->~T(); FREE( allocator, p, ##__VA_ARGS__ ); p = nullptr; } }
+
+
 namespace Memory
 {
     enum Tags : u8
@@ -77,7 +88,7 @@ typedef void* (*AllocFunc)( void* impl, sz sizeBytes, char const* filename, int 
 #define FREE_METHOD  void Free( void* memoryBlock, MemoryParams params = {} )
 typedef void (*FreeFunc)( void* impl, void* memoryBlock, MemoryParams params );
 
-// This guy casts the data pointer to the appropriate type
+// This guy casts an opaque data pointer to the appropriate type
 // and relies on overloading to call the correct pair of Alloc & Free functions accepting that as a first argument
 template <typename Class>
 struct AllocatorImpl
@@ -94,8 +105,6 @@ struct AllocatorImpl
         ::Free( obj, memoryBlock, params );
     }
 };
-
-
 // This guy is just a generic non-templated wrapper to any kind of allocator whatsoever
 // and two function pointers to its corresponding pair of free Alloc & Free functions
 // TODO Can we do this simpler plz
@@ -158,16 +167,6 @@ INLINE FREE_FUNC( Allocator )
     data->freePtr( data->impl, memoryBlock, params );
 }
 
-
-// Free-function versions, passing the allocator implementation
-#define ALLOC(allocator, size, ...)                 Alloc( allocator, size, __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_STRUCT(allocator, type, ...)          (type *)Alloc( allocator, SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define ALLOC_ARRAY(allocator, type, count, ...)    (type *)Alloc( allocator, (count)*SIZEOF(type), __FILE__, __LINE__, ##__VA_ARGS__ )
-#define FREE(allocator, mem, ...)                   Free( allocator, (void*)(mem), ##__VA_ARGS__ )
-
-#undef DELETE
-#define NEW(allocator, type, ...)                   new ( ALLOC( allocator, sizeof(type), ##__VA_ARGS__ ) ) type
-#define DELETE(allocator, p, T, ...)                { if( p ) { p->~T(); FREE( allocator, p, ##__VA_ARGS__ ); p = nullptr; } }
 
 
 struct LazyAllocator
