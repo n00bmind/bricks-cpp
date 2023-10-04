@@ -229,12 +229,12 @@ struct Array
     T* PushEmpty( bool clear = true )
     {
         ASSERT( count < capacity, "Array[%d] overflow", capacity );
-        T* result = data + count++;
+        T* slot = data + count++;
         if( clear )
             // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-            INIT( *result );
+            INIT( *slot );
 
-        return result;
+        return slot;
     }
 
     T* Push( const T& item )
@@ -427,6 +427,7 @@ const Array<T, AllocType> Array<T, AllocType>::Empty = {};
 // Items are always kept compact, so iteration remains really fast. Since bucket sizes are Po2, it can be iterated using a normal integer
 // index or with the provided iterator (for new-style 'for each').
 
+// TODO Incorporate stuff & fixes from KoM's version
 // TODO Benchmark this against std::vector and the compact_vector proposed in https://www.sebastiansylvan.com/post/space-efficient-rresizable-arrays/
 // (the twitter thread https://twitter.com/andy_kelley/status/1516949533413892096?t=vEW63veywf4fqhfBfPRQSA&s=03 is quite interesting)
 template <typename T, typename AllocType /*= Allocator*/>
@@ -447,7 +448,7 @@ struct BucketArray
     i32 bucketBufferCount;
     i32 bucketBufferCapacity;
     sz count;
-    // TODO Remove freelist
+    // TODO Remove freelist (keep buckets in the bucket buffer unless destroy()ed)
     T* firstFree;
     i32 bucketCapacity;
 
@@ -486,9 +487,40 @@ struct BucketArray
         Reset( bucketSize, alloc, params );
     }
 
+    // NOTE Move only (copy implicitly deleted)
+    BucketArray( BucketArray&& other )
+        : allocator( other.allocator )
+        , bucketBuffer( nullptr )
+        , bucketBufferCount( 0 )
+        , bucketBufferCapacity( 0 )
+        , count( 0 )
+        , firstFree( nullptr )
+        , memParams( other.memParams )
+    {
+        *this = std::move( other );
+    }
+
     ~BucketArray()
     {
         Destroy();
+    }
+
+
+    void operator =( BucketArray&& other )
+    {
+        // TODO Force a copy if not true, I guess
+        ASSERT( allocator == other.allocator );
+
+        Destroy();
+
+        bucketBuffer         = other.bucketBuffer;
+        bucketBufferCount    = other.bucketBufferCount;
+        bucketBufferCapacity = other.bucketBufferCapacity;
+        count                = other.count;
+        firstFree            = other.firstFree;
+        bucketCapacity       = other.bucketCapacity;
+
+        ZERO( other );
     }
 
 
@@ -563,17 +595,15 @@ struct BucketArray
             FREE( allocator, data, memParams );
         }
 
-        if( allocator )
+        if( bucketBuffer )
             FREE( allocator, bucketBuffer, memParams );
 
-        allocator = nullptr;
         bucketBuffer = nullptr;
         bucketBufferCount = 0;
         bucketBufferCapacity = 0;
         count = 0;
         firstFree = nullptr;
         bucketCapacity = 0;
-        memParams = {};
     }
 
     void Reserve( sz capacity )
@@ -597,10 +627,10 @@ private:
         if( !lastBucket || lastBucket->count == lastBucket->capacity )
             lastBucket = AllocBucket();
 
-        T* result = lastBucket->data + lastBucket->count++;
+        T* slot = lastBucket->data + lastBucket->count++;
         count++;
 
-        return result;
+        return slot;
     }
 
 public:
@@ -692,7 +722,7 @@ public:
             RetireBucket( lastBucket );
         count--;
 
-        return std::move(result);
+        return result;
     }
 
     // TODO Remove (swap)
@@ -1165,12 +1195,12 @@ struct OldBucketArray
             AddEmptyBucket();
 
         count++;
-        T* result = &last->data[last->count++];
+        T* slot = &last->data[last->count++];
         if( clear )
             // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-            INIT( *result );
+            INIT( *slot );
 
-        return result;
+        return slot;
     }
 
     T* Push( const T& item )
@@ -1575,6 +1605,8 @@ template <> INLINE bool DefaultEqFunc< const char* >( char const* const& a, char
 template <> INLINE u64  DefaultHashFunc< String >( String const& key )      { return key.Hash(); }
 
 
+// TODO This forces us to clear all keys on every resize which is stupid
+// TODO This is probably not a good idea anyway for the general case and we should replace this with an occupancy bitmap
 template <typename K>
 const K ZeroKey{};
 
@@ -1609,7 +1641,7 @@ struct Hashtable
     u32 flags;
 
 
-    explicit Hashtable( int expectedSize = 0, AllocType* alloc = CTX_ALLOC, 
+    explicit Hashtable( int expectedEntryCount = 0, AllocType* alloc = CTX_ALLOC, 
                         HashFunc hashFunc_ = DefaultHashFunc<K>, KeysEqFunc eqFunc_ = DefaultEqFunc<K>, u32 flags_ = 0 )
         : keys( nullptr )
         , values( nullptr )
@@ -1620,11 +1652,11 @@ struct Hashtable
         , capacity( 0 )
         , flags( flags_ )
     {
-        ASSERT( expectedSize || !(flags & FixedSize) );
+        ASSERT( expectedEntryCount || !(flags & FixedSize) );
         ASSERT( allocator );
 
-        if( expectedSize )
-            Grow( NextPowerOf2( 2 * expectedSize ) );
+        if( expectedEntryCount )
+            Resize( expectedEntryCount );
     }
 
     // Disallow implicit copying
@@ -1641,6 +1673,7 @@ struct Hashtable
 
     bool Empty() const { return count == 0; }
 
+    // TODO 
 #if 0
     Hashtable& operator =( Hashtable&& rhs )
     {
@@ -1661,6 +1694,37 @@ struct Hashtable
 #else
     Hashtable& operator =( Hashtable&& ) = delete;
 #endif
+
+    void Resize( int expectedEntryCount )
+    {
+        ASSERT( !(flags & FixedSize) || !capacity );
+
+        int newCapacity = Max( NextPowerOf2( expectedEntryCount * 2 ), 16 );
+
+        int oldCapacity = capacity;
+        K* oldKeys = keys;
+        V* oldValues = values;
+
+        count = 0;
+        capacity = newCapacity;
+
+        // TODO Check that generated code for instances with different allocator types is still being inlined
+        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), Memory::NoClear() );
+        keys   = (K*)newMemory;
+        values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
+
+        for( int i = 0; i < capacity; ++i )
+            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
+            INIT( keys[i] )();
+        for( int i = 0; i < oldCapacity; ++i )
+        {
+            if( !eqFunc( oldKeys[i], ZeroKey<K> ) )
+                // FIXME Move keys too!
+                Put( oldKeys[i], MOVE( oldValues[i] ) );
+        }
+
+        FREE( allocator, oldKeys ); // Handles both
+    }
 
     V* Get( K const& key )
     {
@@ -1699,14 +1763,14 @@ struct Hashtable
         return ((Hashtable<K, V, AllocType>*)this)->Get( key );
     }
 
-    V* PutEmpty( K const& key, const bool clear = true, bool* occupiedOut = nullptr )
+private:
+    INLINE V* FindSlot( K const& key, bool* occupiedOut )
     {
         ASSERT( !eqFunc( key, ZeroKey<K> ) );
 
         // Super conservative but easy to work with
         if( 2 * count >= capacity )
-            Grow( 2 * capacity );
-        ASSERT( 2 * count < capacity );
+            Resize( 2 * count );
 
         u64 hash = hashFunc( key );
         u32 i = hash & (capacity - 1);
@@ -1716,22 +1780,14 @@ struct Hashtable
         {
             if( eqFunc( keys[i], key ) )
             {
-                if( clear )
-                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-                    INIT( values[i] )();
-                if( occupiedOut )
-                    *occupiedOut = true;
+                *occupiedOut = true;
                 return &values[i];
             }
             else if( eqFunc( keys[i], ZeroKey<K> ) )
             {
                 keys[i] = key;
-                if( clear )
-                    // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-                    INIT( values[i] )();
                 ++count;
-                if( occupiedOut )
-                    *occupiedOut = false;
+                *occupiedOut = false;
                 return &values[i];
             }
 
@@ -1747,51 +1803,55 @@ struct Hashtable
         }
     }
 
+public:
+    V* Put( K const& key )
+    {
+        bool occupied;
+        V* slot = FindSlot( key, &occupied );
+        INIT( *slot )();
+        return slot;
+    }
+
     V* Put( K const& key, V const& value )
     {
-        V* result = PutEmpty( key, false );
-        ASSERT( result );
-
-        *result = value;
-        return result;
+        bool occupied;
+        V* slot = FindSlot( key, &occupied );
+        INIT( *slot )( value );
+        return slot;
     }
 
     V* Put( K const& key, V&& value )
     {
-        V* result = PutEmpty( key, false );
-        ASSERT( result );
-
-        *result = MOVE( value );
-        return result;
+        bool occupied;
+        V* slot = FindSlot( key, &occupied );
+        INIT( *slot )( MOVE( value ) );
+        return slot;
     }
 
-    V* GetOrPutEmpty( K const& key, bool* foundOut = nullptr )
+    V* GetOrPut( K const& key, bool* occupiedOut = nullptr )
     {
-        bool found;
-        V* result = PutEmpty( key, false, &found );
-        ASSERT( result );
+        bool occupied;
+        V* slot = FindSlot( key, &occupied );
 
-        if( !found )
-            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-            INIT( *result )();
+        if( !occupied )
+            INIT( *slot )();
 
-        if( foundOut )
-            *foundOut = found;
-        return result;
+        if( occupiedOut )
+            *occupiedOut = occupied;
+        return slot;
     }
 
-    V* GetOrPut( K const& key, V const& value, bool* foundOut = nullptr )
+    V* GetOrPut( K const& key, V const& value, bool* occupiedOut = nullptr )
     {
-        bool found;
-        V* result = PutEmpty( key, false, &found );
-        ASSERT( result );
+        bool occupied;
+        V* slot = FindSlot( key, &occupied );
 
-        if( !found )
-            *result = value;
+        if( !occupied )
+            INIT( *slot )( value );
 
-        if( foundOut )
-            *foundOut = found;
-        return result;
+        if( occupiedOut )
+            *occupiedOut = occupied;
+        return slot;
     }
 
     // TODO Deleting based on Robid Hood or similar
@@ -1897,38 +1957,6 @@ struct Hashtable
     KeyIterator Keys() const { return KeyIterator( *this ); }
     ValueIterator Values() { return ValueIterator( *this ); }
     ConstValueIterator ConstValues() const { return ConstValueIterator( *this ); }
-
-private:
-    void Grow( int newCapacity )
-    {
-        ASSERT( !(flags & FixedSize) || !capacity );
-
-        newCapacity = Max( newCapacity, 16 );
-        ASSERT( IsPowerOf2( newCapacity ) );
-
-        int oldCapacity = capacity;
-        K* oldKeys = keys;
-        V* oldValues = values;
-
-        count = 0;
-        capacity = newCapacity;
-
-        // TODO Check generated code for instances with different allocator types is still being inlined
-        void* newMemory = ALLOC( allocator, capacity * (SIZEOF(K) + SIZEOF(V)), Memory::NoClear() );
-        keys   = (K*)newMemory;
-        values = (V*)((u8*)newMemory + capacity * SIZEOF(K));
-
-        for( int i = 0; i < capacity; ++i )
-            // TODO Call constructor or clear to zero depending on std::is_trivially_copyable(T)
-            INIT( keys[i] )();
-        for( int i = 0; i < oldCapacity; ++i )
-        {
-            if( !eqFunc( oldKeys[i], ZeroKey<K> ) )
-                Put( oldKeys[i], MOVE( oldValues[i] ) );
-        }
-
-        FREE( allocator, oldKeys ); // Handles both
-    }
 };
 
 
@@ -1982,21 +2010,21 @@ struct RingBuffer
 
     T* PushEmpty( bool clear = true )
     {
-        T* result = buffer.data + onePastHeadIndex;
+        T* slot = buffer.data + onePastHeadIndex;
         onePastHeadIndex = (onePastHeadIndex + 1) & (buffer.capacity - 1);
         if( Available() )
             count++;
 
         if( clear )
-            ZEROP( result, sizeof(T) );
-        return result;
+            ZEROP( slot, sizeof(T) );
+        return slot;
     }
 
     T* Push( const T& item )
     {
-        T* result = PushEmpty( false );
-        *result = item;
-        return result;
+        T* slot = PushEmpty( false );
+        *slot = item;
+        return slot;
     }
 
     T Pop()
@@ -2196,20 +2224,20 @@ struct SyncRingBuffer
             newData = (count << 32) | onePastHeadIndex;
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
-        T* result = buffer.data + headIndex;
-        // FIXME This is wrong. Consumer can observe result pointer not cleared
+        T* slot = buffer.data + headIndex;
+        // FIXME This is wrong. Consumer can observe slot pointer not cleared
         if( clear )
-            ZEROP( result, sizeof(T) );
+            ZEROP( slot, sizeof(T) );
 
-        return result;
+        return slot;
     }
 
     T* Push( const T& item )
     {
-        T* result = PushEmpty( false );
-        // FIXME Consumer can observe result pointer being empty
-        *result = item;
-        return result;
+        T* slot = PushEmpty( false );
+        // FIXME Consumer can observe slot pointer being empty
+        *slot = item;
+        return slot;
     }
 
     // TODO Remove
@@ -2237,20 +2265,20 @@ struct SyncRingBuffer
             newData = (count << 32) | onePastHeadIndex;
         } while( !indexData.COMPARE_EXCHANGE_ACQREL( curData, newData ) );
 
-        T* result = buffer.data + headIndex;
+        T* slot = buffer.data + headIndex;
         if( clear )
             // TODO Clear the skipped end of the buffer too?
-            ZEROP( result, rangeLen * SIZEOF(T) );
+            ZEROP( slot, rangeLen * SIZEOF(T) );
 
-        return result;
+        return slot;
     }
 
     // TODO Remove
     T* PushRangeAdjacent( T const* item, int rangeLen )
     {
-        T* result = PushEmptyRangeAdjacent( rangeLen, false );
-        COPYP( item, result, rangeLen * sizeof(T) );
-        return result;
+        T* slot = PushEmptyRangeAdjacent( rangeLen, false );
+        COPYP( item, slot, rangeLen * sizeof(T) );
+        return slot;
     }
 
     bool TryPop( T* out )
@@ -2500,15 +2528,15 @@ private:
             tail = tail->next;
         }
 
-        T* result = PageItemUnsafe( tail, tail->onePastTailIndex );
+        T* slot = PageItemUnsafe( tail, tail->onePastTailIndex );
         tail->onePastTailIndex = (tail->onePastTailIndex + 1) & (tail->capacity - 1);
         tail->count++;
 
         count++;
 
         if( clear )
-            ZEROP( result, sizeof(T) );
-        return result;
+            ZEROP( slot, sizeof(T) );
+        return slot;
     }
 
 public:
@@ -2521,19 +2549,19 @@ public:
     T* Push( const T& item )
     {
         Mutex::Scope lock( mutex );
-        T* result = PushEmptyUnsafe( false );
-        *result = item;
+        T* slot = PushEmptyUnsafe( false );
+        *slot = item;
 
-        return result;
+        return slot;
     }
 
     T* Push( T&& item )
     {
         Mutex::Scope lock( mutex );
-        T* result = PushEmptyUnsafe( false );
-        *result = std::move( item );
+        T* slot = PushEmptyUnsafe( false );
+        *slot = std::move( item );
 
-        return result;
+        return slot;
     }
 
     bool TryPop( T* out )
@@ -2546,8 +2574,8 @@ public:
             canPop = count > 0;
             if( canPop )
             {
-                T* result = PageItemUnsafe( head, head->HeadIndex() );
-                *out = std::move( *result );
+                T* slot = PageItemUnsafe( head, head->HeadIndex() );
+                *out = std::move( *slot );
                 head->count--;
 
                 if( head->count == 0 && head != tail )

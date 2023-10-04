@@ -10,7 +10,7 @@ namespace Logging
         ASSERT( !state->channels.Empty(), "No channels.. have you called Logging::Init?" );
 
         // If we don't find the Channel just add one with default attrs on the spot
-        Channel const* channel = state->channels.GetOrPutEmpty( channelName );
+        Channel const* channel = state->channels.GetOrPut( channelName );
         ASSERT( channelName && channel, "Invalid log channel" );
         if( !channel )
             return;
@@ -135,10 +135,10 @@ namespace Logging
         InitArena( &state->threadTmpArena );
 
         // Always add a 'Platform' channel
-        /*Channel* c = */state->channels.PutEmpty( "Platform" );
+        /*Channel* c = */state->channels.Put( "Platform" );
         for( ChannelDecl const& cd : channels )
         {
-            Channel* c = state->channels.PutEmpty( cd.name );
+            Channel* c = state->channels.Put( cd.name );
             c->minVolume = cd.minVolume;
         }
 
