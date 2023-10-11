@@ -470,6 +470,7 @@ public:
 using StringBuffer = Buffer<char const>;
 
 // This is the least horrible thing I could come up with ¬¬
+// TODO Make this a variadic template?
 #define BUFFER(T, ...)                    \
 []()                                      \
 {                                         \
