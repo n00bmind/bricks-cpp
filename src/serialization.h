@@ -10,6 +10,7 @@ struct ReflectResult
         BufferOverflow,
     } code;
     //char const* msg;
+    // TODO Need some kind of reflector-agnostic location info to help locate parsing errors in the input
 
     explicit operator bool() const { return code == Ok; }
 };

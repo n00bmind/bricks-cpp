@@ -1726,6 +1726,7 @@ struct Hashtable
         FREE( allocator, oldKeys ); // Handles both
     }
 
+    // TODO This is all now equivalent to FindSlot?
     V* Get( K const& key )
     {
         ASSERT( !eqFunc( key, ZeroKey<K> ) );
@@ -1769,6 +1770,7 @@ private:
         ASSERT( !eqFunc( key, ZeroKey<K> ) );
 
         // Super conservative but easy to work with
+        // TODO Put resize check in a FindSlotForPut wrapper or something
         if( 2 * count >= capacity )
             Resize( 2 * count );
 
@@ -2171,6 +2173,8 @@ private:
 // Can be used as a fixed-capacity thread-safe queue.
 
 // FIXME This type is very broken! Review all ops agains!
+// TODO Simplify and rethink all this by using the repeated page mapping technique Casey uses
+// explained in https://youtu.be/H8THRznXxpQ?si=9IQLXNsvHnEbw6xo&t=702
 template <typename T, typename AllocType = Allocator>
 struct SyncRingBuffer
 {
@@ -2468,6 +2472,9 @@ public:
 
 // TODO Consider how to avoid false-sharing, given that a producer thread will always access the tail and a consumer will access the head
 // TODO Also consider switching all datatypes of this kind to a 'virtual stream' model .. https://fgiesen.wordpress.com/2010/12/14/ring-buffers-and-queues/
+
+// TODO Simplify and rethink the circular buffer used in each Page by using the repeated page mapping technique Casey uses
+// explained in https://youtu.be/H8THRznXxpQ?si=9IQLXNsvHnEbw6xo&t=702
 template <typename T, typename AllocType = Allocator>
 struct SyncQueue
 {
