@@ -30,6 +30,7 @@ namespace Core
 
 
 
+// TODO Test & benchmark all this using the "atomic sync" primitives in https://github.com/dr-m/atomic_sync (requires C++20)
 // TODO These should all delete the copy constructor and assignment?
 
 /////     SEMAPHORE     /////
@@ -374,7 +375,7 @@ public:
 };
 
 
-// TODO Implement https://github.com/preshing/cpp11-on-multicore/blob/master/common/rwlock.h
+// TODO ? Implement https://github.com/preshing/cpp11-on-multicore/blob/master/common/rwlock.h
 // TODO Implement Event from https://elweitzel.de/drupal/?q=node/6
 // Also check AutoResetEvent in https://preshing.com/20150316/semaphores-are-surprisingly-versatile/
 

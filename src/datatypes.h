@@ -2470,11 +2470,16 @@ public:
 // https://moodycamel.com/blog/2013/a-fast-lock-free-queue-for-c++.htm
 // https://moodycamel.com/blog/2014/a-fast-general-purpose-lock-free-queue-for-c++.htm
 
-// TODO Consider how to avoid false-sharing, given that a producer thread will always access the tail and a consumer will access the head
 // TODO Also consider switching all datatypes of this kind to a 'virtual stream' model .. https://fgiesen.wordpress.com/2010/12/14/ring-buffers-and-queues/
 
 // TODO Simplify and rethink the circular buffer used in each Page by using the repeated page mapping technique Casey uses
 // explained in https://youtu.be/H8THRznXxpQ?si=9IQLXNsvHnEbw6xo&t=702
+// TODO Actually, it's probably much simpler to just get rid of using circular buffers in each page, and instead switch to huge circular buffer that is
+// mapped using the "sparse memory" technique Casey explains in https://youtu.be/H8THRznXxpQ?si=poiWfwaWYP0dmQhD&t=1887, i.e. essentially keeping a page table
+// and mapping / unmapping pages as the data is produced / consumed.
+// (TOGETHER with the "mirrored-pages" circular buffer technique above, so that we can actually get to the end of it and auto-wrap around)
+// This is only valid if we can live with our queues being bounded (which, given that the max size can be as huge as we want is probably really really worth it!)
+// Also, this would in principle make it a multi-producer multi-consumer queue, which is really cool.
 template <typename T, typename AllocType = Allocator>
 struct SyncQueue
 {
